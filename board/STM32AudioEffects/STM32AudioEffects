@@ -1,0 +1,75 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+        <title>KiCad BOM Example 5</title>
+    </head>
+    <body>
+    <h1>C:\Users\raste\Desktop\Electronics\PCBs\STM32AudioEffects\STM32AudioEffects\STM32AudioEffects.sch</h1>
+    <p>17/08/21 18:51:28</p>
+    <p>Eeschema (5.1.6)-1</p>
+    <p><b>Component Count:</b>96</p>
+    <table>
+    <tr><th style='width:640px'>Ref</th><th>Qnty</th><th>Value</th><th>Part</th><th>Footprint</th><th>Description</th><th>Vendor</th></tr>
+    <tr><td>BT1</td><td>1</td><td>9V</td><td>Device:Battery</td><td>TestPoint:TestPoint_2Pads_Pitch5.08mm_Drill1.3mm</td><td>Multiple-cell battery</td><td></td></tr>
+    <tr><td>C1, C12</td><td>2</td><td>4.7u</td><td>Device:CP1_Small</td><td>Capacitor_SMD:C_0805_2012Metric</td><td>Polarized capacitor, small US symbol</td><td></td></tr>
+    <tr><td>C2, C3, C4, C5, C6, C11</td><td>6</td><td>100n</td><td>Device:C_Small</td><td>Capacitor_SMD:C_0402_1005Metric</td><td>Unpolarized capacitor, small symbol</td><td></td></tr>
+    <tr><td>C7</td><td>1</td><td>1u</td><td>Device:CP1_Small</td><td>Capacitor_SMD:C_0402_1005Metric</td><td>Polarized capacitor, small US symbol</td><td></td></tr>
+    <tr><td>C8</td><td>1</td><td>10n</td><td>Device:C_Small</td><td>Capacitor_SMD:C_0402_1005Metric</td><td>Unpolarized capacitor, small symbol</td><td></td></tr>
+    <tr><td>C9, C10</td><td>2</td><td>33p</td><td>Device:C_Small</td><td>Capacitor_SMD:C_0402_1005Metric</td><td>Unpolarized capacitor, small symbol</td><td></td></tr>
+    <tr><td>C13</td><td>1</td><td>22u</td><td>Device:CP1_Small</td><td>Capacitor_SMD:C_0805_2012Metric</td><td>Polarized capacitor, small US symbol</td><td></td></tr>
+    <tr><td>C14, C20</td><td>2</td><td>10u</td><td>Device:CP1_Small</td><td>Capacitor_SMD:C_0805_2012Metric</td><td>Polarized capacitor, small US symbol</td><td></td></tr>
+    <tr><td>C15</td><td>1</td><td>330p</td><td>Device:C_Small</td><td>Capacitor_SMD:C_0402_1005Metric</td><td>Unpolarized capacitor, small symbol</td><td></td></tr>
+    <tr><td>C16, C18, C22</td><td>3</td><td>10u</td><td>Device:C_Small</td><td>Capacitor_SMD:C_0805_2012Metric</td><td>Unpolarized capacitor, small symbol</td><td></td></tr>
+    <tr><td>C17, C19, C23</td><td>3</td><td>1n</td><td>Device:C_Small</td><td>Capacitor_SMD:C_0402_1005Metric</td><td>Unpolarized capacitor, small symbol</td><td></td></tr>
+    <tr><td>C21</td><td>1</td><td>2.2n</td><td>Device:C_Small</td><td>Capacitor_SMD:C_0805_2012Metric</td><td>Unpolarized capacitor, small symbol</td><td></td></tr>
+    <tr><td>D1</td><td>1</td><td>BLUE</td><td>Device:LED_Small</td><td>LED_SMD:LED_0603_1608Metric</td><td>Light emitting diode, small symbol</td><td></td></tr>
+    <tr><td>D2, D3, D5, D6</td><td>4</td><td>B5819W</td><td>Device:D_Schottky_Small</td><td>Diode_SMD:D_SOD-123</td><td>Schottky diode, small symbol</td><td></td></tr>
+    <tr><td>D4</td><td>1</td><td>GREEN</td><td>Device:LED_Small</td><td>LED_SMD:LED_0603_1608Metric</td><td>Light emitting diode, small symbol</td><td></td></tr>
+    <tr><td>F1</td><td>1</td><td>250mA</td><td>Device:Polyfuse_Small</td><td>Fuse:Fuse_1206_3216Metric</td><td>Resettable fuse, polymeric positive temperature coefficient, small symbol</td><td></td></tr>
+    <tr><td>FB1</td><td>1</td><td>600@600MHz</td><td>Device:Ferrite_Bead_Small</td><td>Inductor_SMD:L_0805_2012Metric</td><td>Ferrite bead, small symbol</td><td></td></tr>
+    <tr><td>H1, H2, H3, H4</td><td>4</td><td>MountingHole_Pad</td><td>Mechanical:MountingHole_Pad</td><td>MountingHole:MountingHole_4.3mm_M4_Pad_Via</td><td>Mounting Hole with connection</td><td></td></tr>
+    <tr><td>J1</td><td>1</td><td>Barrel_Jack</td><td>Connector:Barrel_Jack</td><td>Connector_BarrelJack:BarrelJack_CUI_PJ-063AH_Horizontal</td><td>DC Barrel Jack</td><td></td></tr>
+    <tr><td>J2</td><td>1</td><td>SWD</td><td>Connector_Generic:Conn_02x05_Odd_Even</td><td>Connector_PinHeader_1.27mm:PinHeader_2x05_P1.27mm_Vertical_SMD</td><td>Generic connector, double row, 02x05, odd/even pin numbering scheme (row 1 odd numbers, row 2 even numbers), script generated (kicad-library-utils/schlib/autogen/connector/)</td><td></td></tr>
+    <tr><td>J3</td><td>1</td><td>Conn_01x12</td><td>Connector_Generic:Conn_01x12</td><td>Connector_PinHeader_1.27mm:PinHeader_1x12_P1.27mm_Vertical</td><td>Generic connector, single row, 01x12, script generated (kicad-library-utils/schlib/autogen/connector/)</td><td></td></tr>
+    <tr><td>J4</td><td>1</td><td>USB_B_Micro</td><td>Connector:USB_B_Micro</td><td>Connector_USB:USB_Micro-B_Molex-105017-0001</td><td>USB Micro Type B connector</td><td></td></tr>
+    <tr><td>J5</td><td>1</td><td>Conn_01x06</td><td>Connector_Generic:Conn_01x06</td><td>Connector_PinHeader_1.27mm:PinHeader_1x06_P1.27mm_Vertical</td><td>Generic connector, single row, 01x06, script generated (kicad-library-utils/schlib/autogen/connector/)</td><td></td></tr>
+    <tr><td>J6</td><td>1</td><td>Conn_01x03</td><td>Connector_Generic:Conn_01x03</td><td>Connector_PinHeader_1.27mm:PinHeader_1x03_P1.27mm_Vertical</td><td>Generic connector, single row, 01x03, script generated (kicad-library-utils/schlib/autogen/connector/)</td><td></td></tr>
+    <tr><td>J7, J8</td><td>2</td><td>6.35mm Jack</td><td>Connector:AudioJack2</td><td>Connector_Audio:Jack_6.35mm_Neutrik_NMJ4HFD2_Horizontal</td><td>Audio Jack, 2 Poles (Mono / TS)</td><td></td></tr>
+    <tr><td>L1</td><td>1</td><td>39n</td><td>Device:L_Small</td><td>Inductor_SMD:L_0402_1005Metric</td><td>Inductor, small symbol</td><td></td></tr>
+    <tr><td>L2</td><td>1</td><td>220u</td><td>Device:L_Core_Iron_Small</td><td>Inductor_SMD:L_1210_3225Metric</td><td>Inductor with iron core, small symbol</td><td></td></tr>
+    <tr><td>Q1</td><td>1</td><td>AO3401A</td><td>Transistor_FET:AO3401A</td><td>Package_TO_SOT_SMD:SOT-23</td><td>-4.0A Id, -30V Vds, P-Channel MOSFET, SOT-23</td><td></td></tr>
+    <tr><td>R1</td><td>1</td><td>220</td><td>Device:R_Small_US</td><td>Resistor_SMD:R_0402_1005Metric</td><td>Resistor, small US symbol</td><td></td></tr>
+    <tr><td>R2, R8, R24, R25, R26, R27, R28, R29</td><td>8</td><td>10k</td><td>Device:R_Small_US</td><td>Resistor_SMD:R_0402_1005Metric</td><td>Resistor, small US symbol</td><td></td></tr>
+    <tr><td>R3</td><td>1</td><td>1.5k</td><td>Device:R_Small_US</td><td>Resistor_SMD:R_0603_1608Metric</td><td>Resistor, small US symbol</td><td></td></tr>
+    <tr><td>R4, R7</td><td>2</td><td>4.7k</td><td>Device:R_Small_US</td><td>Resistor_SMD:R_0603_1608Metric</td><td>Resistor, small US symbol</td><td></td></tr>
+    <tr><td>R5, R9</td><td>2</td><td>0</td><td>Device:R_Small_US</td><td>Resistor_SMD:R_0402_1005Metric</td><td>Resistor, small US symbol</td><td></td></tr>
+    <tr><td>R6, R10</td><td>2</td><td>33</td><td>Device:R_Small_US</td><td>Resistor_SMD:R_0402_1005Metric</td><td>Resistor, small US symbol</td><td></td></tr>
+    <tr><td>R11</td><td>1</td><td>2</td><td>Device:R_Small_US</td><td>Resistor_SMD:R_1206_3216Metric</td><td>Resistor, small US symbol</td><td></td></tr>
+    <tr><td>R12</td><td>1</td><td>18k</td><td>Device:R_Small_US</td><td>Resistor_SMD:R_0603_1608Metric</td><td>Resistor, small US symbol</td><td></td></tr>
+    <tr><td>R13</td><td>1</td><td>11k</td><td>Device:R_Small_US</td><td>Resistor_SMD:R_0603_1608Metric</td><td>Resistor, small US symbol</td><td></td></tr>
+    <tr><td>R14, R15</td><td>2</td><td>1M</td><td>Device:R_Small_US</td><td>Resistor_SMD:R_0402_1005Metric</td><td>Resistor, small US symbol</td><td></td></tr>
+    <tr><td>R16, R17</td><td>2</td><td>220k</td><td>Device:R_Small_US</td><td>Resistor_SMD:R_0402_1005Metric</td><td>Resistor, small US symbol</td><td></td></tr>
+    <tr><td>R18</td><td>1</td><td>1.2k</td><td>Device:R_Small_US</td><td>Resistor_SMD:R_0402_1005Metric</td><td>Resistor, small US symbol</td><td></td></tr>
+    <tr><td>R19</td><td>1</td><td>24k</td><td>Device:R_Small_US</td><td>Resistor_SMD:R_0402_1005Metric</td><td>Resistor, small US symbol</td><td></td></tr>
+    <tr><td>R20</td><td>1</td><td>27k</td><td>Device:R_Small_US</td><td>Resistor_SMD:R_0402_1005Metric</td><td>Resistor, small US symbol</td><td></td></tr>
+    <tr><td>R21</td><td>1</td><td>2.4k</td><td>Device:R_Small_US</td><td>Resistor_SMD:R_0402_1005Metric</td><td>Resistor, small US symbol</td><td></td></tr>
+    <tr><td>R22</td><td>1</td><td>3.3k</td><td>Device:R_Small_US</td><td>Resistor_SMD:R_0402_1005Metric</td><td>Resistor, small US symbol</td><td></td></tr>
+    <tr><td>R23</td><td>1</td><td>4.3k</td><td>Device:R_Small_US</td><td>Resistor_SMD:R_0603_1608Metric</td><td>Resistor, small US symbol</td><td></td></tr>
+    <tr><td>RV1, RV2, RV3, RV4, RV5, RV6</td><td>6</td><td>10k</td><td>Device:R_POT_US</td><td>Potentiometer_THT:Potentiometer_Alps_RK09K_Single_Vertical</td><td>Potentiometer, US symbol</td><td></td></tr>
+    <tr><td>SW1</td><td>1</td><td>SW_Push</td><td>Switch:SW_Push</td><td>Button_Switch_SMD:SW_SPST_PTS645</td><td>Push button switch, generic, two pins</td><td></td></tr>
+    <tr><td>SW2</td><td>1</td><td>SW_SPDT</td><td>Switch:SW_SPDT</td><td>Button_Switch_SMD:SW_SPDT_PCM12</td><td>Switch, single pole double throw</td><td></td></tr>
+    <tr><td>SW3</td><td>1</td><td>SW_PUSH_OFF_ON_DPDT</td><td>STM32AudioEffects:SW_PUSH_OFF_ON_DPDT</td><td>STM32AudioEffects:SW_DPDT_FOOT_17.2x12.2mm_Vertical</td><td>Momentary Switch, dual pole double throw</td><td></td></tr>
+    <tr><td>SW4, SW5, SW6</td><td>3</td><td>OFF_MOM</td><td>Switch:SW_Push</td><td>Button_Switch_THT:SW_PUSH_6mm_H13mm</td><td>Push button switch, generic, two pins</td><td></td></tr>
+    <tr><td>SW7, SW8, SW9</td><td>3</td><td>SW_SPST</td><td>Switch:SW_SPST</td><td>STM32AudioEffects:SW_DPDT_FOOT_17.2x12.2mm_Vertical</td><td>Single Pole Single Throw (SPST) switch</td><td></td></tr>
+    <tr><td>U1</td><td>1</td><td>STM32F303RETx</td><td>MCU_ST_STM32F3:STM32F303RETx</td><td>Package_QFP:LQFP-64_10x10mm_P0.5mm</td><td>ARM Cortex-M4 MCU, 512KB flash, 64KB RAM, 72MHz, 2-3.6V, 51 GPIO, LQFP-64</td><td></td></tr>
+    <tr><td>U2</td><td>1</td><td>I2C_OLED_Display</td><td>STM32AudioEffects:I2C_OLED_Display</td><td>STM32AudioEffects:I2C_OLED_DISPLAY</td><td></td><td></td></tr>
+    <tr><td>U3</td><td>1</td><td>MC34063AD</td><td>Regulator_Switching:MC34063AD</td><td>Package_SO:SOIC-8_3.9x4.9mm_P1.27mm</td><td>1.5A, step-up/down/inverting switching regulator, 3-40V Vin, 100kHz, SO-8</td><td></td></tr>
+    <tr><td>U4</td><td>1</td><td>USBLC6-2SC6</td><td>Power_Protection:USBLC6-2SC6</td><td>Package_TO_SOT_SMD:SOT-23-6</td><td>Very low capacitance ESD protection diode, 2 data-line, SOT-23-6</td><td></td></tr>
+    <tr><td>X1</td><td>1</td><td>12MHz</td><td>Device:Crystal_GND24_Small</td><td>Crystal:Crystal_SMD_3225-4Pin_3.2x2.5mm</td><td>Four pin crystal, GND on pins 2 and 4, small symbol</td><td></td></tr><!--TABLEROW-->
+    </table>
+    </body>
+</html>
+    

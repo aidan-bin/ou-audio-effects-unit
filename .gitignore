@@ -1,0 +1,36 @@
+# macOS
+.DS_Store
+
+# CMake and build outputs
+build/
+build-*/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+
+# Common C/C++ build artifacts
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+*.out
+*.elf
+*.bin
+*.map
+
+# Python
+__pycache__/
+*.pyc
+
+# KiCad backups/autosaves/cache artifacts
+*.bak
+*-bak
+*.bck
+*_autosave-*
+*-cache.lib
+fp-info-cache
