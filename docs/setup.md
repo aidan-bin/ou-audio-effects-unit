@@ -20,6 +20,7 @@ Optional tooling:
 ./scripts/test.sh
 ./scripts/clean.sh
 ./scripts/check-full.sh
+./scripts/doctor.sh
 ```
 
 ## Host Demo

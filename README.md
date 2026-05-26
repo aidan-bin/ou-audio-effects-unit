@@ -66,6 +66,12 @@ Clean generated artifacts:
 ./scripts/clean.sh
 ```
 
+Check local tool dependencies:
+
+```sh
+./scripts/doctor.sh
+```
+
 ## Hardware Snapshot
 
 Board assets are under [hardware/STM32AudioEffects](hardware/STM32AudioEffects), with analog simulation files under [hardware/LTspice](hardware/LTspice).
