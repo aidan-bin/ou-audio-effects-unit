@@ -358,6 +358,30 @@ static void test_compression_threshold_above_axis_clamps(void)
     expect_eq_u16(output_ref[0], output_over[0], "compression threshold>axis clamps");
 }
 
+static void test_compression_threshold_above_axis_clamps_negative_side(void)
+{
+    const uint16_t input[] = {
+        0,
+    };
+
+    uint16_t output_ref[1] = {0};
+    CompressionParam ref_param = {
+        .threshold = X_AXIS,
+        .ratio = Q_ONE,
+    };
+
+    uint16_t output_over[1] = {0};
+    CompressionParam over_threshold_param = {
+        .threshold = X_AXIS + 1000,
+        .ratio = Q_ONE,
+    };
+
+    buf_compression(input, output_ref, 1, &ref_param);
+    buf_compression(input, output_over, 1, &over_threshold_param);
+
+    expect_eq_u16(output_ref[0], output_over[0], "compression threshold>axis clamps negative side");
+}
+
 static void test_echo_attack_zero_is_copy(void)
 {
     const EchoParam param = {
@@ -766,6 +790,7 @@ int main(void)
     test_compression_zero_threshold_hard_clip();
     test_compression_ratio_above_one_clamps_to_hard_clip();
     test_compression_threshold_above_axis_clamps();
+    test_compression_threshold_above_axis_clamps_negative_side();
     test_echo_attack_zero_is_copy();
     test_echo_zero_density_is_copy();
     test_echo_pre_delay_beyond_window_is_copy();
