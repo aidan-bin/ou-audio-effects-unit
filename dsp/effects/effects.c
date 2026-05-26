@@ -70,6 +70,11 @@ void buf_echo(const uint16_t* in_buf, uint16_t* out_buf, size_t num_samples, con
 	size_t density = param->density;
 	size_t attack = param->attack;
 	size_t decay = param->decay;
+
+	if (num_samples == 0)
+	{
+		return;
+	}
 	
 	// Start of current samples of in_buf
 	const uint16_t* in_buf_curr = &in_buf[delay_samples];
@@ -77,7 +82,16 @@ void buf_echo(const uint16_t* in_buf, uint16_t* out_buf, size_t num_samples, con
 	// Copy current input samples to output samples buffer
 	memcpy(out_buf, in_buf_curr, num_samples * sizeof(uint16_t));
 
+	if (density == 0)
+	{
+		return;
+	}
+
 	size_t echo_spacing = (1U << FIXED_POINT_Q) / density;
+	if (echo_spacing == 0)
+	{
+		echo_spacing = 1;
+	}
 
 	// For each sample of in_buf, add its echo to out_buf
 	for (size_t n = 0; n < delay_samples + num_samples - 1; n++)

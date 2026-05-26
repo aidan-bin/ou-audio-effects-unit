@@ -128,12 +128,48 @@ static void test_echo_attack_zero_is_copy(void)
     }
 }
 
+static void test_echo_zero_density_is_copy(void)
+{
+    const EchoParam param = {
+        .delay_samples = 2,
+        .pre_delay = 1,
+        .density = 0,
+        .attack = Q_ONE,
+        .decay = 0,
+    };
+
+    const uint16_t input_with_delay[] = {
+        (uint16_t)(X_AXIS + 10),
+        (uint16_t)(X_AXIS + 20),
+        (uint16_t)(X_AXIS + 30),
+        (uint16_t)(X_AXIS + 40),
+        (uint16_t)(X_AXIS + 50),
+        (uint16_t)(X_AXIS + 60),
+    };
+
+    const uint16_t expected[] = {
+        input_with_delay[2],
+        input_with_delay[3],
+        input_with_delay[4],
+        input_with_delay[5],
+    };
+
+    uint16_t output[4] = {0};
+    buf_echo(input_with_delay, output, 4, &param);
+
+    for (size_t i = 0; i < 4; i++)
+    {
+        expect_eq_u16(expected[i], output[i], "echo density=0 copy");
+    }
+}
+
 int main(void)
 {
     test_q_tanh_clamps();
     test_overdrive_dry_passthrough();
     test_compression_ratio_behavior();
     test_echo_attack_zero_is_copy();
+    test_echo_zero_density_is_copy();
 
     if (failures != 0)
     {
