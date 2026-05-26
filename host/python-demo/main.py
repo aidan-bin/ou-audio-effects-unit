@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 import sounddevice as sd
 import wave
 import effects
-import ctypes
 import sys
 from pathlib import Path
 

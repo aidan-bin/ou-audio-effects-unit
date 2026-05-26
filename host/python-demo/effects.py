@@ -25,9 +25,8 @@ def _load_effects_library():
 
 libeffects = _load_effects_library()
 
-x_axis = int(65535/2)
+x_axis = int(65535 / 2)
 fixed_point_q = 8
-param_max = 2 ** 16 - 1  # 16-bit unsigned integer max
 
 
 class OverdriveParam(ctypes.Structure):
@@ -72,6 +71,33 @@ class CompressionParam(ctypes.Structure):
                f"ratio = {self.ratio}"
 
 
+UINT16_PTR = ctypes.POINTER(ctypes.c_uint16)
+
+libeffects.buf_overdrive.argtypes = [
+    UINT16_PTR,
+    UINT16_PTR,
+    ctypes.c_size_t,
+    ctypes.POINTER(OverdriveParam),
+]
+libeffects.buf_overdrive.restype = None
+
+libeffects.buf_echo.argtypes = [
+    UINT16_PTR,
+    UINT16_PTR,
+    ctypes.c_size_t,
+    ctypes.POINTER(EchoParam),
+]
+libeffects.buf_echo.restype = None
+
+libeffects.buf_compression.argtypes = [
+    UINT16_PTR,
+    UINT16_PTR,
+    ctypes.c_size_t,
+    ctypes.POINTER(CompressionParam),
+]
+libeffects.buf_compression.restype = None
+
+
 def overdrive(in_samples_list, param):
     in_samples_list = [(round(sample) + x_axis) for sample in in_samples_list]
     num_samples = len(in_samples_list)
@@ -85,7 +111,7 @@ def overdrive(in_samples_list, param):
 
 def echo(in_samples_list, param):
     in_samples_list = [(round(sample) + x_axis) for sample in in_samples_list]
-    num_prev_samples = param.delay_samples
+    num_prev_samples = int(param.delay_samples)
     num_curr_samples = len(in_samples_list) - num_prev_samples
     in_samples_array = (ctypes.c_uint16 * len(in_samples_list))(*in_samples_list)
     out_samples_array = (ctypes.c_uint16 * num_curr_samples)()
@@ -104,13 +130,3 @@ def compression(in_samples_list, param):
                                ctypes.cast(out_samples_array, ctypes.POINTER(ctypes.c_uint16)),
                                num_samples, ctypes.byref(param))
     return [(out_samples_array[i] - x_axis) for i in range(num_samples)]
-
-
-# Saturate num to +/- amp
-def saturate(num, amp):
-    if num > amp:
-        return amp
-    elif num < -amp:
-        return -amp
-    else:
-        return num
