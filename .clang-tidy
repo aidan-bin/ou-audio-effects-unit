@@ -1,0 +1,9 @@
+Checks: >
+  clang-analyzer-*,
+  bugprone-*,
+  performance-*,
+  readability-identifier-naming,
+  -readability-identifier-naming
+WarningsAsErrors: ''
+HeaderFilterRegex: '^(dsp|firmware|host|tests)/'
+FormatStyle: none

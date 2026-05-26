@@ -1,14 +1,28 @@
 # Setup
 
+## Build Baseline
+
+Run from repository root:
+
+```sh
+./scripts/build.sh
+```
+
+Optional tooling:
+
+```sh
+./scripts/format.sh
+./scripts/lint.sh
+```
+
 ## Host Demo
 
 Run from repository root:
 
 ```sh
+./scripts/build.sh
 cd host/python-demo
 python3 -m pip install PyQt5 matplotlib numpy sounddevice
-cc -Wall -I../../dsp/effects -I../../dsp/math -c ../../dsp/math/fast_math.c ../../dsp/effects/effects.c
-cc -shared -o libeffects.dll fast_math.o effects.o
 python3 main.py
 ```
 
