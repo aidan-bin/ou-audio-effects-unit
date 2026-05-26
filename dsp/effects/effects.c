@@ -37,6 +37,10 @@ void buf_overdrive(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples
     size_t tone = param->tone;
     size_t mix = param->mix;
 
+    if (mix > (1U << FIXED_POINT_Q)) {
+        mix = (1U << FIXED_POINT_Q);
+    }
+
     for (size_t n = 0; n < num_samples; n++) {
         int32_t input = (int32_t)in_buf[n] - X_AXIS;
         int32_t output;
@@ -117,6 +121,10 @@ void buf_compression(const uint16_t *in_buf, uint16_t *out_buf, size_t num_sampl
                      const CompressionParam *param) {
     int32_t threshold = (int32_t)param->threshold;
     int32_t ratio = (int32_t)param->ratio;
+
+    if (ratio > (1 << FIXED_POINT_Q)) {
+        ratio = (1 << FIXED_POINT_Q);
+    }
 
     // Excess gets scaled by (1 - ratio) before being added back to threshold
     ratio = (1 << FIXED_POINT_Q) - ratio;

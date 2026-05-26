@@ -103,6 +103,36 @@ static void test_overdrive_full_wet_changes_signal(void)
     }
 }
 
+static void test_overdrive_mix_above_one_clamps_to_wet(void)
+{
+    const uint16_t input[] = {
+        (uint16_t)(X_AXIS - 900),
+        (uint16_t)(X_AXIS + 900),
+    };
+
+    uint16_t output_clamped[2] = {0};
+    OverdriveParam clamped_param = {
+        .level = MAX_OVERDRIVE_LEVEL,
+        .gain = Q_ONE,
+        .tone = Q_ONE,
+        .mix = Q_ONE,
+    };
+
+    uint16_t output_over[2] = {0};
+    OverdriveParam over_param = {
+        .level = MAX_OVERDRIVE_LEVEL,
+        .gain = Q_ONE,
+        .tone = Q_ONE,
+        .mix = Q_ONE + 64,
+    };
+
+    buf_overdrive(input, output_clamped, 2, &clamped_param);
+    buf_overdrive(input, output_over, 2, &over_param);
+
+    expect_eq_u16(output_clamped[0], output_over[0], "overdrive mix>1 clamps sample 0");
+    expect_eq_u16(output_clamped[1], output_over[1], "overdrive mix>1 clamps sample 1");
+}
+
 static void test_compression_ratio_behavior(void)
 {
     const uint16_t input[] = {
@@ -156,6 +186,32 @@ static void test_compression_zero_threshold_hard_clip(void)
     expect_eq_u16((uint16_t)X_AXIS, output[0], "compression zero-threshold clip low");
     expect_eq_u16((uint16_t)X_AXIS, output[1], "compression zero-threshold clip center");
     expect_eq_u16((uint16_t)X_AXIS, output[2], "compression zero-threshold clip high");
+}
+
+static void test_compression_ratio_above_one_clamps_to_hard_clip(void)
+{
+    const uint16_t input[] = {
+        (uint16_t)(X_AXIS - 1000),
+        (uint16_t)(X_AXIS + 1000),
+    };
+
+    uint16_t output_clip[2] = {0};
+    CompressionParam hard_clip_param = {
+        .threshold = 300,
+        .ratio = Q_ONE,
+    };
+
+    uint16_t output_over[2] = {0};
+    CompressionParam over_ratio_param = {
+        .threshold = 300,
+        .ratio = Q_ONE + 64,
+    };
+
+    buf_compression(input, output_clip, 2, &hard_clip_param);
+    buf_compression(input, output_over, 2, &over_ratio_param);
+
+    expect_eq_u16(output_clip[0], output_over[0], "compression ratio>1 clamps sample 0");
+    expect_eq_u16(output_clip[1], output_over[1], "compression ratio>1 clamps sample 1");
 }
 
 static void test_echo_attack_zero_is_copy(void)
@@ -325,8 +381,10 @@ int main(void)
     test_overdrive_dry_passthrough();
     test_overdrive_zero_level_mutes_wet();
     test_overdrive_full_wet_changes_signal();
+    test_overdrive_mix_above_one_clamps_to_wet();
     test_compression_ratio_behavior();
     test_compression_zero_threshold_hard_clip();
+    test_compression_ratio_above_one_clamps_to_hard_clip();
     test_echo_attack_zero_is_copy();
     test_echo_zero_density_is_copy();
     test_echo_single_step_full_coverage();
