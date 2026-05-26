@@ -869,6 +869,53 @@ static void test_echo_negative_mix_saturates_at_zero(void)
     expect_eq_u16(0, output[0], "echo negative mix saturates");
 }
 
+static void test_echo_attack_monotonic_positive_case(void)
+{
+    const uint16_t input_with_delay[] = {
+        (uint16_t)(X_AXIS + 500),
+        (uint16_t)(X_AXIS + 1000),
+    };
+
+    const EchoParam low_attack = {
+        .delay_samples = 1,
+        .pre_delay = 1,
+        .density = Q_ONE,
+        .attack = Q_ONE / 4,
+        .decay = Q_ONE,
+    };
+
+    const EchoParam mid_attack = {
+        .delay_samples = 1,
+        .pre_delay = 1,
+        .density = Q_ONE,
+        .attack = Q_ONE / 2,
+        .decay = Q_ONE,
+    };
+
+    const EchoParam high_attack = {
+        .delay_samples = 1,
+        .pre_delay = 1,
+        .density = Q_ONE,
+        .attack = Q_ONE,
+        .decay = Q_ONE,
+    };
+
+    uint16_t out_low[1] = {0};
+    uint16_t out_mid[1] = {0};
+    uint16_t out_high[1] = {0};
+
+    buf_echo(input_with_delay, out_low, 1, &low_attack);
+    buf_echo(input_with_delay, out_mid, 1, &mid_attack);
+    buf_echo(input_with_delay, out_high, 1, &high_attack);
+
+    if (!(out_low[0] <= out_mid[0] && out_mid[0] <= out_high[0]))
+    {
+        fprintf(stderr, "FAIL: echo attack monotonic low=%u mid=%u high=%u\n", out_low[0], out_mid[0],
+            out_high[0]);
+        failures++;
+    }
+}
+
 int main(void)
 {
     test_q_tanh_clamps();
@@ -903,6 +950,7 @@ int main(void)
     test_echo_zero_samples_no_write();
     test_echo_positive_mix_saturates_at_u16_max();
     test_echo_negative_mix_saturates_at_zero();
+    test_echo_attack_monotonic_positive_case();
 
     if (failures != 0)
     {
