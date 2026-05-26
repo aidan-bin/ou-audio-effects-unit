@@ -8,6 +8,7 @@ static int32_t saturate_min(int32_t num, int32_t min);
 static uint16_t saturate_u16(int32_t num);
 static size_t clamp_qn(size_t num);
 static size_t clamp_range(size_t num, size_t min, size_t max);
+static size_t clamp_min(size_t num, size_t min);
 
 // #define PARAM_INSTANCE_ENABLE	// Enables instances of parameters
 
@@ -65,7 +66,7 @@ void buf_overdrive(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples
 void buf_echo(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples,
               const EchoParam *param) {
     size_t delay_samples = param->delay_samples;
-    size_t pre_delay = clamp_range(param->pre_delay, MIN_ECHO_PRE_DELAY, SIZE_MAX);
+    size_t pre_delay = clamp_min(param->pre_delay, MIN_ECHO_PRE_DELAY);
     size_t density = clamp_qn(param->density);
     size_t attack = clamp_qn(param->attack);
     size_t decay = clamp_qn(param->decay);
@@ -190,6 +191,14 @@ static size_t clamp_range(size_t num, size_t min, size_t max) {
 
     if (num > max) {
         return max;
+    }
+
+    return num;
+}
+
+static size_t clamp_min(size_t num, size_t min) {
+    if (num < min) {
+        return min;
     }
 
     return num;
