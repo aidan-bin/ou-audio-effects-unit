@@ -1,17 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-needs_configure=0
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/cmake.sh"
 
-if [[ ! -f build/CMakeCache.txt ]]; then
-	needs_configure=1
-elif ! grep -q '^CMAKE_BUILD_TYPE:STRING=Release$' build/CMakeCache.txt; then
-	needs_configure=1
-fi
-
-if [[ "$needs_configure" -eq 1 ]]; then
-	cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-fi
+ensure_release_build_tree
 
 cmake --build build -j
 ctest --test-dir build --output-on-failure
