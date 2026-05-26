@@ -15,6 +15,26 @@ check_tool() {
     fi
 }
 
+check_tool_or_versioned() {
+    local tool="$1"
+    local hint="$2"
+    local found=0
+
+    for candidate in "$tool" "$tool"-20 "$tool"-19 "$tool"-18 "$tool"-17 "$tool"-16; do
+        if command -v "$candidate" >/dev/null 2>&1; then
+            found=1
+            break
+        fi
+    done
+
+    if [[ "$found" -eq 1 ]]; then
+        echo "[ok] $tool (or versioned variant)"
+    else
+        echo "[missing] $tool - $hint"
+        missing=1
+    fi
+}
+
 echo "Checking core build and test dependencies..."
 check_tool cmake "Install CMake (e.g. brew install cmake)"
 check_tool ctest "Usually installed with CMake"
@@ -23,25 +43,8 @@ check_tool cc "Install a C compiler toolchain"
 echo
 echo "Checking formatting and lint dependencies..."
 
-if command -v clang-format >/dev/null 2>&1 || \
-   command -v clang-format-18 >/dev/null 2>&1 || \
-   command -v clang-format-17 >/dev/null 2>&1 || \
-   command -v clang-format-16 >/dev/null 2>&1; then
-    echo "[ok] clang-format (or versioned variant)"
-else
-    echo "[missing] clang-format - Install LLVM clang-format (e.g. brew install llvm)"
-    missing=1
-fi
-
-if command -v clang-tidy >/dev/null 2>&1 || \
-   command -v clang-tidy-18 >/dev/null 2>&1 || \
-   command -v clang-tidy-17 >/dev/null 2>&1 || \
-   command -v clang-tidy-16 >/dev/null 2>&1; then
-    echo "[ok] clang-tidy (or versioned variant)"
-else
-    echo "[missing] clang-tidy - Install LLVM clang-tidy (e.g. brew install llvm)"
-    missing=1
-fi
+check_tool_or_versioned clang-format "Install LLVM clang-format (e.g. brew install llvm)"
+check_tool_or_versioned clang-tidy "Install LLVM clang-tidy (e.g. brew install llvm)"
 
 echo
 echo "Checking host demo dependencies..."
