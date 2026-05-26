@@ -399,6 +399,35 @@ static void test_compression_threshold_above_axis_clamps_negative_side(void)
     expect_eq_u16(output_ref[0], output_over[0], "compression threshold>axis clamps negative side");
 }
 
+static void test_compression_sign_symmetry(void)
+{
+    const uint16_t input[] = {
+        (uint16_t)(X_AXIS - 1000),
+        (uint16_t)(X_AXIS + 1000),
+        (uint16_t)(X_AXIS - 200),
+        (uint16_t)(X_AXIS + 200),
+    };
+
+    uint16_t output[4] = {0};
+    CompressionParam param = {
+        .threshold = 300,
+        .ratio = Q_ONE / 2,
+    };
+
+    buf_compression(input, output, 4, &param);
+
+    for (size_t i = 0; i < 4; i += 2)
+    {
+        uint32_t mirrored_sum = (uint32_t)output[i] + (uint32_t)output[i + 1];
+        if (mirrored_sum != (uint32_t)(2U * X_AXIS))
+        {
+            fprintf(stderr, "FAIL: compression symmetry pair=%zu sum=%u expected=%u\n", i / 2,
+                mirrored_sum, (unsigned)(2U * X_AXIS));
+            failures++;
+        }
+    }
+}
+
 static void test_echo_attack_zero_is_copy(void)
 {
     const EchoParam param = {
@@ -791,6 +820,7 @@ int main(void)
     test_compression_ratio_above_one_clamps_to_hard_clip();
     test_compression_threshold_above_axis_clamps();
     test_compression_threshold_above_axis_clamps_negative_side();
+    test_compression_sign_symmetry();
     test_echo_attack_zero_is_copy();
     test_echo_zero_density_is_copy();
     test_echo_pre_delay_beyond_window_is_copy();
