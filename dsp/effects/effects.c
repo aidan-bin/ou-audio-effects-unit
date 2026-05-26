@@ -37,6 +37,20 @@ void buf_overdrive(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples
     size_t tone = param->tone;
     size_t mix = param->mix;
 
+    if (level > MAX_OVERDRIVE_LEVEL) {
+        level = MAX_OVERDRIVE_LEVEL;
+    }
+
+    if (gain > MAX_OVERDRIVE_GAIN) {
+        gain = MAX_OVERDRIVE_GAIN;
+    }
+
+    if (tone < MIN_OVERDRIVE_TONE) {
+        tone = MIN_OVERDRIVE_TONE;
+    } else if (tone > MAX_OVERDRIVE_TONE) {
+        tone = MAX_OVERDRIVE_TONE;
+    }
+
     if (mix > (1U << FIXED_POINT_Q)) {
         mix = (1U << FIXED_POINT_Q);
     }

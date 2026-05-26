@@ -133,6 +133,36 @@ static void test_overdrive_mix_above_one_clamps_to_wet(void)
     expect_eq_u16(output_clamped[1], output_over[1], "overdrive mix>1 clamps sample 1");
 }
 
+static void test_overdrive_gain_above_one_clamps(void)
+{
+    const uint16_t input[] = {
+        (uint16_t)(X_AXIS - 1100),
+        (uint16_t)(X_AXIS + 1100),
+    };
+
+    uint16_t output_ref[2] = {0};
+    OverdriveParam ref_param = {
+        .level = MAX_OVERDRIVE_LEVEL,
+        .gain = Q_ONE,
+        .tone = Q_ONE,
+        .mix = Q_ONE,
+    };
+
+    uint16_t output_over[2] = {0};
+    OverdriveParam over_param = {
+        .level = MAX_OVERDRIVE_LEVEL,
+        .gain = Q_ONE + 64,
+        .tone = Q_ONE,
+        .mix = Q_ONE,
+    };
+
+    buf_overdrive(input, output_ref, 2, &ref_param);
+    buf_overdrive(input, output_over, 2, &over_param);
+
+    expect_eq_u16(output_ref[0], output_over[0], "overdrive gain>1 clamps sample 0");
+    expect_eq_u16(output_ref[1], output_over[1], "overdrive gain>1 clamps sample 1");
+}
+
 static void test_compression_ratio_behavior(void)
 {
     const uint16_t input[] = {
@@ -459,6 +489,7 @@ int main(void)
     test_overdrive_zero_level_mutes_wet();
     test_overdrive_full_wet_changes_signal();
     test_overdrive_mix_above_one_clamps_to_wet();
+    test_overdrive_gain_above_one_clamps();
     test_compression_ratio_behavior();
     test_compression_zero_threshold_hard_clip();
     test_compression_ratio_above_one_clamps_to_hard_clip();
