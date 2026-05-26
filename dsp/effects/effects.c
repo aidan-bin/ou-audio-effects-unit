@@ -159,6 +159,10 @@ void buf_compression(const uint16_t *in_buf, uint16_t *out_buf, size_t num_sampl
     int32_t threshold = (int32_t)param->threshold;
     int32_t ratio = (int32_t)param->ratio;
 
+    if (threshold > X_AXIS) {
+        threshold = X_AXIS;
+    }
+
     if (ratio > (1 << FIXED_POINT_Q)) {
         ratio = (1 << FIXED_POINT_Q);
     }
