@@ -18,6 +18,7 @@ check_tool() {
 echo "Checking core build and test dependencies..."
 check_tool cmake "Install CMake (e.g. brew install cmake)"
 check_tool ctest "Usually installed with CMake"
+check_tool cc "Install a C compiler toolchain"
 
 echo
 echo "Checking formatting and lint dependencies..."
@@ -45,7 +46,13 @@ fi
 echo
 echo "Checking host demo dependencies..."
 check_tool python3 "Install Python 3"
-check_tool pip3 "Install pip for Python 3"
+
+if python3 -m pip --version >/dev/null 2>&1; then
+    echo "[ok] python3 -m pip"
+else
+    echo "[missing] python3 pip module - Install pip for Python 3"
+    missing=1
+fi
 
 if [[ "$missing" -ne 0 ]]; then
     echo
