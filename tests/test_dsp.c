@@ -410,6 +410,48 @@ static void test_echo_zero_samples_no_write(void)
     expect_eq_u16(5678, output[1], "echo zero-samples preserves output[1]");
 }
 
+static void test_echo_positive_mix_saturates_at_u16_max(void)
+{
+    const EchoParam param = {
+        .delay_samples = 1,
+        .pre_delay = 1,
+        .density = Q_ONE,
+        .attack = Q_ONE,
+        .decay = Q_ONE,
+    };
+
+    const uint16_t input_with_delay[] = {
+        UINT16_MAX,
+        UINT16_MAX,
+    };
+
+    uint16_t output[1] = {0};
+    buf_echo(input_with_delay, output, 1, &param);
+
+    expect_eq_u16(UINT16_MAX, output[0], "echo positive mix saturates");
+}
+
+static void test_echo_negative_mix_saturates_at_zero(void)
+{
+    const EchoParam param = {
+        .delay_samples = 1,
+        .pre_delay = 1,
+        .density = Q_ONE,
+        .attack = Q_ONE,
+        .decay = Q_ONE,
+    };
+
+    const uint16_t input_with_delay[] = {
+        0,
+        0,
+    };
+
+    uint16_t output[1] = {0};
+    buf_echo(input_with_delay, output, 1, &param);
+
+    expect_eq_u16(0, output[0], "echo negative mix saturates");
+}
+
 int main(void)
 {
     test_q_tanh_clamps();
@@ -426,6 +468,8 @@ int main(void)
     test_echo_single_step_full_coverage();
     test_echo_high_density_clamps_spacing();
     test_echo_zero_samples_no_write();
+    test_echo_positive_mix_saturates_at_u16_max();
+    test_echo_negative_mix_saturates_at_zero();
 
     if (failures != 0)
     {

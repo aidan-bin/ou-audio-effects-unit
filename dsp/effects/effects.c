@@ -5,6 +5,7 @@
 
 static int32_t saturate_amplitude(int32_t num, size_t max);
 static int32_t saturate_min(int32_t num, int32_t min);
+static uint16_t saturate_u16(int32_t num);
 
 // #define PARAM_INSTANCE_ENABLE	// Enables instances of parameters
 
@@ -101,8 +102,10 @@ void buf_echo(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples,
             // Make sure echo is within bounds of out_buf, ignore otherwise (still decay/reduce
             // gain)
             if (n + delay >= delay_samples && n + delay < delay_samples + num_samples) {
-                out_buf[n + delay - delay_samples] +=
-                    (int32_t)curr_echo_gain * dry_input >> FIXED_POINT_Q;
+                const size_t out_idx = n + delay - delay_samples;
+                int32_t wet = ((int32_t)curr_echo_gain * dry_input) >> FIXED_POINT_Q;
+                int32_t mixed = (int32_t)out_buf[out_idx] + wet;
+                out_buf[out_idx] = saturate_u16(mixed);
             }
 
             // Reduce echo gain by decay, saturating to 0
@@ -163,4 +166,16 @@ static int32_t saturate_min(int32_t num, int32_t min) {
         return min;
     else
         return num;
+}
+
+static uint16_t saturate_u16(int32_t num) {
+    if (num < 0) {
+        return 0;
+    }
+
+    if (num > (int32_t)UINT16_MAX) {
+        return UINT16_MAX;
+    }
+
+    return (uint16_t)num;
 }
