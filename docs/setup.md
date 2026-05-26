@@ -19,6 +19,7 @@ Optional tooling:
 ./scripts/lint.sh
 ./scripts/test.sh
 ./scripts/clean.sh
+./scripts/check-full.sh
 ```
 
 ## Host Demo

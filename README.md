@@ -42,6 +42,12 @@ Run from repository root:
 ./scripts/check.sh
 ```
 
+Run full verification (format + lint + build + tests):
+
+```sh
+./scripts/check-full.sh
+```
+
 Or run tests only:
 
 ```sh
