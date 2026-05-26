@@ -27,6 +27,19 @@ static void expect_eq_i16(int16_t expected, int16_t actual, const char* label)
     }
 }
 
+static void expect_eq_u16_array(const uint16_t* expected, const uint16_t* actual, size_t count,
+    const char* label)
+{
+    for (size_t i = 0; i < count; i++)
+    {
+        if (expected[i] != actual[i])
+        {
+            fprintf(stderr, "FAIL: %s[%zu] expected=%u actual=%u\n", label, i, expected[i], actual[i]);
+            failures++;
+        }
+    }
+}
+
 static void test_q_tanh_clamps(void)
 {
     expect_eq_i16((int16_t)Q_ONE, q_tanh(10000), "q_tanh positive clamp");
@@ -53,10 +66,7 @@ static void test_overdrive_dry_passthrough(void)
 
     buf_overdrive(input, output, sizeof(input) / sizeof(input[0]), &param);
 
-    for (size_t i = 0; i < sizeof(input) / sizeof(input[0]); i++)
-    {
-        expect_eq_u16(input[i], output[i], "overdrive dry passthrough");
-    }
+    expect_eq_u16_array(input, output, sizeof(input) / sizeof(input[0]), "overdrive dry passthrough");
 }
 
 static void test_overdrive_zero_level_mutes_wet(void)
@@ -129,8 +139,7 @@ static void test_overdrive_mix_above_one_clamps_to_wet(void)
     buf_overdrive(input, output_clamped, 2, &clamped_param);
     buf_overdrive(input, output_over, 2, &over_param);
 
-    expect_eq_u16(output_clamped[0], output_over[0], "overdrive mix>1 clamps sample 0");
-    expect_eq_u16(output_clamped[1], output_over[1], "overdrive mix>1 clamps sample 1");
+    expect_eq_u16_array(output_clamped, output_over, 2, "overdrive mix>1 clamps");
 }
 
 static void test_overdrive_gain_above_one_clamps(void)
@@ -159,8 +168,7 @@ static void test_overdrive_gain_above_one_clamps(void)
     buf_overdrive(input, output_ref, 2, &ref_param);
     buf_overdrive(input, output_over, 2, &over_param);
 
-    expect_eq_u16(output_ref[0], output_over[0], "overdrive gain>1 clamps sample 0");
-    expect_eq_u16(output_ref[1], output_over[1], "overdrive gain>1 clamps sample 1");
+    expect_eq_u16_array(output_ref, output_over, 2, "overdrive gain>1 clamps");
 }
 
 static void test_overdrive_tone_below_one_clamps(void)
@@ -189,8 +197,7 @@ static void test_overdrive_tone_below_one_clamps(void)
     buf_overdrive(input, output_ref, 2, &ref_param);
     buf_overdrive(input, output_low_tone, 2, &low_tone_param);
 
-    expect_eq_u16(output_ref[0], output_low_tone[0], "overdrive tone<1 clamps sample 0");
-    expect_eq_u16(output_ref[1], output_low_tone[1], "overdrive tone<1 clamps sample 1");
+    expect_eq_u16_array(output_ref, output_low_tone, 2, "overdrive tone<1 clamps");
 }
 
 static void test_overdrive_level_above_max_clamps(void)
@@ -219,8 +226,7 @@ static void test_overdrive_level_above_max_clamps(void)
     buf_overdrive(input, output_ref, 2, &ref_param);
     buf_overdrive(input, output_over_level, 2, &over_level_param);
 
-    expect_eq_u16(output_ref[0], output_over_level[0], "overdrive level>max clamps sample 0");
-    expect_eq_u16(output_ref[1], output_over_level[1], "overdrive level>max clamps sample 1");
+    expect_eq_u16_array(output_ref, output_over_level, 2, "overdrive level>max clamps");
 }
 
 static void test_overdrive_tone_above_max_clamps(void)
@@ -249,8 +255,7 @@ static void test_overdrive_tone_above_max_clamps(void)
     buf_overdrive(input, output_ref, 2, &ref_param);
     buf_overdrive(input, output_over_tone, 2, &over_tone_param);
 
-    expect_eq_u16(output_ref[0], output_over_tone[0], "overdrive tone>max clamps sample 0");
-    expect_eq_u16(output_ref[1], output_over_tone[1], "overdrive tone>max clamps sample 1");
+    expect_eq_u16_array(output_ref, output_over_tone, 2, "overdrive tone>max clamps");
 }
 
 static void test_compression_ratio_behavior(void)
@@ -269,10 +274,7 @@ static void test_compression_ratio_behavior(void)
     };
 
     buf_compression(input, output_no_compression, 4, &no_compression);
-    for (size_t i = 0; i < 4; i++)
-    {
-        expect_eq_u16(input[i], output_no_compression[i], "compression ratio=0 passthrough");
-    }
+    expect_eq_u16_array(input, output_no_compression, 4, "compression ratio=0 passthrough");
 
     uint16_t output_hard_clip[4] = {0};
     CompressionParam hard_clip = {
@@ -330,8 +332,7 @@ static void test_compression_ratio_above_one_clamps_to_hard_clip(void)
     buf_compression(input, output_clip, 2, &hard_clip_param);
     buf_compression(input, output_over, 2, &over_ratio_param);
 
-    expect_eq_u16(output_clip[0], output_over[0], "compression ratio>1 clamps sample 0");
-    expect_eq_u16(output_clip[1], output_over[1], "compression ratio>1 clamps sample 1");
+    expect_eq_u16_array(output_clip, output_over, 2, "compression ratio>1 clamps");
 }
 
 static void test_compression_threshold_above_axis_clamps(void)
@@ -411,10 +412,7 @@ static void test_echo_attack_zero_is_copy(void)
     uint16_t output[4] = {0};
     buf_echo(input_with_delay, output, 4, &param);
 
-    for (size_t i = 0; i < 4; i++)
-    {
-        expect_eq_u16(expected[i], output[i], "echo attack=0 copy");
-    }
+    expect_eq_u16_array(expected, output, 4, "echo attack=0 copy");
 }
 
 static void test_echo_zero_density_is_copy(void)
@@ -446,10 +444,7 @@ static void test_echo_zero_density_is_copy(void)
     uint16_t output[4] = {0};
     buf_echo(input_with_delay, output, 4, &param);
 
-    for (size_t i = 0; i < 4; i++)
-    {
-        expect_eq_u16(expected[i], output[i], "echo density=0 copy");
-    }
+    expect_eq_u16_array(expected, output, 4, "echo density=0 copy");
 }
 
 static void test_echo_pre_delay_beyond_window_is_copy(void)
@@ -481,10 +476,7 @@ static void test_echo_pre_delay_beyond_window_is_copy(void)
     uint16_t output[4] = {0};
     buf_echo(input_with_delay, output, 4, &param);
 
-    for (size_t i = 0; i < 4; i++)
-    {
-        expect_eq_u16(expected[i], output[i], "echo pre-delay beyond window copy");
-    }
+    expect_eq_u16_array(expected, output, 4, "echo pre-delay beyond window copy");
 }
 
 static void test_echo_pre_delay_zero_clamps_to_one(void)
@@ -546,7 +538,7 @@ static void test_echo_attack_above_one_clamps(void)
     buf_echo(input_with_delay, output_ref, 1, &ref_param);
     buf_echo(input_with_delay, output_over_attack, 1, &over_attack_param);
 
-    expect_eq_u16(output_ref[0], output_over_attack[0], "echo attack>1 clamps");
+    expect_eq_u16_array(output_ref, output_over_attack, 1, "echo attack>1 clamps");
 }
 
 static void test_echo_decay_above_one_clamps(void)
@@ -577,7 +569,7 @@ static void test_echo_decay_above_one_clamps(void)
     buf_echo(input_with_delay, output_ref, 1, &ref_param);
     buf_echo(input_with_delay, output_over_decay, 1, &over_decay_param);
 
-    expect_eq_u16(output_ref[0], output_over_decay[0], "echo decay>1 clamps");
+    expect_eq_u16_array(output_ref, output_over_decay, 1, "echo decay>1 clamps");
 }
 
 static void test_echo_zero_delay_is_copy(void)
@@ -632,10 +624,7 @@ static void test_echo_single_step_full_coverage(void)
     uint16_t output[4] = {0};
     buf_echo(input_with_delay, output, 4, &param);
 
-    for (size_t i = 0; i < 4; i++)
-    {
-        expect_eq_u16(expected[i], output[i], "echo one-step full coverage");
-    }
+    expect_eq_u16_array(expected, output, 4, "echo one-step full coverage");
 }
 
 static void test_echo_high_density_clamps_spacing(void)
@@ -667,10 +656,7 @@ static void test_echo_high_density_clamps_spacing(void)
     uint16_t output[4] = {0};
     buf_echo(input_with_delay, output, 4, &param);
 
-    for (size_t i = 0; i < 4; i++)
-    {
-        expect_eq_u16(expected[i], output[i], "echo high density spacing clamp");
-    }
+    expect_eq_u16_array(expected, output, 4, "echo high density spacing clamp");
 }
 
 static void test_echo_density_above_one_clamps(void)
@@ -705,10 +691,7 @@ static void test_echo_density_above_one_clamps(void)
     buf_echo(input_with_delay, output_ref, 4, &ref_param);
     buf_echo(input_with_delay, output_over_density, 4, &over_density_param);
 
-    for (size_t i = 0; i < 4; i++)
-    {
-        expect_eq_u16(output_ref[i], output_over_density[i], "echo density>1 clamps");
-    }
+    expect_eq_u16_array(output_ref, output_over_density, 4, "echo density>1 clamps");
 }
 
 static void test_echo_zero_samples_no_write(void)
