@@ -137,6 +137,27 @@ static void test_compression_ratio_behavior(void)
     expect_eq_u16((uint16_t)(X_AXIS + 300), output_hard_clip[3], "compression hard clip high");
 }
 
+static void test_compression_zero_threshold_hard_clip(void)
+{
+    const uint16_t input[] = {
+        (uint16_t)(X_AXIS - 1000),
+        (uint16_t)X_AXIS,
+        (uint16_t)(X_AXIS + 1000),
+    };
+
+    uint16_t output[3] = {0};
+    CompressionParam param = {
+        .threshold = 0,
+        .ratio = Q_ONE,
+    };
+
+    buf_compression(input, output, 3, &param);
+
+    expect_eq_u16((uint16_t)X_AXIS, output[0], "compression zero-threshold clip low");
+    expect_eq_u16((uint16_t)X_AXIS, output[1], "compression zero-threshold clip center");
+    expect_eq_u16((uint16_t)X_AXIS, output[2], "compression zero-threshold clip high");
+}
+
 static void test_echo_attack_zero_is_copy(void)
 {
     const EchoParam param = {
@@ -276,6 +297,28 @@ static void test_echo_high_density_clamps_spacing(void)
     }
 }
 
+static void test_echo_zero_samples_no_write(void)
+{
+    const EchoParam param = {
+        .delay_samples = 1,
+        .pre_delay = 1,
+        .density = Q_ONE,
+        .attack = Q_ONE,
+        .decay = Q_ONE,
+    };
+
+    const uint16_t input_with_delay[] = {
+        (uint16_t)(X_AXIS + 10),
+        (uint16_t)(X_AXIS + 20),
+    };
+
+    uint16_t output[2] = {1234, 5678};
+    buf_echo(input_with_delay, output, 0, &param);
+
+    expect_eq_u16(1234, output[0], "echo zero-samples preserves output[0]");
+    expect_eq_u16(5678, output[1], "echo zero-samples preserves output[1]");
+}
+
 int main(void)
 {
     test_q_tanh_clamps();
@@ -283,10 +326,12 @@ int main(void)
     test_overdrive_zero_level_mutes_wet();
     test_overdrive_full_wet_changes_signal();
     test_compression_ratio_behavior();
+    test_compression_zero_threshold_hard_clip();
     test_echo_attack_zero_is_copy();
     test_echo_zero_density_is_copy();
     test_echo_single_step_full_coverage();
     test_echo_high_density_clamps_spacing();
+    test_echo_zero_samples_no_write();
 
     if (failures != 0)
     {
