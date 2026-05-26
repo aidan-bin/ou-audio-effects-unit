@@ -6,6 +6,8 @@
 static int32_t saturate_amplitude(int32_t num, size_t max);
 static int32_t saturate_min(int32_t num, int32_t min);
 static uint16_t saturate_u16(int32_t num);
+static size_t clamp_qn(size_t num);
+static size_t clamp_range(size_t num, size_t min, size_t max);
 
 // #define PARAM_INSTANCE_ENABLE	// Enables instances of parameters
 
@@ -32,28 +34,10 @@ volatile CompressionParam compression = {.threshold = MAX_COMPRESSION_THRESHOLD,
  */
 void buf_overdrive(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples,
                    const OverdriveParam *param) {
-    size_t level = param->level;
-    size_t gain = param->gain;
-    size_t tone = param->tone;
-    size_t mix = param->mix;
-
-    if (level > MAX_OVERDRIVE_LEVEL) {
-        level = MAX_OVERDRIVE_LEVEL;
-    }
-
-    if (gain > MAX_OVERDRIVE_GAIN) {
-        gain = MAX_OVERDRIVE_GAIN;
-    }
-
-    if (tone < MIN_OVERDRIVE_TONE) {
-        tone = MIN_OVERDRIVE_TONE;
-    } else if (tone > MAX_OVERDRIVE_TONE) {
-        tone = MAX_OVERDRIVE_TONE;
-    }
-
-    if (mix > (1U << FIXED_POINT_Q)) {
-        mix = (1U << FIXED_POINT_Q);
-    }
+    size_t level = clamp_range(param->level, 0, MAX_OVERDRIVE_LEVEL);
+    size_t gain = clamp_qn(param->gain);
+    size_t tone = clamp_range(param->tone, MIN_OVERDRIVE_TONE, MAX_OVERDRIVE_TONE);
+    size_t mix = clamp_qn(param->mix);
 
     for (size_t n = 0; n < num_samples; n++) {
         int32_t input = (int32_t)in_buf[n] - X_AXIS;
@@ -81,30 +65,14 @@ void buf_overdrive(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples
 void buf_echo(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples,
               const EchoParam *param) {
     size_t delay_samples = param->delay_samples;
-    size_t pre_delay = param->pre_delay;
-    size_t density = param->density;
-    size_t attack = param->attack;
-    size_t decay = param->decay;
+    size_t pre_delay = clamp_range(param->pre_delay, MIN_ECHO_PRE_DELAY, SIZE_MAX);
+    size_t density = clamp_qn(param->density);
+    size_t attack = clamp_qn(param->attack);
+    size_t decay = clamp_qn(param->decay);
 
     if (delay_samples == 0) {
         memcpy(out_buf, in_buf, num_samples * sizeof(uint16_t));
         return;
-    }
-
-    if (pre_delay < MIN_ECHO_PRE_DELAY) {
-        pre_delay = MIN_ECHO_PRE_DELAY;
-    }
-
-    if (density > MAX_ECHO_DENSITY) {
-        density = MAX_ECHO_DENSITY;
-    }
-
-    if (attack > MAX_ECHO_ATTACK) {
-        attack = MAX_ECHO_ATTACK;
-    }
-
-    if (decay > MAX_ECHO_DECAY) {
-        decay = MAX_ECHO_DECAY;
     }
 
     if (num_samples == 0) {
@@ -156,16 +124,8 @@ void buf_echo(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples,
  */
 void buf_compression(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples,
                      const CompressionParam *param) {
-    int32_t threshold = (int32_t)param->threshold;
-    int32_t ratio = (int32_t)param->ratio;
-
-    if (threshold > X_AXIS) {
-        threshold = X_AXIS;
-    }
-
-    if (ratio > (1 << FIXED_POINT_Q)) {
-        ratio = (1 << FIXED_POINT_Q);
-    }
+    int32_t threshold = (int32_t)clamp_range(param->threshold, 0, X_AXIS);
+    int32_t ratio = (int32_t)clamp_qn(param->ratio);
 
     // Excess gets scaled by (1 - ratio) before being added back to threshold
     ratio = (1 << FIXED_POINT_Q) - ratio;
@@ -217,4 +177,20 @@ static uint16_t saturate_u16(int32_t num) {
     }
 
     return (uint16_t)num;
+}
+
+static size_t clamp_qn(size_t num) {
+    return clamp_range(num, 0, (1U << FIXED_POINT_Q));
+}
+
+static size_t clamp_range(size_t num, size_t min, size_t max) {
+    if (num < min) {
+        return min;
+    }
+
+    if (num > max) {
+        return max;
+    }
+
+    return num;
 }
