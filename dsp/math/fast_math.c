@@ -1,9 +1,9 @@
 #include "fast_math.h"
 #include <math.h>
-#include <stdio.h>
-#include <stdlib.h>
 
-#define TANH_CLAMP_POINT ((int16_t) (2.9858 * pow(2, FIXED_POINT_Q)))   // Point where tanh gets clamped to 1.0 in QA (should be where the error is lower than approximating)
+#define Q_ONE (1 << FIXED_POINT_Q)
+
+#define TANH_CLAMP_POINT ((int16_t) (3 * Q_ONE))   // Point where tanh gets clamped to 1.0 in QA
 
 /*
 int16_t bam_sin(bam_t x)
@@ -33,10 +33,10 @@ int16_t q_tanh(int16_t x)
     // Uses finite Lamber's series to 4 divisions (before simplification)
 
     if (x < -TANH_CLAMP_POINT) 
-        return -(1 << FIXED_POINT_Q);
+        return -Q_ONE;
 
     if (x > TANH_CLAMP_POINT)
-        return (1 << FIXED_POINT_Q);
+        return Q_ONE;
 
     int32_t x_squared = (x * x) >> FIXED_POINT_Q;
 
