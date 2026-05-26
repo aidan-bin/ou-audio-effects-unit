@@ -43,6 +43,12 @@ Current STM32 firmware lives under [firmware/stm32f303/cubemx](firmware/stm32f30
 Run from repository root:
 
 ```sh
+./scripts/check.sh
+```
+
+Or run tests only:
+
+```sh
 ./scripts/test.sh
 ```
 
