@@ -4,4 +4,4 @@ set -euo pipefail
 ./scripts/doctor.sh
 ./scripts/format-check.sh
 ./scripts/lint.sh
-./scripts/check.sh
+SKIP_DOCTOR=1 ./scripts/check.sh
