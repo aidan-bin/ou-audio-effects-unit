@@ -1,47 +1,129 @@
-# STM32-Audio-Effects-Unit
+# STM32 Audio Effects Unit
 
-![Board v1](https://raw.githubusercontent.com/ouras/STM32-Audio-Effects-Unit/main/board/STM32AudioEffects/STM32AudioEffectsUnit.jpg)
+![Board v1](hardware/STM32AudioEffects/STM32AudioEffectsUnit.jpg)
 
-Audio effects unit designed for STM32. Includes:
-- Library of effects implemented in C (including distortion/overdrive, reverb/echo, and compression)
-- Python GUI demo/testbench for effects (based on PyQt, PyPlot, NumPy, and ctypes)
-- PCB layout based on STM32F3RETx (plus LTSpice files for select sub-networks)
-- CubeMX file for board (including FreeRTOS, peripheral, and pin configuration)
-- main.c (FreeRTOS-based firmware)
+Embedded audio effects platform built around STM32, with portable DSP code in C, a host-side demo path, and full board design assets.
 
-Firmware features:
-- FreeRTOS for task management
-- ADC and DAC with DMA for efficient audio processing (note: sample rate = 40.5 kHz)
-- I2C for EEPROM ~~and OLED display~~ *(coming soon)*
-- Interrupts/handlers for user inputs
+This project is being modernized as a portfolio-quality embedded systems repo. The current codebase already demonstrates:
 
-Board includes:
-- 1/4" (6.35mm) input/output jacks
+- real-time audio processing on STM32 with ADC/DAC DMA and FreeRTOS tasking
+- fixed-point DSP implementation in C for effect processing and numeric control
+- portable host-side effect execution through a Python UI and C shared library
+- mixed hardware and firmware ownership: KiCad PCB, LTspice analog validation, MCU firmware, and DSP code
+
+## Highlights
+
+- Effects implemented in C: overdrive, echo, compression
+- Firmware pipeline built around low-latency sample buffering and DMA-driven I/O
+- Fixed-point parameterization and effect math designed for explicit numeric control
+- Board-level design includes analog front-end, output filtering, user I/O, EEPROM, and power stages
+- Host demo provides a fast way to inspect and audition effect behavior without flashing hardware
+
+## Skills Demonstrated
+
+- embedded C
+- low-level firmware design
+- real-time audio pipelines
+- DMA and interrupt-driven I/O
+- fixed-point DSP
+- hardware and firmware co-design
+- board design in KiCad
+- analog verification in LTspice
+
+## Repository Layout
+
+- `dsp/` portable DSP and numeric code
+- `firmware/` target-specific firmware and CubeMX assets
+- `hardware/` KiCad project and LTspice schematics
+- `host/` host-side demo application
+- `tests/` transitional test assets; full automated coverage is part of the modernization work
+- `docs/` project documentation, setup, architecture, and bring-up notes
+- `scripts/` helper scripts and workflow tooling
+
+## Current Structure
+
+### DSP
+
+- `dsp/effects/` effect implementations and public effect interfaces
+- `dsp/math/` fixed-point helpers and math support code
+
+### Firmware
+
+- `firmware/stm32f303/cubemx/` current STM32 firmware entrypoint and MCU configuration assets
+
+### Host Demo
+
+- `host/python-demo/` PyQt-based demo UI, Python bindings, and sample media
+
+### Hardware
+
+- `hardware/STM32AudioEffects/` KiCad project, schematics, PCB, and custom footprints
+- `hardware/LTspice/` analog simulation files for selected subcircuits
+
+## Firmware Snapshot
+
+Current firmware work includes:
+
+- FreeRTOS-based task structure
+- ADC and DAC with DMA for block-based audio processing
+- ping-pong sample buffering
+- effect parameter handling for user controls
+- I2C integration for EEPROM and display-facing infrastructure
+
+The firmware is currently centered around the CubeMX-generated STM32F303 target under `firmware/stm32f303/cubemx/`.
+
+## Host Demo: Current Run Path
+
+The host demo is still in pre-tooling-refresh form. Today it expects a shared library named `libeffects.dll` in `host/python-demo/`.
+
+From the repository root:
+
+```sh
+cd host/python-demo
+python3 -m pip install PyQt5 matplotlib numpy sounddevice
+cc -Wall -I../../dsp/effects -I../../dsp/math -c ../../dsp/math/fast_math.c ../../dsp/effects/effects.c
+cc -shared -o libeffects.dll fast_math.o effects.o
+python3 main.py
+```
+
+Notes:
+
+- The current Python binding hardcodes `libeffects.dll`.
+- The demo is useful for host-side effect inspection, but it has not been packaged yet.
+- Live host audio is planned as part of the modernization track, but it is not the current baseline.
+
+## Hardware Snapshot
+
+Board-level features in the current design:
+
+- 1/4 in audio input and output
 - OLED display
-- 4 configuration potentiometers + 2 volume potentiometers
-- 3 buttons
-- 3 switches
-- EEPROM (for user configuration backups)
-- Input and output active gain and noise filter networks (with LTSpice schematics/simulation files)
-- 9V DC wall adapter, 9V battery, and 5V USB power support (converted to 3.3V for Vcc)
-- Status and power LEDs
+- EEPROM for stored configuration
+- user controls via potentiometers, buttons, and switches
+- analog input/output conditioning and filtering
+- support for wall adapter, battery, and USB-derived power paths
 
-Directory guide:
-- /board contains LTSpice files and a KiCad project for the board
-- /cubemx contains a CubeMX file for generating code for the MCU configuration and a main.c file containing the FreeRTOS port
-- /demo contains files for running the demo
-- /effects and /math contain the effects and math libraries
-- /signal_gen_tools contains code for generating binary samples files
+## Modernization Status
 
-Running the demo:
-1. Copy the contents of /demo to a folder.
-2. Install the required modules (at the top of effects.py and main.py)
-3. Copy the contents of /math and /effects to the folder from step 1.
-4. Compile the C source files using:
-  1. gcc -Wall -c fast_math.c effects.c
-5. Create the shared library using:
-  1. gcc -shared -o libeffects.dll \*.o
-  2. Add “-m64” if using 64-bit Python
-  3. Run main.py
+The repository is in active V1 cleanup and modernization.
 
-A working document for this project (which include requirements, milestones, and technical notes) can be found [here](https://docs.google.com/document/d/13bzRhMHOJ_USe95iWY26JIxKYx1gLJ1tkpusW1AXwGo/edit?usp=sharing).
+Completed so far:
+
+- top-level layout refactor to separate DSP, firmware, hardware, host, tests, and docs
+
+Planned in V1:
+
+- README and setup overhaul
+- portable build system
+- linting and formatting
+- unit and integration tests
+- CI validation
+- board bring-up documentation
+
+## Why Fixed-Point Here
+
+This codebase uses fixed-point arithmetic intentionally. The goal is not just raw performance; it is to make numeric behavior explicit, keep the DSP core portable, and demonstrate control over embedded arithmetic tradeoffs.
+
+## Status
+
+This is not yet the final polished V1 state. The structure is now cleaner, but build tooling, tests, and setup ergonomics are still being upgraded.

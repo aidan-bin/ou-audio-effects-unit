@@ -34,3 +34,5 @@ __pycache__/
 *_autosave-*
 *-cache.lib
 fp-info-cache
+
+.local/
