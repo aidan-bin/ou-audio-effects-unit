@@ -411,6 +411,30 @@ static void test_echo_attack_above_one_clamps(void)
     expect_eq_u16(output_ref[0], output_over_attack[0], "echo attack>1 clamps");
 }
 
+static void test_echo_zero_delay_is_copy(void)
+{
+    const EchoParam param = {
+        .delay_samples = 0,
+        .pre_delay = 1,
+        .density = Q_ONE,
+        .attack = Q_ONE,
+        .decay = Q_ONE,
+    };
+
+    const uint16_t input[] = {
+        (uint16_t)(X_AXIS + 101),
+        (uint16_t)(X_AXIS + 202),
+        (uint16_t)(X_AXIS + 303),
+    };
+
+    uint16_t output[3] = {0};
+    buf_echo(input, output, 3, &param);
+
+    expect_eq_u16(input[0], output[0], "echo delay=0 copy sample 0");
+    expect_eq_u16(input[1], output[1], "echo delay=0 copy sample 1");
+    expect_eq_u16(input[2], output[2], "echo delay=0 copy sample 2");
+}
+
 static void test_echo_single_step_full_coverage(void)
 {
     const EchoParam param = {
@@ -560,6 +584,7 @@ int main(void)
     test_echo_pre_delay_beyond_window_is_copy();
     test_echo_pre_delay_zero_clamps_to_one();
     test_echo_attack_above_one_clamps();
+    test_echo_zero_delay_is_copy();
     test_echo_single_step_full_coverage();
     test_echo_high_density_clamps_spacing();
     test_echo_zero_samples_no_write();
