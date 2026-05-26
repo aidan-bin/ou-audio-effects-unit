@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if ! command -v clang-tidy >/dev/null 2>&1; then
-    echo "clang-tidy not found"
+clang_tidy_bin=""
+for candidate in clang-tidy clang-tidy-18 clang-tidy-17 clang-tidy-16; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+        clang_tidy_bin="$candidate"
+        break
+    fi
+done
+
+if [[ -z "$clang_tidy_bin" ]]; then
+    echo "clang-tidy not found (tried clang-tidy, clang-tidy-18, clang-tidy-17, clang-tidy-16)"
     exit 1
 fi
 
@@ -15,7 +23,7 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
 fi
 
 run_tidy() {
-    clang-tidy -quiet -p build -header-filter='^dsp/' "${extra_args[@]}" "$1" 2>&1 | \
+    "$clang_tidy_bin" -quiet -p build -header-filter='^dsp/' "${extra_args[@]}" "$1" 2>&1 | \
         sed -E '/^[0-9]+ warnings generated\.$/d'
 }
 

@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if ! command -v clang-format >/dev/null 2>&1; then
-    echo "clang-format not found"
+clang_format_bin=""
+for candidate in clang-format clang-format-18 clang-format-17 clang-format-16; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+        clang_format_bin="$candidate"
+        break
+    fi
+done
+
+if [[ -z "$clang_format_bin" ]]; then
+    echo "clang-format not found (tried clang-format, clang-format-18, clang-format-17, clang-format-16)"
     exit 1
 fi
 
-clang-format -i \
+"$clang_format_bin" -i \
     dsp/effects/effects.c \
     dsp/effects/effects.h \
     dsp/math/fast_math.c \
