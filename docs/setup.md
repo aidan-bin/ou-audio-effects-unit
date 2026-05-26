@@ -5,12 +5,13 @@
 Run from repository root:
 
 ```sh
-./scripts/build.sh
+./scripts/check.sh
 ```
 
 Optional tooling:
 
 ```sh
+./scripts/build.sh
 ./scripts/format.sh
 ./scripts/lint.sh
 ./scripts/test.sh
@@ -28,8 +29,8 @@ python3 host/python-demo/main.py
 
 Notes:
 
-- The Python binding in [host/python-demo/effects.py](host/python-demo/effects.py) loads a library named libeffects.dll from the current working directory.
-- On non-Windows hosts the output name is still libeffects.dll because the binding currently hardcodes that filename.
+- The Python binding in [host/python-demo/effects.py](host/python-demo/effects.py) resolves the shared library relative to the module location.
+- The loader supports libeffects.dll, libeffects.so, and libeffects.dylib.
 
 ## Firmware Source Location
 
