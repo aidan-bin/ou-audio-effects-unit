@@ -52,6 +52,12 @@ Or run tests only:
 ./scripts/test.sh
 ```
 
+Clean generated artifacts:
+
+```sh
+./scripts/clean.sh
+```
+
 ## Hardware Snapshot
 
 Board assets are under [hardware/STM32AudioEffects](hardware/STM32AudioEffects), with analog simulation files under [hardware/LTspice](hardware/LTspice).

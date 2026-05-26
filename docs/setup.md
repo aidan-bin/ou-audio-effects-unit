@@ -15,6 +15,7 @@ Optional tooling:
 ./scripts/format.sh
 ./scripts/lint.sh
 ./scripts/test.sh
+./scripts/clean.sh
 ```
 
 ## Host Demo
