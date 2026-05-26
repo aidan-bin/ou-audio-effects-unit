@@ -223,6 +223,36 @@ static void test_overdrive_level_above_max_clamps(void)
     expect_eq_u16(output_ref[1], output_over_level[1], "overdrive level>max clamps sample 1");
 }
 
+static void test_overdrive_tone_above_max_clamps(void)
+{
+    const uint16_t input[] = {
+        (uint16_t)(X_AXIS - 1300),
+        (uint16_t)(X_AXIS + 1300),
+    };
+
+    uint16_t output_ref[2] = {0};
+    OverdriveParam ref_param = {
+        .level = MAX_OVERDRIVE_LEVEL,
+        .gain = Q_ONE,
+        .tone = MAX_OVERDRIVE_TONE,
+        .mix = Q_ONE,
+    };
+
+    uint16_t output_over_tone[2] = {0};
+    OverdriveParam over_tone_param = {
+        .level = MAX_OVERDRIVE_LEVEL,
+        .gain = Q_ONE,
+        .tone = MAX_OVERDRIVE_TONE + Q_ONE,
+        .mix = Q_ONE,
+    };
+
+    buf_overdrive(input, output_ref, 2, &ref_param);
+    buf_overdrive(input, output_over_tone, 2, &over_tone_param);
+
+    expect_eq_u16(output_ref[0], output_over_tone[0], "overdrive tone>max clamps sample 0");
+    expect_eq_u16(output_ref[1], output_over_tone[1], "overdrive tone>max clamps sample 1");
+}
+
 static void test_compression_ratio_behavior(void)
 {
     const uint16_t input[] = {
@@ -619,6 +649,44 @@ static void test_echo_high_density_clamps_spacing(void)
     }
 }
 
+static void test_echo_density_above_one_clamps(void)
+{
+    const uint16_t input_with_delay[] = {
+        (uint16_t)(X_AXIS + 10),
+        (uint16_t)(X_AXIS + 20),
+        (uint16_t)(X_AXIS + 30),
+        (uint16_t)(X_AXIS + 40),
+        (uint16_t)(X_AXIS + 50),
+        (uint16_t)(X_AXIS + 60),
+    };
+
+    uint16_t output_ref[4] = {0};
+    const EchoParam ref_param = {
+        .delay_samples = 2,
+        .pre_delay = 1,
+        .density = Q_ONE,
+        .attack = Q_ONE,
+        .decay = Q_ONE,
+    };
+
+    uint16_t output_over_density[4] = {0};
+    const EchoParam over_density_param = {
+        .delay_samples = 2,
+        .pre_delay = 1,
+        .density = Q_ONE + 64,
+        .attack = Q_ONE,
+        .decay = Q_ONE,
+    };
+
+    buf_echo(input_with_delay, output_ref, 4, &ref_param);
+    buf_echo(input_with_delay, output_over_density, 4, &over_density_param);
+
+    for (size_t i = 0; i < 4; i++)
+    {
+        expect_eq_u16(output_ref[i], output_over_density[i], "echo density>1 clamps");
+    }
+}
+
 static void test_echo_zero_samples_no_write(void)
 {
     const EchoParam param = {
@@ -693,6 +761,7 @@ int main(void)
     test_overdrive_gain_above_one_clamps();
     test_overdrive_tone_below_one_clamps();
     test_overdrive_level_above_max_clamps();
+    test_overdrive_tone_above_max_clamps();
     test_compression_ratio_behavior();
     test_compression_zero_threshold_hard_clip();
     test_compression_ratio_above_one_clamps_to_hard_clip();
@@ -706,6 +775,7 @@ int main(void)
     test_echo_zero_delay_is_copy();
     test_echo_single_step_full_coverage();
     test_echo_high_density_clamps_spacing();
+    test_echo_density_above_one_clamps();
     test_echo_zero_samples_no_write();
     test_echo_positive_mix_saturates_at_u16_max();
     test_echo_negative_mix_saturates_at_zero();
