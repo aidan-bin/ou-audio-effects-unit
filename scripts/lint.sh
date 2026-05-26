@@ -14,7 +14,9 @@ if [[ -z "$clang_tidy_bin" ]]; then
     exit 1
 fi
 
-cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON >/dev/null
+if [[ ! -f build/compile_commands.json ]]; then
+    cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON >/dev/null
+fi
 
 extra_args=()
 if [[ "$(uname -s)" == "Darwin" ]]; then
