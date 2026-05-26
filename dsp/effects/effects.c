@@ -1,6 +1,7 @@
 #include "effects.h"
 #include "fast_math.h"
 
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
@@ -49,7 +50,7 @@ void buf_overdrive(const uint16_t* in_buf, uint16_t* out_buf, size_t num_samples
 		size_t dry_amount = (1U << FIXED_POINT_Q) - mix;
 
 		// Saturate the input of tanh to avoid overflow
-		output = (int32_t) level * q_tanh(saturate_amplitude((int32_t) tone * input, INT16_MAX));
+		output = (int32_t) level * q_tanh((int16_t) saturate_amplitude((int32_t) tone * input, INT16_MAX));
 		output = (int32_t) gain * ((int32_t) wet_amount * output >> FIXED_POINT_Q) >> FIXED_POINT_Q;
 		output += (int32_t) dry_amount * input;
 
@@ -108,29 +109,29 @@ void buf_echo(const uint16_t* in_buf, uint16_t* out_buf, size_t num_samples, con
  */
 void buf_compression(const uint16_t* in_buf, uint16_t* out_buf, size_t num_samples, const CompressionParam* param)
 {
-	size_t threshold = param->threshold;
-	size_t ratio = param->ratio;
+	int32_t threshold = (int32_t) param->threshold;
+	int32_t ratio = (int32_t) param->ratio;
 	
 	// Excess gets scaled by (1 - ratio) before being added back to threshold
-	ratio = (1L << FIXED_POINT_Q) - ratio;
+	ratio = (1 << FIXED_POINT_Q) - ratio;
 	
 	for (size_t n = 0; n < num_samples; n++)
 	{
 		int32_t sample = (int32_t) in_buf[n] - X_AXIS;
 
-		if (sample > (int32_t) threshold)
+		if (sample > threshold)
 		{
 			// Scale down excess above threshold using ratio
-			uint32_t excess = sample - (int32_t) threshold;
+			uint32_t excess = (uint32_t) (sample - threshold);
 
-			sample = (excess * ratio >> FIXED_POINT_Q) + (int32_t) threshold;
+			sample = (int32_t) ((excess * (uint32_t) ratio >> FIXED_POINT_Q) + (uint32_t) threshold);
 		}
-		else if (sample < (int32_t) -threshold)
+		else if (sample < -threshold)
 		{
 			// Scale down excess above threshold using ratio (make sure both are at QN)
-			uint32_t excess = (int32_t) -threshold - sample;
+			uint32_t excess = (uint32_t) (-threshold - sample);
 
-			sample = (int32_t) -threshold - (excess * ratio >> FIXED_POINT_Q);
+			sample = -threshold - (int32_t) ((excess * (uint32_t) ratio) >> FIXED_POINT_Q);
 		}
 
 		out_buf[n] = (uint16_t) sample + X_AXIS;
@@ -157,7 +158,7 @@ void buf_averager(const uint16_t* in_buf, uint16_t* out_buf, const uint16_t* edg
 	// Calculate each output sample
 	// 	n is the index of the oldest sample in the current filter pass
 	// 	Note: starts at n = -edge_samples, where n = 0 is the start of in_buf
-	for (int n = -edge_samples; n < (int) in_buf_size - (int) edge_samples; n++)
+	for (ptrdiff_t n = -(ptrdiff_t) edge_samples; n < (ptrdiff_t) in_buf_size - (ptrdiff_t) edge_samples; n++)
 	{
 		uint32_t out = 0;
 		
@@ -165,20 +166,20 @@ void buf_averager(const uint16_t* in_buf, uint16_t* out_buf, const uint16_t* edg
 		// 	offset is number of unit delays current sample is ahead of n
 		for (size_t offset = 0; offset < num_taps; offset++)
 		{
-			if (n + (int) offset < 0)
+			if (n + (ptrdiff_t) offset < 0)
 			{
 				// Get samples from edge_sample_buf
-				out += edge_samples_buf[n + (int) offset + (int) edge_samples];
+				out += edge_samples_buf[n + (ptrdiff_t) offset + (ptrdiff_t) edge_samples];
 			}
 			else
 			{
 				// Get samples from in_buf
-				out += in_buf[n + offset];
+				out += in_buf[n + (ptrdiff_t) offset];
 			}
 		}
 		
 		// Divide value by coefficient (by shifting)
-		out_buf[n + edge_samples] = (uint16_t) (out >> shift);
+		out_buf[n + (ptrdiff_t) edge_samples] = (uint16_t) (out >> shift);
 	}
 }
 
@@ -186,9 +187,9 @@ void buf_averager(const uint16_t* in_buf, uint16_t* out_buf, const uint16_t* edg
 int32_t saturate_amplitude(int32_t num, size_t max)
 {
 	if (num > (int32_t) max)
-        return max;
+		return (int32_t) max;
 	else if (num < (int32_t) -max)
-		return -max;
+		return -(int32_t) max;
 	else
 		return num;
 }
