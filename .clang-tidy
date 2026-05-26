@@ -1,6 +1,7 @@
 Checks: >
   clang-analyzer-*,
   bugprone-*,
+  -bugprone-easily-swappable-parameters,
   performance-*,
   readability-identifier-naming,
   -readability-identifier-naming
