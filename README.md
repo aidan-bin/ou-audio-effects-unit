@@ -2,79 +2,30 @@
 
 ![Board v1](hardware/STM32AudioEffects/STM32AudioEffectsUnit.jpg)
 
-Embedded audio effects platform built around STM32, with portable DSP code in C, a host-side demo path, and full board design assets.
+Embedded STM32 audio effects project with fixed-point DSP in C, host-side effect demo tooling, and board design files.
 
-This project is being modernized as a portfolio-quality embedded systems repo. The current codebase already demonstrates:
+This repository is being modernized. The goal is to keep it developer-usable while making quality signals obvious: clean structure, reproducible setup, tests, and CI.
 
-- real-time audio processing on STM32 with ADC/DAC DMA and FreeRTOS tasking
-- fixed-point DSP implementation in C for effect processing and numeric control
-- portable host-side effect execution through a Python UI and C shared library
-- mixed hardware and firmware ownership: KiCad PCB, LTspice analog validation, MCU firmware, and DSP code
+## What Is Here
 
-## Highlights
-
-- Effects implemented in C: overdrive, echo, compression
-- Firmware pipeline built around low-latency sample buffering and DMA-driven I/O
-- Fixed-point parameterization and effect math designed for explicit numeric control
-- Board-level design includes analog front-end, output filtering, user I/O, EEPROM, and power stages
-- Host demo provides a fast way to inspect and audition effect behavior without flashing hardware
-
-## Skills Demonstrated
-
-- embedded C
-- low-level firmware design
-- real-time audio pipelines
-- DMA and interrupt-driven I/O
-- fixed-point DSP
-- hardware and firmware co-design
-- board design in KiCad
-- analog verification in LTspice
+- DSP effects in C: overdrive, echo, compression
+- STM32 firmware using FreeRTOS + ADC/DAC DMA audio pipeline
+- Host demo (Python + ctypes) for quick effect validation
+- Hardware design assets (KiCad + LTspice)
 
 ## Repository Layout
 
-- `dsp/` portable DSP and numeric code
-- `firmware/` target-specific firmware and CubeMX assets
-- `hardware/` KiCad project and LTspice schematics
-- `host/` host-side demo application
-- `tests/` transitional test assets; full automated coverage is part of the modernization work
-- `docs/` project documentation, setup, architecture, and bring-up notes
-- `scripts/` helper scripts and workflow tooling
+- [dsp](dsp): portable DSP and math code
+- [firmware](firmware): STM32 target firmware
+- [host](host): host-side demo tooling
+- [hardware](hardware): board and analog design assets
+- [tests](tests): transitional tests (full suite in progress)
+- [docs](docs): setup, architecture, bring-up docs (expanding)
+- [scripts](scripts): helper scripts
 
-## Current Structure
+## Quick Start: Host Demo (Current Baseline)
 
-### DSP
-
-- `dsp/effects/` effect implementations and public effect interfaces
-- `dsp/math/` fixed-point helpers and math support code
-
-### Firmware
-
-- `firmware/stm32f303/cubemx/` current STM32 firmware entrypoint and MCU configuration assets
-
-### Host Demo
-
-- `host/python-demo/` PyQt-based demo UI, Python bindings, and sample media
-
-### Hardware
-
-- `hardware/STM32AudioEffects/` KiCad project, schematics, PCB, and custom footprints
-- `hardware/LTspice/` analog simulation files for selected subcircuits
-
-## Firmware Snapshot
-
-Current firmware work includes:
-
-- FreeRTOS-based task structure
-- ADC and DAC with DMA for block-based audio processing
-- ping-pong sample buffering
-- effect parameter handling for user controls
-- I2C integration for EEPROM and display-facing infrastructure
-
-The firmware is currently centered around the CubeMX-generated STM32F303 target under `firmware/stm32f303/cubemx/`.
-
-## Host Demo: Current Run Path
-
-The host demo is still in pre-tooling-refresh form. Today it expects a shared library named `libeffects.dll` in `host/python-demo/`.
+The current Python binding expects a shared library named `libeffects.dll` in [host/python-demo](host/python-demo).
 
 From the repository root:
 
@@ -89,41 +40,38 @@ python3 main.py
 Notes:
 
 - The current Python binding hardcodes `libeffects.dll`.
-- The demo is useful for host-side effect inspection, but it has not been packaged yet.
-- Live host audio is planned as part of the modernization track, but it is not the current baseline.
+- Demo packaging/tooling cleanup is part of V1 modernization.
+
+## Firmware Snapshot
+
+Current STM32 firmware lives under [firmware/stm32f303/cubemx](firmware/stm32f303/cubemx).
+
+Current implementation includes:
+
+- FreeRTOS task-based control flow
+- ping-pong sample buffering
+- DMA-driven ADC/DAC audio transfer
+- effect parameter/state handling
+- I2C infrastructure for peripherals (EEPROM and display path)
 
 ## Hardware Snapshot
 
-Board-level features in the current design:
-
-- 1/4 in audio input and output
-- OLED display
-- EEPROM for stored configuration
-- user controls via potentiometers, buttons, and switches
-- analog input/output conditioning and filtering
-- support for wall adapter, battery, and USB-derived power paths
+Board assets are under [hardware/STM32AudioEffects](hardware/STM32AudioEffects), with analog simulation files under [hardware/LTspice](hardware/LTspice).
 
 ## Modernization Status
 
-The repository is in active V1 cleanup and modernization.
+Completed:
 
-Completed so far:
+- repo layout refactor (DSP / firmware / host / hardware split)
+- README pass for the new layout
 
-- top-level layout refactor to separate DSP, firmware, hardware, host, tests, and docs
+In progress for V1:
 
-Planned in V1:
-
-- README and setup overhaul
-- portable build system
-- linting and formatting
-- unit and integration tests
-- CI validation
+- reproducible build/tooling baseline
+- test framework + deterministic regression tests
+- CI checks
 - board bring-up documentation
 
 ## Why Fixed-Point Here
 
-This codebase uses fixed-point arithmetic intentionally. The goal is not just raw performance; it is to make numeric behavior explicit, keep the DSP core portable, and demonstrate control over embedded arithmetic tradeoffs.
-
-## Status
-
-This is not yet the final polished V1 state. The structure is now cleaner, but build tooling, tests, and setup ergonomics are still being upgraded.
+The DSP path is fixed-point by design in V1: explicit numeric behavior, deterministic control over arithmetic, and portability to targets without strong floating-point support.
