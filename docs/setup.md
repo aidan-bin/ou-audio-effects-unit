@@ -13,6 +13,7 @@ Optional tooling:
 ```sh
 ./scripts/format.sh
 ./scripts/lint.sh
+./scripts/test.sh
 ```
 
 ## Host Demo

@@ -8,6 +8,7 @@ set(CMAKE_C_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(OU_BUILD_SHARED_LIB "Build shared effects library for host demo" ON)
+option(OU_BUILD_TESTS "Build DSP unit tests" ON)
 
 set(OU_DSP_SOURCES
     dsp/effects/effects.c
@@ -40,4 +41,20 @@ if(OU_BUILD_SHARED_LIB)
         LIBRARY_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/host/python-demo
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/host/python-demo
     )
+endif()
+
+if(OU_BUILD_TESTS)
+    enable_testing()
+
+    add_executable(ou_dsp_tests
+        tests/test_dsp.c
+    )
+
+    target_link_libraries(ou_dsp_tests PRIVATE ou_dsp)
+
+    if(APPLE OR UNIX)
+        target_link_libraries(ou_dsp_tests PRIVATE m)
+    endif()
+
+    add_test(NAME ou_dsp_tests COMMAND ou_dsp_tests)
 endif()

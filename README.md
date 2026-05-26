@@ -39,6 +39,14 @@ Current STM32 firmware lives under [firmware/stm32f303/cubemx](firmware/stm32f30
 - effect parameter/state handling
 - I2C infrastructure for peripherals (EEPROM and display path)
 
+## Tests
+
+Run from repository root:
+
+```sh
+./scripts/test.sh
+```
+
 ## Hardware Snapshot
 
 Board assets are under [hardware/STM32AudioEffects](hardware/STM32AudioEffects), with analog simulation files under [hardware/LTspice](hardware/LTspice).
