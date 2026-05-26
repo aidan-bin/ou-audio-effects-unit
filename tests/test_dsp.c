@@ -59,6 +59,50 @@ static void test_overdrive_dry_passthrough(void)
     }
 }
 
+static void test_overdrive_zero_level_mutes_wet(void)
+{
+    const uint16_t input[] = {
+        (uint16_t)(X_AXIS - 1200),
+        (uint16_t)(X_AXIS + 1200),
+    };
+    uint16_t output[2] = {0};
+
+    OverdriveParam param = {
+        .level = 0,
+        .gain = Q_ONE,
+        .tone = Q_ONE,
+        .mix = Q_ONE,
+    };
+
+    buf_overdrive(input, output, 2, &param);
+    expect_eq_u16((uint16_t)X_AXIS, output[0], "overdrive zero level mute 0");
+    expect_eq_u16((uint16_t)X_AXIS, output[1], "overdrive zero level mute 1");
+}
+
+static void test_overdrive_full_wet_changes_signal(void)
+{
+    const uint16_t input[] = {
+        (uint16_t)(X_AXIS - 1500),
+        (uint16_t)(X_AXIS + 1500),
+    };
+    uint16_t output[2] = {0};
+
+    OverdriveParam param = {
+        .level = MAX_OVERDRIVE_LEVEL,
+        .gain = Q_ONE,
+        .tone = Q_ONE,
+        .mix = Q_ONE,
+    };
+
+    buf_overdrive(input, output, 2, &param);
+
+    if (output[0] == input[0] || output[1] == input[1])
+    {
+        fprintf(stderr, "FAIL: overdrive full wet should alter signal\n");
+        failures++;
+    }
+}
+
 static void test_compression_ratio_behavior(void)
 {
     const uint16_t input[] = {
@@ -236,6 +280,8 @@ int main(void)
 {
     test_q_tanh_clamps();
     test_overdrive_dry_passthrough();
+    test_overdrive_zero_level_mutes_wet();
+    test_overdrive_full_wet_changes_signal();
     test_compression_ratio_behavior();
     test_echo_attack_zero_is_copy();
     test_echo_zero_density_is_copy();
