@@ -6,7 +6,7 @@ if ! command -v clang-format >/dev/null 2>&1; then
     exit 1
 fi
 
-clang-format -i \
+clang-format --dry-run --Werror \
     dsp/effects/effects.c \
     dsp/effects/effects.h \
     dsp/math/fast_math.c \

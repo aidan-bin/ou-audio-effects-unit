@@ -3,7 +3,7 @@
 
 #define Q_ONE (1 << FIXED_POINT_Q)
 
-#define TANH_CLAMP_POINT ((int16_t) (3 * Q_ONE))   // Point where tanh gets clamped to 1.0 in QA
+#define TANH_CLAMP_POINT ((int16_t)(3 * Q_ONE)) // Point where tanh gets clamped to 1.0 in QA
 
 /*
 int16_t bam_sin(bam_t x)
@@ -27,12 +27,11 @@ int16_t bam_sin(bam_t x)
 }
 */
 
-int16_t q_tanh(int16_t x)
-{
+int16_t q_tanh(int16_t x) {
     // Note: x and return value are in QA
     // Uses finite Lamber's series to 4 divisions (before simplification)
 
-    if (x < -TANH_CLAMP_POINT) 
+    if (x < -TANH_CLAMP_POINT)
         return -Q_ONE;
 
     if (x > TANH_CLAMP_POINT)
@@ -40,10 +39,11 @@ int16_t q_tanh(int16_t x)
 
     int32_t x_squared = (x * x) >> FIXED_POINT_Q;
 
-    int32_t a = ( (10 * x * x_squared) >> FIXED_POINT_Q ) + 105 * x;
-    int32_t b = ( (x_squared * x_squared) >> FIXED_POINT_Q) + (45 * x_squared) + (105 << FIXED_POINT_Q);
+    int32_t a = ((10 * x * x_squared) >> FIXED_POINT_Q) + 105 * x;
+    int32_t b =
+        ((x_squared * x_squared) >> FIXED_POINT_Q) + (45 * x_squared) + (105 << FIXED_POINT_Q);
 
-    return (int16_t) ((a << FIXED_POINT_Q) / b);
+    return (int16_t)((a << FIXED_POINT_Q) / b);
 }
 /*
 int main()
@@ -52,7 +52,7 @@ int main()
     FILE *fp_q_tanh = fopen("q_tanh.bin", "wb");
 
     const int sample_count = 500;
-    
+
     int16_t *tanh_buf = malloc(sizeof(int16_t) * sample_count);
     int16_t *q_tanh_buf = malloc(sizeof(int16_t) * sample_count);
 
@@ -73,14 +73,15 @@ int main()
         printf("tanh_buf[i] = %lf\n", (float) tanh_buf[i] * pow(2, -FIXED_POINT_Q));
         printf("q_tanh_buf[i] = %lf\n", (float) q_tanh_buf[i] * pow(2, -FIXED_POINT_Q));
 
-        
+
         printf("i = %d, %f\n", i, (float) i * pow(2, -4));
         printf("tanh = %lf\n", tanh((float) i * pow(2, -4)));
-        printf("approx. tanh = %lf\n", (float) q_tanh(i << (FIXED_POINT_Q - 4)) * pow(2, -FIXED_POINT_Q));
-        printf("error = %lf\n", fabs(tanh((float) i * pow(2, -4)) - ((float) q_tanh(i << (FIXED_POINT_Q - 4)) * pow(2, -FIXED_POINT_Q))));
-        
-       //printf("(6.0f / 2.0f) / (sample_count / 2.0f) = %lf\n", (6.0f / 2.0f) / (sample_count / 2.0f));
-       input += bound / (sample_count / 2.0f);
+        printf("approx. tanh = %lf\n", (float) q_tanh(i << (FIXED_POINT_Q - 4)) * pow(2,
+-FIXED_POINT_Q)); printf("error = %lf\n", fabs(tanh((float) i * pow(2, -4)) - ((float) q_tanh(i <<
+(FIXED_POINT_Q - 4)) * pow(2, -FIXED_POINT_Q))));
+
+       //printf("(6.0f / 2.0f) / (sample_count / 2.0f) = %lf\n", (6.0f / 2.0f) / (sample_count
+/ 2.0f)); input += bound / (sample_count / 2.0f);
     }
 
     fwrite(tanh_buf, sizeof(int16_t), sample_count, fp_tanh);

@@ -48,6 +48,12 @@ Or run tests only:
 ./scripts/test.sh
 ```
 
+Check formatting without modifying files:
+
+```sh
+./scripts/format-check.sh
+```
+
 Clean generated artifacts:
 
 ```sh

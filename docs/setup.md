@@ -15,6 +15,7 @@ Optional tooling:
 ```sh
 ./scripts/build.sh
 ./scripts/format.sh
+./scripts/format-check.sh
 ./scripts/lint.sh
 ./scripts/test.sh
 ./scripts/clean.sh
