@@ -1,10 +1,8 @@
 # STM32 Audio Effects Unit
 
-![Board v1](hardware/STM32AudioEffects/STM32AudioEffectsUnit.jpg)
+![Board](hardware/STM32AudioEffects/STM32AudioEffectsUnit.jpg)
 
 Embedded STM32 audio effects project with fixed-point DSP in C, host-side effect demo tooling, and board design files.
-
-This repository is being modernized. The goal is to keep it developer-usable while making quality signals obvious: clean structure, reproducible setup, tests, and CI.
 
 ## What Is Here
 
@@ -40,7 +38,6 @@ python3 main.py
 Notes:
 
 - The current Python binding hardcodes `libeffects.dll`.
-- Demo packaging/tooling cleanup is part of V1 modernization.
 
 ## Firmware Snapshot
 
@@ -58,20 +55,6 @@ Current implementation includes:
 
 Board assets are under [hardware/STM32AudioEffects](hardware/STM32AudioEffects), with analog simulation files under [hardware/LTspice](hardware/LTspice).
 
-## Modernization Status
-
-Completed:
-
-- repo layout refactor (DSP / firmware / host / hardware split)
-- README pass for the new layout
-
-In progress for V1:
-
-- reproducible build/tooling baseline
-- test framework + deterministic regression tests
-- CI checks
-- board bring-up documentation
-
 ## Why Fixed-Point Here
 
-The DSP path is fixed-point by design in V1: explicit numeric behavior, deterministic control over arithmetic, and portability to targets without strong floating-point support.
+The DSP path is fixed-point by design: explicit numeric behavior, deterministic control over arithmetic, and portability to targets without strong floating-point support.
