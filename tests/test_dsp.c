@@ -47,6 +47,22 @@ static void test_q_tanh_clamps(void)
     expect_eq_i16(0, q_tanh(0), "q_tanh zero");
 }
 
+static void test_q_tanh_odd_symmetry(void)
+{
+    for (int16_t x = 1; x <= (5 * Q_ONE); x += 13)
+    {
+        int16_t positive = q_tanh(x);
+        int16_t negative = q_tanh((int16_t)-x);
+
+        if (negative != (int16_t)-positive)
+        {
+            fprintf(stderr, "FAIL: q_tanh odd symmetry x=%d tanh(x)=%d tanh(-x)=%d\n", x,
+                positive, negative);
+            failures++;
+        }
+    }
+}
+
 static void test_overdrive_dry_passthrough(void)
 {
     const uint16_t input[] = {
@@ -761,6 +777,7 @@ static void test_echo_negative_mix_saturates_at_zero(void)
 int main(void)
 {
     test_q_tanh_clamps();
+    test_q_tanh_odd_symmetry();
     test_overdrive_dry_passthrough();
     test_overdrive_zero_level_mutes_wet();
     test_overdrive_full_wet_changes_signal();
