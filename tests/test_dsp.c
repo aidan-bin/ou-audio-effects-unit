@@ -63,6 +63,37 @@ static void test_q_tanh_odd_symmetry(void)
     }
 }
 
+static void test_q_tanh_is_bounded(void)
+{
+    for (int16_t x = (int16_t)(-8 * Q_ONE); x <= (int16_t)(8 * Q_ONE); x += 11)
+    {
+        int16_t y = q_tanh(x);
+        if (y < (int16_t)-Q_ONE || y > (int16_t)Q_ONE)
+        {
+            fprintf(stderr, "FAIL: q_tanh boundedness x=%d y=%d\n", x, y);
+            failures++;
+        }
+    }
+}
+
+static void test_q_tanh_monotonic(void)
+{
+    int16_t prev = q_tanh((int16_t)(-8 * Q_ONE));
+
+    for (int16_t x = (int16_t)(-8 * Q_ONE + 1); x <= (int16_t)(8 * Q_ONE); x++)
+    {
+        int16_t current = q_tanh(x);
+        if (current + 1 < prev)
+        {
+            fprintf(stderr, "FAIL: q_tanh monotonic x=%d prev=%d current=%d\n", x, prev, current);
+            failures++;
+            return;
+        }
+
+        prev = current;
+    }
+}
+
 static void test_overdrive_dry_passthrough(void)
 {
     const uint16_t input[] = {
@@ -807,6 +838,8 @@ int main(void)
 {
     test_q_tanh_clamps();
     test_q_tanh_odd_symmetry();
+    test_q_tanh_is_bounded();
+    test_q_tanh_monotonic();
     test_overdrive_dry_passthrough();
     test_overdrive_zero_level_mutes_wet();
     test_overdrive_full_wet_changes_signal();
