@@ -305,6 +305,41 @@ static void test_overdrive_tone_above_max_clamps(void)
     expect_eq_u16_array(output_ref, output_over_tone, 2, "overdrive tone>max clamps");
 }
 
+static void test_overdrive_sign_symmetry(void)
+{
+    const uint16_t input[] = {
+        (uint16_t)(X_AXIS - 2000),
+        (uint16_t)(X_AXIS + 2000),
+        (uint16_t)(X_AXIS - 700),
+        (uint16_t)(X_AXIS + 700),
+    };
+
+    uint16_t output[4] = {0};
+    OverdriveParam param = {
+        .level = MAX_OVERDRIVE_LEVEL,
+        .gain = Q_ONE,
+        .tone = Q_ONE,
+        .mix = Q_ONE,
+    };
+
+    buf_overdrive(input, output, 4, &param);
+
+    for (size_t i = 0; i < 4; i += 2)
+    {
+        uint32_t mirrored_sum = (uint32_t)output[i] + (uint32_t)output[i + 1];
+        uint32_t centered_sum = (uint32_t)(2U * X_AXIS);
+        uint32_t diff = (mirrored_sum > centered_sum) ? (mirrored_sum - centered_sum)
+                                                      : (centered_sum - mirrored_sum);
+
+        if (diff > 1U)
+        {
+            fprintf(stderr, "FAIL: overdrive symmetry pair=%zu sum=%u expected=%u\n", i / 2,
+                mirrored_sum, (unsigned)centered_sum);
+            failures++;
+        }
+    }
+}
+
 static void test_compression_ratio_behavior(void)
 {
     const uint16_t input[] = {
@@ -848,6 +883,7 @@ int main(void)
     test_overdrive_tone_below_one_clamps();
     test_overdrive_level_above_max_clamps();
     test_overdrive_tone_above_max_clamps();
+    test_overdrive_sign_symmetry();
     test_compression_ratio_behavior();
     test_compression_zero_threshold_hard_clip();
     test_compression_ratio_above_one_clamps_to_hard_clip();
