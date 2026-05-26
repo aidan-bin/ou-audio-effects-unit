@@ -86,6 +86,27 @@ void buf_echo(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples,
     size_t attack = param->attack;
     size_t decay = param->decay;
 
+    if (delay_samples == 0) {
+        memcpy(out_buf, in_buf, num_samples * sizeof(uint16_t));
+        return;
+    }
+
+    if (pre_delay < MIN_ECHO_PRE_DELAY) {
+        pre_delay = MIN_ECHO_PRE_DELAY;
+    }
+
+    if (density > MAX_ECHO_DENSITY) {
+        density = MAX_ECHO_DENSITY;
+    }
+
+    if (attack > MAX_ECHO_ATTACK) {
+        attack = MAX_ECHO_ATTACK;
+    }
+
+    if (decay > MAX_ECHO_DECAY) {
+        decay = MAX_ECHO_DECAY;
+    }
+
     if (num_samples == 0) {
         return;
     }
@@ -96,7 +117,7 @@ void buf_echo(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples,
     // Copy current input samples to output samples buffer
     memcpy(out_buf, in_buf_curr, num_samples * sizeof(uint16_t));
 
-    if (density == 0) {
+    if (density == 0 || pre_delay > delay_samples) {
         return;
     }
 
