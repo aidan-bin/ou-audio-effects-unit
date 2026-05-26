@@ -37,10 +37,13 @@ if(OU_BUILD_SHARED_LIB)
     set_target_properties(ou_effects_shared PROPERTIES
         OUTPUT_NAME libeffects
         PREFIX ""
-        SUFFIX ".dll"
         LIBRARY_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/host/python-demo
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/host/python-demo
     )
+
+    if(WIN32)
+        set_target_properties(ou_effects_shared PROPERTIES SUFFIX ".dll")
+    endif()
 endif()
 
 if(OU_BUILD_TESTS)
