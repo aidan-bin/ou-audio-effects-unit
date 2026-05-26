@@ -2,12 +2,10 @@
 #include "fast_math.h"
 
 #include <stddef.h>
-#include <stdio.h>
 #include <string.h>
-#include <math.h>
 
-int32_t saturate_amplitude(int32_t num, size_t max);
-int32_t saturate_min(int32_t num, int32_t min);
+static int32_t saturate_amplitude(int32_t num, size_t max);
+static int32_t saturate_min(int32_t num, int32_t min);
 
 //#define PARAM_INSTANCE_ENABLE	// Enables instances of parameters
 
@@ -198,7 +196,7 @@ void buf_averager(const uint16_t* in_buf, uint16_t* out_buf, const uint16_t* edg
 }
 
 // Saturate num to +/- max
-int32_t saturate_amplitude(int32_t num, size_t max)
+static int32_t saturate_amplitude(int32_t num, size_t max)
 {
 	if (num > (int32_t) max)
 		return (int32_t) max;
@@ -209,7 +207,7 @@ int32_t saturate_amplitude(int32_t num, size_t max)
 }
 
 // Saturate num to min
-int32_t saturate_min(int32_t num, int32_t min)
+static int32_t saturate_min(int32_t num, int32_t min)
 {
 	if (num < min)
         return min;
