@@ -284,6 +284,41 @@ static void test_echo_zero_density_is_copy(void)
     }
 }
 
+static void test_echo_pre_delay_beyond_window_is_copy(void)
+{
+    const EchoParam param = {
+        .delay_samples = 2,
+        .pre_delay = 3,
+        .density = Q_ONE,
+        .attack = Q_ONE,
+        .decay = 0,
+    };
+
+    const uint16_t input_with_delay[] = {
+        (uint16_t)(X_AXIS + 7),
+        (uint16_t)(X_AXIS + 14),
+        (uint16_t)(X_AXIS + 21),
+        (uint16_t)(X_AXIS + 28),
+        (uint16_t)(X_AXIS + 35),
+        (uint16_t)(X_AXIS + 42),
+    };
+
+    const uint16_t expected[] = {
+        input_with_delay[2],
+        input_with_delay[3],
+        input_with_delay[4],
+        input_with_delay[5],
+    };
+
+    uint16_t output[4] = {0};
+    buf_echo(input_with_delay, output, 4, &param);
+
+    for (size_t i = 0; i < 4; i++)
+    {
+        expect_eq_u16(expected[i], output[i], "echo pre-delay beyond window copy");
+    }
+}
+
 static void test_echo_single_step_full_coverage(void)
 {
     const EchoParam param = {
@@ -387,6 +422,7 @@ int main(void)
     test_compression_ratio_above_one_clamps_to_hard_clip();
     test_echo_attack_zero_is_copy();
     test_echo_zero_density_is_copy();
+    test_echo_pre_delay_beyond_window_is_copy();
     test_echo_single_step_full_coverage();
     test_echo_high_density_clamps_spacing();
     test_echo_zero_samples_no_write();
