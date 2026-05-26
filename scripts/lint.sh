@@ -14,5 +14,10 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
     extra_args+=("--extra-arg-before=-isysroot${sdk_path}")
 fi
 
-clang-tidy -quiet -p build -header-filter='^dsp/' "${extra_args[@]}" dsp/effects/effects.c
-clang-tidy -quiet -p build -header-filter='^dsp/' "${extra_args[@]}" dsp/math/fast_math.c
+run_tidy() {
+    clang-tidy -quiet -p build -header-filter='^dsp/' "${extra_args[@]}" "$1" 2>&1 | \
+        sed -E '/^[0-9]+ warnings generated\.$/d'
+}
+
+run_tidy dsp/effects/effects.c
+run_tidy dsp/math/fast_math.c
