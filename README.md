@@ -42,11 +42,15 @@ Run from repository root:
 ./scripts/check.sh
 ```
 
+`check.sh` runs dependency preflight (`doctor.sh`) before build+test.
+
 Run full verification (format + lint + build + tests):
 
 ```sh
 ./scripts/check-full.sh
 ```
+
+`check-full.sh` runs dependency preflight (`doctor.sh`) before the full gate.
 
 Or run tests only:
 

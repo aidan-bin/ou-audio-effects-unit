@@ -10,6 +10,8 @@ Run from repository root:
 ./scripts/check.sh
 ```
 
+This runs `./scripts/doctor.sh` first, then build + test.
+
 Optional tooling:
 
 ```sh
