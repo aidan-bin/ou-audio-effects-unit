@@ -23,6 +23,12 @@ Optional tooling:
 Run from repository root:
 
 ```sh
+./scripts/demo.sh
+```
+
+Equivalent explicit commands:
+
+```sh
 ./scripts/build.sh
 python3 -m pip install -r host/python-demo/requirements.txt
 python3 host/python-demo/main.py

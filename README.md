@@ -18,14 +18,10 @@ Includes overdrive/echo/compression DSP in C, STM32 firmware with FreeRTOS + DMA
 
 ## Quick Start: Host Demo
 
-The Python binding expects a shared library named libeffects.dll in [host/python-demo](host/python-demo).
-
 From the repository root:
 
 ```sh
-./scripts/build.sh
-python3 -m pip install -r host/python-demo/requirements.txt
-python3 host/python-demo/main.py
+./scripts/demo.sh
 ```
 
 ## Firmware Snapshot
