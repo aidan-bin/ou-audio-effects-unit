@@ -8,12 +8,14 @@ import wave
 import effects
 import ctypes
 import sys
+from pathlib import Path
 
 
 class Ui(QtWidgets.QMainWindow):
     def __init__(self):
         super(Ui, self).__init__()
-        self.ui = uic.loadUi('demo.ui', self)
+        ui_path = Path(__file__).resolve().parent / "demo.ui"
+        self.ui = uic.loadUi(str(ui_path), self)
 
         self.input_signal = np.zeros(2)
         self.output_signal = np.zeros(2)

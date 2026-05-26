@@ -24,9 +24,8 @@ From the repository root:
 
 ```sh
 ./scripts/build.sh
-cd host/python-demo
-python3 -m pip install -r requirements.txt
-python3 main.py
+python3 -m pip install -r host/python-demo/requirements.txt
+python3 host/python-demo/main.py
 ```
 
 ## Firmware Snapshot

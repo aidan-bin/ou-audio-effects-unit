@@ -2,10 +2,28 @@
 #   Usage: Instantiate effect param objects, call <effect>(in_samples, <effect object>)
 
 import ctypes
-import os
+from pathlib import Path
 
-libpath = os.path.abspath("libeffects.dll")
-libeffects = ctypes.CDLL(libpath)
+
+def _load_effects_library():
+    module_dir = Path(__file__).resolve().parent
+    candidates = (
+        module_dir / "libeffects.dll",
+        module_dir / "libeffects.so",
+        module_dir / "libeffects.dylib",
+    )
+
+    for candidate in candidates:
+        if candidate.exists():
+            return ctypes.CDLL(str(candidate))
+
+    raise RuntimeError(
+        "Could not find the effects shared library. "
+        "Run ./scripts/build.sh from the repository root first."
+    )
+
+
+libeffects = _load_effects_library()
 
 x_axis = int(65535/2)
 fixed_point_q = 8
