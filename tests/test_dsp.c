@@ -197,6 +197,41 @@ static void test_echo_single_step_full_coverage(void)
     }
 }
 
+static void test_echo_high_density_clamps_spacing(void)
+{
+    const EchoParam param = {
+        .delay_samples = 2,
+        .pre_delay = 1,
+        .density = (2U * Q_ONE),
+        .attack = Q_ONE,
+        .decay = Q_ONE,
+    };
+
+    const uint16_t input_with_delay[] = {
+        (uint16_t)(X_AXIS + 10),
+        (uint16_t)(X_AXIS + 20),
+        (uint16_t)(X_AXIS + 30),
+        (uint16_t)(X_AXIS + 40),
+        (uint16_t)(X_AXIS + 50),
+        (uint16_t)(X_AXIS + 60),
+    };
+
+    const uint16_t expected[] = {
+        (uint16_t)(X_AXIS + 50),
+        (uint16_t)(X_AXIS + 70),
+        (uint16_t)(X_AXIS + 90),
+        (uint16_t)(X_AXIS + 110),
+    };
+
+    uint16_t output[4] = {0};
+    buf_echo(input_with_delay, output, 4, &param);
+
+    for (size_t i = 0; i < 4; i++)
+    {
+        expect_eq_u16(expected[i], output[i], "echo high density spacing clamp");
+    }
+}
+
 int main(void)
 {
     test_q_tanh_clamps();
@@ -205,6 +240,7 @@ int main(void)
     test_echo_attack_zero_is_copy();
     test_echo_zero_density_is_copy();
     test_echo_single_step_full_coverage();
+    test_echo_high_density_clamps_spacing();
 
     if (failures != 0)
     {
