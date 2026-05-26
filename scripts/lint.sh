@@ -15,7 +15,7 @@ if [[ -z "$clang_tidy_bin" ]]; then
 fi
 
 if [[ ! -f build/compile_commands.json ]]; then
-    cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON >/dev/null
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON >/dev/null
 fi
 
 extra_args=()
