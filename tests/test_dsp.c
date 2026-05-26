@@ -163,6 +163,40 @@ static void test_echo_zero_density_is_copy(void)
     }
 }
 
+static void test_echo_single_step_full_coverage(void)
+{
+    const EchoParam param = {
+        .delay_samples = 1,
+        .pre_delay = 1,
+        .density = Q_ONE,
+        .attack = Q_ONE,
+        .decay = Q_ONE,
+    };
+
+    const uint16_t input_with_delay[] = {
+        (uint16_t)(X_AXIS + 1),
+        (uint16_t)(X_AXIS + 2),
+        (uint16_t)(X_AXIS + 3),
+        (uint16_t)(X_AXIS + 4),
+        (uint16_t)(X_AXIS + 5),
+    };
+
+    const uint16_t expected[] = {
+        (uint16_t)(X_AXIS + 3),
+        (uint16_t)(X_AXIS + 5),
+        (uint16_t)(X_AXIS + 7),
+        (uint16_t)(X_AXIS + 9),
+    };
+
+    uint16_t output[4] = {0};
+    buf_echo(input_with_delay, output, 4, &param);
+
+    for (size_t i = 0; i < 4; i++)
+    {
+        expect_eq_u16(expected[i], output[i], "echo one-step full coverage");
+    }
+}
+
 int main(void)
 {
     test_q_tanh_clamps();
@@ -170,6 +204,7 @@ int main(void)
     test_compression_ratio_behavior();
     test_echo_attack_zero_is_copy();
     test_echo_zero_density_is_copy();
+    test_echo_single_step_full_coverage();
 
     if (failures != 0)
     {

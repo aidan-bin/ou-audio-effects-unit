@@ -104,7 +104,7 @@ void buf_echo(const uint16_t* in_buf, uint16_t* out_buf, size_t num_samples, con
 		for (size_t delay = pre_delay; delay <= delay_samples; delay += echo_spacing)
 		{
 			// Make sure echo is within bounds of out_buf, ignore otherwise (still decay/reduce gain)
-			if (n + delay >= delay_samples && n + delay < num_samples)
+			if (n + delay >= delay_samples && n + delay < delay_samples + num_samples)
 			{
 				out_buf[n + delay - delay_samples] += (int32_t) curr_echo_gain * dry_input >> FIXED_POINT_Q;
 			}
