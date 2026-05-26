@@ -23,7 +23,7 @@ Run from repository root:
 ```sh
 ./scripts/build.sh
 cd host/python-demo
-python3 -m pip install PyQt5 matplotlib numpy sounddevice
+python3 -m pip install -r requirements.txt
 python3 main.py
 ```
 
