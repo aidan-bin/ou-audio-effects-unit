@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/tooling.sh"
+
 missing=0
 
 check_tool() {
@@ -18,16 +21,8 @@ check_tool() {
 check_tool_or_versioned() {
     local tool="$1"
     local hint="$2"
-    local found=0
 
-    for candidate in "$tool" "$tool"-20 "$tool"-19 "$tool"-18 "$tool"-17 "$tool"-16; do
-        if command -v "$candidate" >/dev/null 2>&1; then
-            found=1
-            break
-        fi
-    done
-
-    if [[ "$found" -eq 1 ]]; then
+    if find_versioned_tool "$tool" >/dev/null; then
         echo "[ok] $tool (or versioned variant)"
     else
         echo "[missing] $tool - $hint"

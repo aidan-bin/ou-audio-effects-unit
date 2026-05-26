@@ -1,16 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-clang_tidy_bin=""
-for candidate in clang-tidy clang-tidy-20 clang-tidy-19 clang-tidy-18 clang-tidy-17 clang-tidy-16; do
-    if command -v "$candidate" >/dev/null 2>&1; then
-        clang_tidy_bin="$candidate"
-        break
-    fi
-done
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/tooling.sh"
+
+clang_tidy_bin="$(find_versioned_tool clang-tidy || true)"
 
 if [[ -z "$clang_tidy_bin" ]]; then
-    echo "clang-tidy not found (tried clang-tidy, clang-tidy-20, clang-tidy-19, clang-tidy-18, clang-tidy-17, clang-tidy-16)"
+    echo "clang-tidy not found (tried $(tool_candidates_string clang-tidy))"
     exit 1
 fi
 

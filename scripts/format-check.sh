@@ -1,16 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-clang_format_bin=""
-for candidate in clang-format clang-format-20 clang-format-19 clang-format-18 clang-format-17 clang-format-16; do
-    if command -v "$candidate" >/dev/null 2>&1; then
-        clang_format_bin="$candidate"
-        break
-    fi
-done
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/tooling.sh"
+
+clang_format_bin="$(find_versioned_tool clang-format || true)"
 
 if [[ -z "$clang_format_bin" ]]; then
-    echo "clang-format not found (tried clang-format, clang-format-20, clang-format-19, clang-format-18, clang-format-17, clang-format-16)"
+    echo "clang-format not found (tried $(tool_candidates_string clang-format))"
     exit 1
 fi
 
