@@ -1135,7 +1135,7 @@ void startEffectsTask(void const * argument)
       goto effects_iteration_cleanup;
 		}
 		
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < NUM_EFFECTS; i++)
 		{
 			Effect effect = latchedEffectsState.ordered[i];
       if (!effect_is_valid(effect))
@@ -1319,13 +1319,30 @@ void startSwHandlerTask(void const * argument)
   /* Infinite loop */
   for(;;)
   {
-		Effect effect_a = effectsState.ordered[0];
-		Effect effect_b = effectsState.ordered[1];
-		Effect effect_c = effectsState.ordered[2];
-		
-		effectsState.isEnabled[effect_a] = HAL_GPIO_ReadPin(SWITCH_A_GPIO_Port, SWITCH_A_Pin) == GPIO_PIN_SET;
-		effectsState.isEnabled[effect_b] = HAL_GPIO_ReadPin(SWITCH_A_GPIO_Port, SWITCH_B_Pin) == GPIO_PIN_SET;
-		effectsState.isEnabled[effect_c] = HAL_GPIO_ReadPin(SWITCH_A_GPIO_Port, SWITCH_C_Pin) == GPIO_PIN_SET;
+    bool switchAEnabled = HAL_GPIO_ReadPin(SWITCH_A_GPIO_Port, SWITCH_A_Pin) == GPIO_PIN_SET;
+    bool switchBEnabled = HAL_GPIO_ReadPin(SWITCH_A_GPIO_Port, SWITCH_B_Pin) == GPIO_PIN_SET;
+    bool switchCEnabled = HAL_GPIO_ReadPin(SWITCH_A_GPIO_Port, SWITCH_C_Pin) == GPIO_PIN_SET;
+    Effect effect_a;
+    Effect effect_b;
+    Effect effect_c;
+
+    taskENTER_CRITICAL();
+    effect_a = effectsState.ordered[0];
+    effect_b = effectsState.ordered[1];
+    effect_c = effectsState.ordered[2];
+    taskEXIT_CRITICAL();
+
+    if (!effect_is_valid(effect_a) || !effect_is_valid(effect_b) || !effect_is_valid(effect_c))
+    {
+      osDelay(pollingFrequencyMs);
+      continue;
+    }
+
+    taskENTER_CRITICAL();
+    effectsState.isEnabled[effect_a] = switchAEnabled;
+    effectsState.isEnabled[effect_b] = switchBEnabled;
+    effectsState.isEnabled[effect_c] = switchCEnabled;
+    taskEXIT_CRITICAL();
 
 		osDelay(pollingFrequencyMs);
   }
@@ -1387,8 +1404,25 @@ void startPotHandlerTask(void const * argument)
 				continue;
 			}
 
+      Effect activeEffect;
+      taskENTER_CRITICAL();
+      if (effectsState.activeEffectSelection < NUM_EFFECTS)
+      {
+        activeEffect = effectsState.ordered[effectsState.activeEffectSelection];
+      }
+      else
+      {
+        activeEffect = (Effect) NUM_EFFECTS;
+      }
+      taskEXIT_CRITICAL();
+
+      if (!effect_is_valid(activeEffect))
+      {
+        continue;
+      }
+
 			/* Handle POT_x depending on active effect */
-			if (effectsState.ordered[effectsState.activeEffectSelection] == OVERDRIVE)
+      if (activeEffect == OVERDRIVE)
 			{
 				switch (pot)
 				{
@@ -1429,7 +1463,7 @@ void startPotHandlerTask(void const * argument)
 					default: break;
 				}
 			}
-			else if (effectsState.ordered[effectsState.activeEffectSelection] == ECHO)
+      else if (activeEffect == ECHO)
 			{
 				switch (pot)
 				{
@@ -1468,7 +1502,7 @@ void startPotHandlerTask(void const * argument)
 					default: break;
 				}
 			}
-			else if (effectsState.ordered[effectsState.activeEffectSelection] == COMPRESSION)
+      else if (activeEffect == COMPRESSION)
 			{
 				switch (pot)
 				{
