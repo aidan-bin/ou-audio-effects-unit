@@ -1353,6 +1353,35 @@ static void test_handle_echo_delay_accessor_rejects_wrong_type(void)
     }
 }
 
+static void test_handle_echo_delay_accessor_rejects_null_out_ptr(void)
+{
+    EffectHandle handle = {0};
+    if (effect_handle_init(&handle, EFFECT_TYPE_ECHO) != 0)
+    {
+        fprintf(stderr, "FAIL: handle echo init for delay null ptr test\n");
+        failures++;
+        return;
+    }
+
+    if (effect_handle_get_echo_delay_samples(&handle, NULL) == 0)
+    {
+        fprintf(stderr, "FAIL: handle echo delay accessor accepted null output pointer\n");
+        failures++;
+    }
+}
+
+static void test_handle_echo_delay_accessor_rejects_uninitialized_handle(void)
+{
+    EffectHandle handle = {0};
+    size_t delay_samples = 0;
+
+    if (effect_handle_get_echo_delay_samples(&handle, &delay_samples) == 0)
+    {
+        fprintf(stderr, "FAIL: handle echo delay accessor accepted uninitialized handle\n");
+        failures++;
+    }
+}
+
 static void test_handle_reset_restores_defaults(void)
 {
     const uint16_t input[] = {
@@ -1454,6 +1483,8 @@ int main(void)
     test_handle_echo_parity();
     test_handle_echo_delay_accessor();
     test_handle_echo_delay_accessor_rejects_wrong_type();
+    test_handle_echo_delay_accessor_rejects_null_out_ptr();
+    test_handle_echo_delay_accessor_rejects_uninitialized_handle();
     test_handle_reset_restores_defaults();
 
     if (failures != 0)
