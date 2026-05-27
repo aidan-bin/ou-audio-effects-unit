@@ -28,6 +28,10 @@ libeffects = _load_effects_library()
 x_axis = int(65535 / 2)
 fixed_point_q = 8
 
+EFFECT_TYPE_OVERDRIVE = 0
+EFFECT_TYPE_ECHO = 1
+EFFECT_TYPE_COMPRESSION = 2
+
 
 class OverdriveParam(ctypes.Structure):
     _fields_ = [("level", ctypes.c_size_t), # Saturation amplitude of wet signal
@@ -71,6 +75,28 @@ class CompressionParam(ctypes.Structure):
                f"ratio = {self.ratio}"
 
 
+class EffectParams(ctypes.Union):
+    _fields_ = [
+        ("overdrive", OverdriveParam),
+        ("echo", EchoParam),
+        ("compression", CompressionParam),
+    ]
+
+
+class EffectInstance(ctypes.Structure):
+    _fields_ = [
+        ("type", ctypes.c_int),
+        ("params", EffectParams),
+    ]
+
+
+class EffectHandle(ctypes.Structure):
+    _fields_ = [
+        ("instance", EffectInstance),
+        ("initialized", ctypes.c_int),
+    ]
+
+
 UINT16_PTR = ctypes.POINTER(ctypes.c_uint16)
 
 libeffects.buf_overdrive.argtypes = [
@@ -97,36 +123,108 @@ libeffects.buf_compression.argtypes = [
 ]
 libeffects.buf_compression.restype = None
 
+libeffects.effect_handle_init.argtypes = [ctypes.POINTER(EffectHandle), ctypes.c_int]
+libeffects.effect_handle_init.restype = ctypes.c_int
+
+libeffects.effect_handle_reset.argtypes = [ctypes.POINTER(EffectHandle)]
+libeffects.effect_handle_reset.restype = ctypes.c_int
+
+libeffects.effect_handle_set_overdrive_params.argtypes = [
+    ctypes.POINTER(EffectHandle),
+    ctypes.POINTER(OverdriveParam),
+]
+libeffects.effect_handle_set_overdrive_params.restype = ctypes.c_int
+
+libeffects.effect_handle_set_echo_params.argtypes = [
+    ctypes.POINTER(EffectHandle),
+    ctypes.POINTER(EchoParam),
+]
+libeffects.effect_handle_set_echo_params.restype = ctypes.c_int
+
+libeffects.effect_handle_set_compression_params.argtypes = [
+    ctypes.POINTER(EffectHandle),
+    ctypes.POINTER(CompressionParam),
+]
+libeffects.effect_handle_set_compression_params.restype = ctypes.c_int
+
+libeffects.effect_handle_process.argtypes = [
+    ctypes.POINTER(EffectHandle),
+    UINT16_PTR,
+    UINT16_PTR,
+    ctypes.c_size_t,
+]
+libeffects.effect_handle_process.restype = ctypes.c_int
+
+
+class EffectRuntime:
+    def __init__(self, effect_type):
+        self.handle = EffectHandle()
+        result = libeffects.effect_handle_init(ctypes.byref(self.handle), effect_type)
+        if result != 0:
+            raise RuntimeError(f"Failed to initialize effect runtime (type={effect_type})")
+
+    def reset(self):
+        result = libeffects.effect_handle_reset(ctypes.byref(self.handle))
+        if result != 0:
+            raise RuntimeError("Failed to reset effect runtime")
+
+    def set_overdrive(self, param):
+        result = libeffects.effect_handle_set_overdrive_params(ctypes.byref(self.handle), ctypes.byref(param))
+        if result != 0:
+            raise RuntimeError("Failed to set overdrive parameters")
+
+    def set_echo(self, param):
+        result = libeffects.effect_handle_set_echo_params(ctypes.byref(self.handle), ctypes.byref(param))
+        if result != 0:
+            raise RuntimeError("Failed to set echo parameters")
+
+    def set_compression(self, param):
+        result = libeffects.effect_handle_set_compression_params(ctypes.byref(self.handle), ctypes.byref(param))
+        if result != 0:
+            raise RuntimeError("Failed to set compression parameters")
+
+    def _process(self, in_samples_list, out_samples_count):
+        in_samples_array = (ctypes.c_uint16 * len(in_samples_list))(*in_samples_list)
+        out_samples_array = (ctypes.c_uint16 * out_samples_count)()
+
+        result = libeffects.effect_handle_process(
+            ctypes.byref(self.handle),
+            ctypes.cast(in_samples_array, ctypes.POINTER(ctypes.c_uint16)),
+            ctypes.cast(out_samples_array, ctypes.POINTER(ctypes.c_uint16)),
+            out_samples_count,
+        )
+        if result != 0:
+            raise RuntimeError("Failed to process effect runtime")
+
+        return [(out_samples_array[i] - x_axis) for i in range(out_samples_count)]
+
+    def process(self, in_samples_list):
+        samples = [(round(sample) + x_axis) for sample in in_samples_list]
+        return self._process(samples, len(samples))
+
+    def process_echo(self, in_samples_list, delay_samples):
+        samples = [(round(sample) + x_axis) for sample in in_samples_list]
+        num_samples = len(samples) - int(delay_samples)
+
+        if num_samples < 0:
+            raise ValueError("Echo input must include delay_samples of padding")
+
+        return self._process(samples, num_samples)
+
 
 def overdrive(in_samples_list, param):
-    in_samples_list = [(round(sample) + x_axis) for sample in in_samples_list]
-    num_samples = len(in_samples_list)
-    in_samples_array = (ctypes.c_uint16 * num_samples)(*in_samples_list)
-    out_samples_array = (ctypes.c_uint16 * num_samples)()
-    libeffects.buf_overdrive(ctypes.cast(in_samples_array, ctypes.POINTER(ctypes.c_uint16)),
-                             ctypes.cast(out_samples_array, ctypes.POINTER(ctypes.c_uint16)),
-                             num_samples, ctypes.byref(param))
-    return [(out_samples_array[i] - x_axis) for i in range(num_samples)]
+    runtime = EffectRuntime(EFFECT_TYPE_OVERDRIVE)
+    runtime.set_overdrive(param)
+    return runtime.process(in_samples_list)
 
 
 def echo(in_samples_list, param):
-    in_samples_list = [(round(sample) + x_axis) for sample in in_samples_list]
-    num_prev_samples = int(param.delay_samples)
-    num_curr_samples = len(in_samples_list) - num_prev_samples
-    in_samples_array = (ctypes.c_uint16 * len(in_samples_list))(*in_samples_list)
-    out_samples_array = (ctypes.c_uint16 * num_curr_samples)()
-    libeffects.buf_echo(ctypes.cast(in_samples_array, ctypes.POINTER(ctypes.c_uint16)),
-                        ctypes.cast(out_samples_array, ctypes.POINTER(ctypes.c_uint16)),
-                        num_curr_samples, ctypes.byref(param))
-    return [(out_samples_array[i] - x_axis) for i in range(num_curr_samples)]
+    runtime = EffectRuntime(EFFECT_TYPE_ECHO)
+    runtime.set_echo(param)
+    return runtime.process(in_samples_list)
 
 
 def compression(in_samples_list, param):
-    in_samples_list = [(round(sample) + x_axis) for sample in in_samples_list]
-    num_samples = len(in_samples_list)
-    in_samples_array = (ctypes.c_uint16 * num_samples)(*in_samples_list)
-    out_samples_array = (ctypes.c_uint16 * num_samples)()
-    libeffects.buf_compression(ctypes.cast(in_samples_array, ctypes.POINTER(ctypes.c_uint16)),
-                               ctypes.cast(out_samples_array, ctypes.POINTER(ctypes.c_uint16)),
-                               num_samples, ctypes.byref(param))
-    return [(out_samples_array[i] - x_axis) for i in range(num_samples)]
+    runtime = EffectRuntime(EFFECT_TYPE_COMPRESSION)
+    runtime.set_compression(param)
+    return runtime.process(in_samples_list)

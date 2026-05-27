@@ -1,3 +1,4 @@
+import ctypes
 from PyQt5 import QtWidgets, uic
 import numpy as np
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -24,6 +25,9 @@ class Ui(QtWidgets.QMainWindow):
         self.overdrive_param = effects.OverdriveParam()
         self.echo_param = effects.EchoParam()
         self.compression_param = effects.CompressionParam()
+        self.overdrive_runtime = effects.EffectRuntime(effects.EFFECT_TYPE_OVERDRIVE)
+        self.echo_runtime = effects.EffectRuntime(effects.EFFECT_TYPE_ECHO)
+        self.compression_runtime = effects.EffectRuntime(effects.EFFECT_TYPE_COMPRESSION)
 
         self.figure = plt.figure()
         self.canvas = FigureCanvas(self.figure)
@@ -44,6 +48,40 @@ class Ui(QtWidgets.QMainWindow):
         self.ui.stopPushButton.clicked.connect(self.stop_playing_handler)
         self.ui.openFilePushButton.clicked.connect(self.open_file_handler)
 
+    def _scale_q(self, value):
+        return ctypes.c_size_t(int(value * 2 ** effects.fixed_point_q))
+
+    def _update_effect_params(self):
+        self.overdrive_param.level = ctypes.c_size_t(self.ui.overdriveLevelSpinBox.value())
+        self.overdrive_param.gain = self._scale_q(self.ui.overdriveGainSpinBox.value())
+        self.overdrive_param.tone = self._scale_q(self.ui.overdriveToneSpinBox.value())
+        self.overdrive_param.mix = self._scale_q(self.ui.overdriveMixSpinBox.value())
+
+        self.echo_param.delay_samples = ctypes.c_size_t(self.ui.echoDelaySpinBox.value())
+        self.echo_param.pre_delay = ctypes.c_size_t(self.ui.echoPreDelaySpinBox.value())
+        self.echo_param.density = self._scale_q(self.ui.echoDensitySpinBox.value())
+        self.echo_param.attack = self._scale_q(self.ui.echoAttackSpinBox.value())
+        self.echo_param.decay = self._scale_q(self.ui.echoDecaySpinBox.value())
+
+        self.compression_param.threshold = ctypes.c_size_t(self.ui.compressionThresholdSpinBox.value())
+        self.compression_param.ratio = self._scale_q(self.ui.compressionRatioSpinBox.value())
+
+    def _apply_overdrive(self, samples):
+        print("Adding overdrive...")
+        self.overdrive_runtime.set_overdrive(self.overdrive_param)
+        return np.asarray(self.overdrive_runtime.process(samples.tolist()))
+
+    def _apply_echo(self, samples):
+        print("Adding echo...")
+        padded_samples = np.pad(samples, (self.echo_param.delay_samples, 0))
+        self.echo_runtime.set_echo(self.echo_param)
+        return np.asarray(self.echo_runtime.process_echo(padded_samples.tolist(), self.echo_param.delay_samples))
+
+    def _apply_compression(self, samples):
+        print("Adding compression...")
+        self.compression_runtime.set_compression(self.compression_param)
+        return np.asarray(self.compression_runtime.process(samples.tolist()))
+
     def plot(self):
         self.figure.clear()
         ax = self.figure.add_subplot(111)
@@ -59,6 +97,9 @@ class Ui(QtWidgets.QMainWindow):
         sd.stop()
         self.input_signal = np.zeros(2)
         self.output_signal = np.zeros(2)
+        self.overdrive_runtime.reset()
+        self.echo_runtime.reset()
+        self.compression_runtime.reset()
         self.plot()
 
     def add_signals_handler(self):
@@ -120,43 +161,19 @@ class Ui(QtWidgets.QMainWindow):
     def apply_effects_handler(self):
         print("Applying effect(s)...")
 
-        # Update params
-        self.overdrive_param.level = ctypes.c_size_t(self.ui.overdriveLevelSpinBox.value())
-        self.overdrive_param.gain = ctypes.c_size_t(int(self.ui.overdriveGainSpinBox.value() * 2 ** effects.fixed_point_q))
-        self.overdrive_param.tone = ctypes.c_size_t(int(self.ui.overdriveToneSpinBox.value() * 2 ** effects.fixed_point_q))
-        self.overdrive_param.mix = ctypes.c_size_t(int(self.ui.overdriveMixSpinBox.value() * 2 ** effects.fixed_point_q))
-
-        # print(self.overdrive_param)
-
-        self.echo_param.delay_samples = ctypes.c_size_t(self.ui.echoDelaySpinBox.value())
-        self.echo_param.pre_delay = ctypes.c_size_t(self.ui.echoPreDelaySpinBox.value())
-        self.echo_param.density = ctypes.c_size_t(int(self.ui.echoDensitySpinBox.value() * 2 ** effects.fixed_point_q))
-        self.echo_param.attack = ctypes.c_size_t(int(self.ui.echoAttackSpinBox.value() * 2 ** effects.fixed_point_q))
-        self.echo_param.decay = ctypes.c_size_t(int(self.ui.echoDecaySpinBox.value() * 2 ** effects.fixed_point_q))
-
-        # print(self.echo_param)
-
-        self.compression_param.threshold = ctypes.c_size_t(self.ui.compressionThresholdSpinBox.value())
-        self.compression_param.ratio = ctypes.c_size_t(int(self.ui.compressionRatioSpinBox.value() * 2 ** effects.fixed_point_q))
-
-        # print(self.compression_param)
+        self._update_effect_params()
 
         # Apply effects
         temp = self.input_signal.copy()
 
         if self.ui.overdriveEnabledCheckBox.isChecked():
-            print("Adding overdrive...")
-            temp = np.asarray(effects.overdrive(temp.tolist(), self.overdrive_param))
+            temp = self._apply_overdrive(temp)
 
         if self.ui.echoEnabledCheckBox.isChecked():
-            print("Adding echo...")
-            # Pad delay_samples zeros to the front
-            padded = np.pad(temp, (self.echo_param.delay_samples, 0))
-            temp = np.asarray(effects.echo(padded.tolist(), self.echo_param))
+            temp = self._apply_echo(temp)
 
         if self.ui.compressionEnabledCheckBox.isChecked():
-            print("Adding compression...")
-            temp = np.asarray(effects.compression(temp.tolist(), self.compression_param))
+            temp = self._apply_compression(temp)
 
         self.output_signal = temp.copy()
 
