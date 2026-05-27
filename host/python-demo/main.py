@@ -64,22 +64,10 @@ class Ui(QtWidgets.QMainWindow):
         self.compression_param.threshold = self.ui.compressionThresholdSpinBox.value()
         self.compression_param.ratio = self._scale_q(self.ui.compressionRatioSpinBox.value())
 
-    def _apply_overdrive(self, samples):
-        print("Adding overdrive...")
-        self.overdrive_runtime.set_overdrive(self.overdrive_param)
-        return np.asarray(self.overdrive_runtime.process(samples.tolist()))
-
-    def _apply_echo(self, samples):
-        print("Adding echo...")
-        delay_samples = int(self.echo_param.delay_samples)
-        padded_samples = np.pad(samples, (delay_samples, 0))
-        self.echo_runtime.set_echo(self.echo_param)
-        return np.asarray(self.echo_runtime.process_echo(padded_samples.tolist(), delay_samples))
-
-    def _apply_compression(self, samples):
-        print("Adding compression...")
-        self.compression_runtime.set_compression(self.compression_param)
-        return np.asarray(self.compression_runtime.process(samples.tolist()))
+    def _apply_runtime(self, label, runtime, setter, samples, processor):
+        print(f"Adding {label}...")
+        setter()
+        return np.asarray(processor(runtime, samples))
 
     def _append_signal(self, signal, component):
         if len(component) < len(signal):
@@ -183,13 +171,34 @@ class Ui(QtWidgets.QMainWindow):
         temp = self.input_signal.copy()
 
         if self.ui.overdriveEnabledCheckBox.isChecked():
-            temp = self._apply_overdrive(temp)
+            temp = self._apply_runtime(
+                "overdrive",
+                self.overdrive_runtime,
+                lambda: self.overdrive_runtime.set_overdrive(self.overdrive_param),
+                temp,
+                lambda runtime, signal: runtime.process(signal.tolist()),
+            )
 
         if self.ui.echoEnabledCheckBox.isChecked():
-            temp = self._apply_echo(temp)
+            temp = self._apply_runtime(
+                "echo",
+                self.echo_runtime,
+                lambda: self.echo_runtime.set_echo(self.echo_param),
+                temp,
+                lambda runtime, signal: runtime.process_echo(
+                    np.pad(signal, (int(self.echo_param.delay_samples), 0)).tolist(),
+                    int(self.echo_param.delay_samples),
+                ),
+            )
 
         if self.ui.compressionEnabledCheckBox.isChecked():
-            temp = self._apply_compression(temp)
+            temp = self._apply_runtime(
+                "compression",
+                self.compression_runtime,
+                lambda: self.compression_runtime.set_compression(self.compression_param),
+                temp,
+                lambda runtime, signal: runtime.process(signal.tolist()),
+            )
 
         self.output_signal = temp.copy()
 
