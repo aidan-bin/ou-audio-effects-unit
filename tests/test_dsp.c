@@ -1198,6 +1198,103 @@ static void test_handle_overdrive_parity(void)
     expect_eq_u16_array(direct_output, handle_output, 2, "handle overdrive parity");
 }
 
+static void test_handle_rejects_wrong_param_setter(void)
+{
+    EffectHandle handle = {0};
+    if (effect_handle_init(&handle, EFFECT_TYPE_ECHO) != 0)
+    {
+        fprintf(stderr, "FAIL: handle echo init for wrong setter test\n");
+        failures++;
+        return;
+    }
+
+    OverdriveParam overdrive = {
+        .level = MAX_OVERDRIVE_LEVEL,
+        .gain = Q_ONE,
+        .tone = Q_ONE,
+        .mix = 0,
+    };
+
+    if (effect_handle_set_overdrive_params(&handle, &overdrive) == 0)
+    {
+        fprintf(stderr, "FAIL: handle accepted wrong param setter\n");
+        failures++;
+    }
+}
+
+static void test_handle_process_rejects_null_buffers(void)
+{
+    EffectHandle handle = {0};
+    uint16_t input[1] = {(uint16_t)X_AXIS};
+    uint16_t output[1] = {0};
+
+    if (effect_handle_init(&handle, EFFECT_TYPE_OVERDRIVE) != 0)
+    {
+        fprintf(stderr, "FAIL: handle init for null buffer test\n");
+        failures++;
+        return;
+    }
+
+    if (effect_handle_process(&handle, NULL, output, 1) == 0)
+    {
+        fprintf(stderr, "FAIL: handle accepted null input buffer\n");
+        failures++;
+    }
+
+    if (effect_handle_process(&handle, input, NULL, 1) == 0)
+    {
+        fprintf(stderr, "FAIL: handle accepted null output buffer\n");
+        failures++;
+    }
+}
+
+static void test_handle_echo_parity(void)
+{
+    const uint16_t input_with_delay[] = {
+        (uint16_t)(X_AXIS + 100),
+        (uint16_t)(X_AXIS + 200),
+        (uint16_t)(X_AXIS + 300),
+        (uint16_t)(X_AXIS + 400),
+        (uint16_t)(X_AXIS + 500),
+    };
+
+    EchoParam param = {
+        .delay_samples = 2,
+        .pre_delay = 1,
+        .density = Q_ONE,
+        .attack = Q_ONE,
+        .decay = Q_ONE,
+    };
+
+    uint16_t direct_output[3] = {0};
+    buf_echo(input_with_delay, direct_output, 3, &param);
+
+    EffectHandle handle = {0};
+    if (effect_handle_init(&handle, EFFECT_TYPE_ECHO) != 0)
+    {
+        fprintf(stderr, "FAIL: handle echo init\n");
+        failures++;
+        return;
+    }
+
+    if (effect_handle_set_echo_params(&handle, &param) != 0)
+    {
+        fprintf(stderr, "FAIL: handle echo set params\n");
+        failures++;
+        return;
+    }
+
+    uint16_t handle_output[3] = {0};
+    if (effect_handle_process(&handle, input_with_delay, handle_output, 3) != 0)
+    {
+        fprintf(stderr, "FAIL: handle echo process\n");
+        failures++;
+        return;
+    }
+
+    expect_eq_u16_array(direct_output, handle_output, 3, "handle echo parity");
+}
+
 static void test_handle_reset_restores_defaults(void)
 {
     const uint16_t input[] = {
@@ -1294,6 +1391,9 @@ int main(void)
     test_runtime_compression_setter_normalizes_params();
     test_handle_rejects_use_before_init();
     test_handle_overdrive_parity();
+    test_handle_rejects_wrong_param_setter();
+    test_handle_process_rejects_null_buffers();
+    test_handle_echo_parity();
     test_handle_reset_restores_defaults();
 
     if (failures != 0)
