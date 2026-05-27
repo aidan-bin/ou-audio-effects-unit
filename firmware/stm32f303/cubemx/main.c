@@ -1126,7 +1126,11 @@ void startEffectsTask(void const * argument)
 						concatenating echoDelaySamples to inputBuf in a new buffer */
 				if (effect == ECHO)
 				{
-					size_t numDelaySamples = latchedEffectsParams.echo.delay_samples;	// Number of delayed samples needed (i.e., if index 0 represent n = 0 for signal x[n], x[-numDelaySamples] is the oldest sample)
+          size_t numDelaySamples = effectSlots.echo.instance.params.echo.delay_samples;	// Number of delayed samples needed (i.e., if index 0 represent n = 0 for signal x[n], x[-numDelaySamples] is the oldest sample)
+          if (numDelaySamples > NUM_DELAY_SAMPLES)
+          {
+            numDelaySamples = NUM_DELAY_SAMPLES;
+          }
 					
 					echoInputBuf = pvPortMalloc((numDelaySamples + SAMPLE_BUF_LEN) * sizeof(uint16_t));
           if (echoInputBuf == NULL)
@@ -1135,12 +1139,15 @@ void startEffectsTask(void const * argument)
             break;
           }
 					
-					HAL_DMA_Start_IT(&hdma_memtomem_dma1_channel1, (uint32_t) &echoDelaySamplesBuf[NUM_DELAY_SAMPLES - numDelaySamples], (uint32_t) echoInputBuf, numDelaySamples);
-					
-					if (xSemaphoreTake(delaySamplesDmaSemaphoreHandle, ticksToWait) != pdTRUE)
+          if (numDelaySamples > 0)
 					{
-            processFailed = true;
-            break;
+            HAL_DMA_Start_IT(&hdma_memtomem_dma1_channel1, (uint32_t) &echoDelaySamplesBuf[NUM_DELAY_SAMPLES - numDelaySamples], (uint32_t) echoInputBuf, numDelaySamples);
+						
+            if (xSemaphoreTake(delaySamplesDmaSemaphoreHandle, ticksToWait) != pdTRUE)
+            {
+              processFailed = true;
+              break;
+            }
 					}
 					
 					HAL_DMA_Start_IT(&hdma_memtomem_dma1_channel1, (uint32_t) inputBuf, (uint32_t) &echoInputBuf[numDelaySamples], SAMPLE_BUF_LEN);
