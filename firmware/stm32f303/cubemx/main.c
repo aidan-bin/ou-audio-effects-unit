@@ -1260,7 +1260,7 @@ effects_iteration_cleanup:
 		
 		/* If outputBuf is not the DAC buffer (i.e., the DAC buffer does not
 				have the final output), copy outputBuf to dacBuf */
-		if (outputBuf != dacBuf)
+    if (outputBuf != currDacBuf)
 		{
 			memcpy(currDacBuf, outputBuf, (DAC_BUF_LEN / 2) * sizeof(uint16_t));
 		}
@@ -1673,6 +1673,8 @@ void startRomHandlerTask(void const * argument)
 	do
 	{
 		const uint16_t timeOutMs = 100;
+    const size_t addressPayloadSizeBytes = sizeof(uint16_t);
+    size_t payloadSizeBytes = sizeof(EffectsState) + sizeof(EffectsParams);
 		
 		I2CMessage message;
 		
@@ -1681,9 +1683,13 @@ void startRomHandlerTask(void const * argument)
 		message.rxTxBar = false;
 		message.address = (ROM_I2C_ADDR << 1) & ~1U;	// Address with write enabled
 		
-		message.pPayload = pvPortMalloc(payloadSizeBytes);	// Freed by I2C handler task
-		message.pPayload[0] = (writeAddress & 0xFF00) >> 8;	// Upper byte of address
-		message.pPayload[1] = (writeAddress & 0x00FF) >> 8;	// Lower byte of address
+    message.pPayload = pvPortMalloc(addressPayloadSizeBytes);	// Freed by I2C handler task
+    if (message.pPayload == NULL)
+    {
+      continue;
+    }
+    message.pPayload[0] = (readAddress & 0xFF00) >> 8;	// Upper byte of address
+    message.pPayload[1] = readAddress & 0x00FF;	// Lower byte of address
 		
 		message.items = 2;
 		message.pFailed = &failed;
@@ -1714,12 +1720,15 @@ void startRomHandlerTask(void const * argument)
 		HAL_GPIO_WritePin(GPIOC, nNVM_WE_Pin, GPIO_PIN_SET);
 		
 		/* Read data */
-		size_t payloadSizeBytes = sizeof(EffectsState) + sizeof(EffectsParams);
 		
 		message.sourceTask = romHandlerTaskHandle;
 		message.rxTxBar = true;
 		message.address = (ROM_I2C_ADDR << 1) | 1U;	// Address with read enabled
 		message.pPayload = pvPortMalloc(payloadSizeBytes);
+    if (message.pPayload == NULL)
+    {
+      continue;
+    }
 		message.items = payloadSizeBytes;
 		message.pFailed = &failed;
 		
@@ -1742,9 +1751,10 @@ void startRomHandlerTask(void const * argument)
 		}
 		
 		taskENTER_CRITICAL();	// Effects configs are accessed by other tasks and this is not atomic
-		memcpy(&effectsState, message.pPayload, sizeof(EffectsState);
+    memcpy((void *) &effectsState, message.pPayload, sizeof(EffectsState));
 		memcpy(&effectsParams, &message.pPayload[sizeof(EffectsState)], sizeof(EffectsParams));
 		taskEXIT_CRITICAL();
+    vPortFree(message.pPayload);
 	} while (failed);
 	
   /* Infinite loop */
@@ -1768,8 +1778,12 @@ void startRomHandlerTask(void const * argument)
 		message.address = (ROM_I2C_ADDR << 1) & ~1U;	// Address with write enabled
 		
 		message.pPayload = pvPortMalloc(payloadSizeBytes);	// Freed by I2C handler task
+    if (message.pPayload == NULL)
+    {
+      continue;
+    }
 		message.pPayload[0] = (writeAddress & 0xFF00) >> 8;	// Upper byte of address
-		message.pPayload[1] = (writeAddress & 0x00FF) >> 8;	// Lower byte of address
+    message.pPayload[1] = writeAddress & 0x00FF;	// Lower byte of address
 		memcpy(&message.pPayload[2], &latchedEffectsState, sizeof(EffectsState));
 		memcpy(&message.pPayload[2 + sizeof(EffectsState)], &latchedEffectsParams, sizeof(EffectsParams));
 		
