@@ -25,7 +25,7 @@
 /* USER CODE BEGIN Includes */
 #include <stdbool.h>
 #include <string.h>
-#include "effects.h"
+#include "effect_runtime.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -59,6 +59,13 @@ typedef struct
 	EchoParam echoMin, echoMax;
 	CompressionParam compressionMin, compressionMax;
 } EffectsParams;
+
+typedef struct
+{
+  EffectHandle overdrive;
+  EffectHandle echo;
+  EffectHandle compression;
+} EffectSlots;
 
 typedef struct
 {
@@ -211,11 +218,71 @@ void startRomHandlerTask(void const * argument);
 void startDisplayHandlerTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
+static void effect_slots_init(EffectSlots *slots);
+static int effect_slots_sync_params(EffectSlots *slots, const EffectsParams *params);
+static int effect_slots_process(const EffectSlots *slots, Effect effect, const uint16_t *inBuf, uint16_t *outBuf, size_t numSamples);
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+static void effect_slots_init(EffectSlots *slots)
+{
+  if (slots == NULL)
+  {
+    return;
+  }
+
+  effect_handle_init(&slots->overdrive, EFFECT_TYPE_OVERDRIVE);
+  effect_handle_init(&slots->echo, EFFECT_TYPE_ECHO);
+  effect_handle_init(&slots->compression, EFFECT_TYPE_COMPRESSION);
+}
+
+static int effect_slots_sync_params(EffectSlots *slots, const EffectsParams *params)
+{
+  if (slots == NULL || params == NULL)
+  {
+    return -1;
+  }
+
+  if (effect_handle_set_overdrive_params(&slots->overdrive, &params->overdrive) != 0)
+  {
+    return -1;
+  }
+
+  if (effect_handle_set_echo_params(&slots->echo, &params->echo) != 0)
+  {
+    return -1;
+  }
+
+  if (effect_handle_set_compression_params(&slots->compression, &params->compression) != 0)
+  {
+    return -1;
+  }
+
+  return 0;
+}
+
+static int effect_slots_process(const EffectSlots *slots, Effect effect, const uint16_t *inBuf, uint16_t *outBuf, size_t numSamples)
+{
+  if (slots == NULL)
+  {
+    return -1;
+  }
+
+  switch (effect)
+  {
+    case OVERDRIVE:
+      return effect_handle_process(&slots->overdrive, inBuf, outBuf, numSamples);
+    case ECHO:
+      return effect_handle_process(&slots->echo, inBuf, outBuf, numSamples);
+    case COMPRESSION:
+      return effect_handle_process(&slots->compression, inBuf, outBuf, numSamples);
+    default:
+      return -1;
+  }
+}
 
 /* USER CODE END 0 */
 
@@ -952,6 +1019,8 @@ void HAL_DMA_CpltCallback(DMA_HandleTypeDef* hdma)
 void startEffectsTask(void const * argument)
 {
   /* USER CODE BEGIN 5 */
+  EffectSlots effectSlots;
+  effect_slots_init(&effectSlots);
 	
 	/* Start ADC and DAC. Note: ADC expects buffers to be ready to be filled,
 			DAC expects buffers to be ready to be read from. Software must ensure this. */
@@ -965,14 +1034,15 @@ void startEffectsTask(void const * argument)
 		uint16_t *currAdcBuf;
 		uint16_t *currDacBuf;
 		
-		uint16_t *echoInputBuf;
+    uint16_t *echoInputBuf = NULL;
 		uint16_t *inputBuf;
 		uint16_t *outputBuf;
 		uint16_t *temp;
+    bool processFailed = false;
 		
 		/* To preserve effects for delayed samples (which are added for echo), they must be processed as well.
 				echoDelaySamplesBuf is used for processing the delayed samples. */
-		uint16_t *echoDelaySamplesBuf;
+    uint16_t *echoDelaySamplesBuf = NULL;
 		
 		/* Effects state and params must be latched before processing so they remain consistent for the whole buffer */
 		EffectsState latchedEffectsState;
@@ -1019,11 +1089,16 @@ void startEffectsTask(void const * argument)
 		
 		/* Allocate echoDelaySamplesBuf and copy over delaySamplesBuf */
 		echoDelaySamplesBuf = (uint16_t *) pvPortMalloc(NUM_DELAY_SAMPLES * sizeof(uint16_t));
+    if (echoDelaySamplesBuf == NULL)
+    {
+      continue;
+    }
 		
 		HAL_DMA_Start_IT(&hdma_memtomem_dma1_channel1, (uint32_t) delaySamplesBuf, (uint32_t) echoDelaySamplesBuf, NUM_DELAY_SAMPLES);
 		
 		if (xSemaphoreTake(delaySamplesDmaSemaphoreHandle, ticksToWait) != pdTRUE)
 		{
+      vPortFree(echoDelaySamplesBuf);
 			continue;
 		}
 		
@@ -1034,6 +1109,12 @@ void startEffectsTask(void const * argument)
 		
 		latchedEffectsState = effectsState;
 		latchedEffectsParams = effectsParams;
+
+    if (effect_slots_sync_params(&effectSlots, &latchedEffectsParams) != 0)
+    {
+      vPortFree(echoDelaySamplesBuf);
+      continue;
+    }
 		
 		for (int i = 0; i < 3; i++)
 		{
@@ -1048,30 +1129,43 @@ void startEffectsTask(void const * argument)
 					size_t numDelaySamples = latchedEffectsParams.echo.delay_samples;	// Number of delayed samples needed (i.e., if index 0 represent n = 0 for signal x[n], x[-numDelaySamples] is the oldest sample)
 					
 					echoInputBuf = pvPortMalloc((numDelaySamples + SAMPLE_BUF_LEN) * sizeof(uint16_t));
+          if (echoInputBuf == NULL)
+          {
+            processFailed = true;
+            break;
+          }
 					
 					HAL_DMA_Start_IT(&hdma_memtomem_dma1_channel1, (uint32_t) &echoDelaySamplesBuf[NUM_DELAY_SAMPLES - numDelaySamples], (uint32_t) echoInputBuf, numDelaySamples);
 					
 					if (xSemaphoreTake(delaySamplesDmaSemaphoreHandle, ticksToWait) != pdTRUE)
 					{
-						continue;
+            processFailed = true;
+            break;
 					}
 					
 					HAL_DMA_Start_IT(&hdma_memtomem_dma1_channel1, (uint32_t) inputBuf, (uint32_t) &echoInputBuf[numDelaySamples], SAMPLE_BUF_LEN);
 					
 					if (xSemaphoreTake(delaySamplesDmaSemaphoreHandle, ticksToWait) != pdTRUE)
 					{
-						continue;
+            processFailed = true;
+            break;
 					}
 				}
 				
 				/* Apply appropriate effect */
-				switch (effect)
-				{
-					case OVERDRIVE: 	buf_overdrive(inputBuf, outputBuf, SAMPLE_BUF_LEN, &latchedEffectsParams.overdrive); break;
-					case ECHO:				buf_echo(echoInputBuf, outputBuf, SAMPLE_BUF_LEN, &latchedEffectsParams.echo); break;
-					case COMPRESSION:	buf_compression(inputBuf, outputBuf, SAMPLE_BUF_LEN, &latchedEffectsParams.compression); break;
-					default: break;
-				}
+        if (effect == ECHO)
+        {
+          if (effect_slots_process(&effectSlots, effect, echoInputBuf, outputBuf, SAMPLE_BUF_LEN) != 0)
+          {
+          processFailed = true;
+            break;
+          }
+        }
+        else if (effect_slots_process(&effectSlots, effect, inputBuf, outputBuf, SAMPLE_BUF_LEN) != 0)
+        {
+        processFailed = true;
+          break;
+        }
 				
 				/* If echo is enabled but not the first effect, also apply effect to delayed samples (echoDelaySamplesBuf).
 						This only needs to be done so echoes of delayed samples are consistent with non-delayed samples.*/
@@ -1080,16 +1174,28 @@ void startEffectsTask(void const * argument)
 					/* Note: ECHO is ommitted since an effect can only appear once */
 					switch (effect)
 					{
-						case OVERDRIVE: 	buf_overdrive(echoDelaySamplesBuf, echoDelaySamplesBuf, NUM_DELAY_SAMPLES, &latchedEffectsParams.overdrive); break;
-						case COMPRESSION:	buf_compression(echoDelaySamplesBuf, echoDelaySamplesBuf, NUM_DELAY_SAMPLES, &latchedEffectsParams.compression); break;
+            case OVERDRIVE:
+            case COMPRESSION:
+              if (effect_slots_process(&effectSlots, effect, echoDelaySamplesBuf, echoDelaySamplesBuf, NUM_DELAY_SAMPLES) != 0)
+              {
+            processFailed = true;
+                break;
+              }
+              break;
 						default: break;
 					}
-					
-					if (effect == ECHO)
-					{
-						vPortFree(echoDelaySamplesBuf);
-					}
 				}
+
+        if (effect == ECHO && echoInputBuf != NULL)
+        {
+          vPortFree(echoInputBuf);
+          echoInputBuf = NULL;
+        }
+
+        if (processFailed)
+        {
+          break;
+        }
 				
 				/* Swap inputBuf and outputBuf. Since effects are applied sequentially,
 						outputBuf becomes the input for the next effect. */
@@ -1098,6 +1204,21 @@ void startEffectsTask(void const * argument)
 				outputBuf = temp;
 			}
 		}
+
+    if (echoInputBuf != NULL)
+    {
+      vPortFree(echoInputBuf);
+    }
+
+    if (echoDelaySamplesBuf != NULL)
+    {
+      vPortFree(echoDelaySamplesBuf);
+    }
+
+    if (processFailed)
+    {
+      continue;
+    }
 		
 		/* If outputBuf is not the DAC buffer (i.e., the DAC buffer does not
 				have the final output), copy outputBuf to dacBuf */
