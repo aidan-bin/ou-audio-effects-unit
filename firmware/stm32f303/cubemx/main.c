@@ -1069,10 +1069,14 @@ void startEffectsTask(void const * argument)
 				so must give up and wait for next ADC buffer. */
 		const uint16_t samplingPeriodUs = 25;	// Sampling period in microseconds
 		TickType_t ticksToWait = pdMS_TO_TICKS(samplingPeriodUs * SAMPLE_BUF_LEN / 1000) - pdMS_TO_TICKS(2);	// Subtract some time to account for processing
-		TimeOut_t timeOut;
+    uint32_t notificationValue;
 		
 		/* Wait for ADC buffer (and make sure it is an ADC buffer) */
-		currAdcBuf = (uint16_t *) ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    if (xTaskNotifyWait(0, 0xFFFFFFFFUL, &notificationValue, portMAX_DELAY) != pdTRUE)
+    {
+      continue;
+    }
+    currAdcBuf = (uint16_t *) notificationValue;
 		
 		if (currAdcBuf != adcBufA && currAdcBuf != adcBufB)
 		{
@@ -1087,16 +1091,14 @@ void startEffectsTask(void const * argument)
 			continue;
 		}
 		
-		HAL_DMA_Start(&hdma_memtomem_dma1_channel1, (uint32_t) currAdcBuf, (uint32_t) &delaySamplesBuf[NUM_DELAY_SAMPLES - SAMPLE_BUF_LEN], NUM_DELAY_SAMPLES);
+    HAL_DMA_Start(&hdma_memtomem_dma1_channel1, (uint32_t) currAdcBuf, (uint32_t) &delaySamplesBuf[NUM_DELAY_SAMPLES - SAMPLE_BUF_LEN], SAMPLE_BUF_LEN);
 		
 		/* Wait for DAC buffer (with timeout, and make sure it is a DAC buffer) */
-		vTaskSetTimeOutState(&timeOut);
-		currDacBuf = (uint16_t *) ulTaskNotifyTake(pdTRUE, ticksToWait);
-		
-		if (xTaskCheckForTimeOut(&timeOut, &ticksToWait) == pdTRUE)
+    if (xTaskNotifyWait(0, 0xFFFFFFFFUL, &notificationValue, ticksToWait) != pdTRUE)
 		{
 			continue;
 		}
+    currDacBuf = (uint16_t *) notificationValue;
 		
 		if (currDacBuf != dacBufA && currDacBuf != dacBufB)
 		{
@@ -1282,7 +1284,12 @@ void startBtnHandlerTask(void const * argument)
   for(;;)
   {
 		/* Wait for interrupt from button */
-		uint16_t pin = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    uint32_t notificationValue;
+    if (xTaskNotifyWait(0, 0xFFFFFFFFUL, &notificationValue, portMAX_DELAY) != pdTRUE)
+    {
+      continue;
+    }
+    uint16_t pin = (uint16_t) notificationValue;
 		
 		switch (pin)
 		{
@@ -1320,8 +1327,8 @@ void startSwHandlerTask(void const * argument)
   for(;;)
   {
     bool switchAEnabled = HAL_GPIO_ReadPin(SWITCH_A_GPIO_Port, SWITCH_A_Pin) == GPIO_PIN_SET;
-    bool switchBEnabled = HAL_GPIO_ReadPin(SWITCH_A_GPIO_Port, SWITCH_B_Pin) == GPIO_PIN_SET;
-    bool switchCEnabled = HAL_GPIO_ReadPin(SWITCH_A_GPIO_Port, SWITCH_C_Pin) == GPIO_PIN_SET;
+    bool switchBEnabled = HAL_GPIO_ReadPin(SWITCH_B_GPIO_Port, SWITCH_B_Pin) == GPIO_PIN_SET;
+    bool switchCEnabled = HAL_GPIO_ReadPin(SWITCH_C_GPIO_Port, SWITCH_C_Pin) == GPIO_PIN_SET;
     Effect effect_a;
     Effect effect_b;
     Effect effect_c;
@@ -1378,7 +1385,7 @@ void startPotHandlerTask(void const * argument)
 		/* Sample each pot in turn */
 		for (int pot = 0; pot < 4; pot++)
 		{
-			TimeOut_t timeOut;
+      ticksToWait = samplingFrequency + pdMS_TO_TICKS(1);
 			uint32_t adcValue;
 			
 			/* Set ADC to appropriate channel */
@@ -1395,11 +1402,7 @@ void startPotHandlerTask(void const * argument)
 			HAL_ADC_ConfigChannel(&hadc1, &sConfig);
 			HAL_ADC_Start_IT(&hadc1);
 
-			vTaskSetTimeOutState(&timeOut);
-			
-			adcValue = ulTaskNotifyTake(pdTRUE, ticksToWait);
-
-			if (xTaskCheckForTimeOut(&timeOut, &ticksToWait) == pdTRUE)
+      if (xTaskNotifyWait(0, 0xFFFFFFFFUL, &adcValue, ticksToWait) != pdTRUE)
 			{
 				continue;
 			}
@@ -1667,11 +1670,12 @@ void startRomHandlerTask(void const * argument)
 	uint16_t readAddress = 0;
 	uint16_t writeAddress = 0;
 	
-	/* Copy effectsState and effectsParams FROM ROM */
-	bool failed;
+  /* Copy effectsState and effectsParams FROM ROM */
+  bool failed = true;
 	
 	do
 	{
+    failed = true;
 		const uint16_t timeOutMs = 100;
     const size_t addressPayloadSizeBytes = sizeof(uint16_t);
     size_t payloadSizeBytes = sizeof(EffectsState) + sizeof(EffectsParams);
