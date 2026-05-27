@@ -81,6 +81,46 @@ class Ui(QtWidgets.QMainWindow):
         self.compression_runtime.set_compression(self.compression_param)
         return np.asarray(self.compression_runtime.process(samples.tolist()))
 
+    def _append_signal(self, signal, component):
+        if len(component) < len(signal):
+            component.resize(signal.shape)
+        else:
+            signal.resize(component.shape)
+        signal += component
+
+    def _add_sin(self, num_samples):
+        print("Adding sin...")
+        freq = 2 * np.pi / self.ui.frequencySpinBox.value()
+        amp = self.ui.sinAmplitudeSpinBox.value()
+        phase = self.ui.phaseSpinBox.value() * 2 * np.pi / self.ui.frequencySpinBox.value()
+        component = np.asarray([round(amp * np.sin(freq * i + phase), 4) for i in range(num_samples)])
+        self._append_signal(self.input_signal, component)
+
+    def _add_constant(self, num_samples):
+        value = self.ui.constantValueSpinBox.value()
+        print(f"Adding constant (value = {value})...")
+        component = value * np.ones(num_samples)
+        self._append_signal(self.input_signal, component)
+
+    def _add_impulse(self, num_samples):
+        print("Adding impulse...")
+        value = self.ui.impulseValueSpinBox.value()
+        delay = self.ui.impulseDelaySpinBox.value()
+        if delay > num_samples:
+            print("Invalid impulse delay!")
+            return
+
+        component = np.zeros(num_samples)
+        component[delay] = value
+        self._append_signal(self.input_signal, component)
+
+    def _add_noise(self, num_samples):
+        print("Adding noise...")
+        amp = self.ui.noiseAmplitudeSpinBox.value()
+        rng = np.random.default_rng()
+        component = amp * rng.uniform(-amp, amp, num_samples)
+        self._append_signal(self.input_signal, component)
+
     def _play_signal(self, signal):
         gain = self.ui.gainDoubleSpinBox.value()
         wav_file = np.array(gain * signal, dtype=np.int16)
@@ -119,52 +159,16 @@ class Ui(QtWidgets.QMainWindow):
         print(f"Adding signal(s) ({num_samples} samples)...")
 
         if self.ui.sinEnabledCheckBox.isChecked():
-            print("Adding sin...")
-            freq = 2 * np.pi / self.ui.frequencySpinBox.value()
-            amp = self.ui.sinAmplitudeSpinBox.value()
-            phase = self.ui.phaseSpinBox.value() * 2 * np.pi / self.ui.frequencySpinBox.value()
-            sin = np.asarray([round(amp * np.sin(freq * i + phase), 4) for i in range(num_samples)])
-            if len(sin) < len(self.input_signal):
-                sin.resize(self.input_signal.shape)
-            else:
-                self.input_signal.resize(sin.shape)
-            self.input_signal += sin
+            self._add_sin(num_samples)
 
         if self.ui.constantEnabledCheckBox.isChecked():
-            value = self.ui.constantValueSpinBox.value()
-            constant = value * np.ones(num_samples)
-            print(f"Adding constant (value = {value})...")
-            if len(constant) < len(self.input_signal):
-                constant.resize(self.input_signal.shape)
-            else:
-                self.input_signal.resize(constant.shape)
-            self.input_signal += constant
+            self._add_constant(num_samples)
 
         if self.ui.impulseEnabledCheckBox.isChecked():
-            print("Adding impulse...")
-            value = self.ui.impulseValueSpinBox.value()
-            delay = self.ui.impulseDelaySpinBox.value()
-            if delay > num_samples:
-                print("Invalid impulse delay!")
-            else:
-                impulse = np.zeros(num_samples)
-                impulse[delay] = value
-                if len(impulse) < len(self.input_signal):
-                    impulse.resize(self.input_signal.shape)
-                else:
-                    self.input_signal.resize(impulse.shape)
-                self.input_signal += impulse
+            self._add_impulse(num_samples)
 
         if self.ui.noiseEnabledCheckBox.isChecked():
-            print("Adding noise...")
-            amp = self.ui.noiseAmplitudeSpinBox.value()
-            rng = np.random.default_rng()
-            noise = amp * rng.uniform(-amp, amp, num_samples)
-            if len(noise) < len(self.input_signal):
-                noise.resize(self.input_signal.shape)
-            else:
-                self.input_signal.resize(noise.shape)
-            self.input_signal += noise
+            self._add_noise(num_samples)
 
         self.output_signal = np.zeros(self.input_signal.shape)
 
