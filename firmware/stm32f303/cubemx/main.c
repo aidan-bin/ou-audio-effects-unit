@@ -221,6 +221,7 @@ void startDisplayHandlerTask(void const * argument);
 static void effect_slots_init(EffectSlots *slots);
 static int effect_slots_sync_params(EffectSlots *slots, const EffectsParams *params);
 static int effect_slots_process(const EffectSlots *slots, Effect effect, const uint16_t *inBuf, uint16_t *outBuf, size_t numSamples);
+static int effect_slots_get_echo_delay_samples(const EffectSlots *slots, size_t *delaySamples);
 
 /* USER CODE END PFP */
 
@@ -978,6 +979,16 @@ void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc)
 	}
 }
 
+static int effect_slots_get_echo_delay_samples(const EffectSlots *slots, size_t *delaySamples)
+{
+  if (slots == NULL || delaySamples == NULL)
+  {
+    return -1;
+  }
+
+  return effect_handle_get_echo_delay_samples(&slots->echo, delaySamples);
+}
+
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 {
 	if (hadc == &hadc1)
@@ -1126,7 +1137,12 @@ void startEffectsTask(void const * argument)
 						concatenating echoDelaySamples to inputBuf in a new buffer */
 				if (effect == ECHO)
 				{
-          size_t numDelaySamples = effectSlots.echo.instance.params.echo.delay_samples;	// Number of delayed samples needed (i.e., if index 0 represent n = 0 for signal x[n], x[-numDelaySamples] is the oldest sample)
+          size_t numDelaySamples = 0;	// Number of delayed samples needed (i.e., if index 0 represent n = 0 for signal x[n], x[-numDelaySamples] is the oldest sample)
+          if (effect_slots_get_echo_delay_samples(&effectSlots, &numDelaySamples) != 0)
+          {
+            processFailed = true;
+            break;
+          }
           if (numDelaySamples > NUM_DELAY_SAMPLES)
           {
             numDelaySamples = NUM_DELAY_SAMPLES;

@@ -1295,6 +1295,64 @@ static void test_handle_echo_parity(void)
     expect_eq_u16_array(direct_output, handle_output, 3, "handle echo parity");
 }
 
+static void test_handle_echo_delay_accessor(void)
+{
+    EffectHandle handle = {0};
+    if (effect_handle_init(&handle, EFFECT_TYPE_ECHO) != 0)
+    {
+        fprintf(stderr, "FAIL: handle echo init for delay accessor\n");
+        failures++;
+        return;
+    }
+
+    EchoParam param = {
+        .delay_samples = 2,
+        .pre_delay = 1,
+        .density = Q_ONE,
+        .attack = Q_ONE,
+        .decay = Q_ONE,
+    };
+
+    if (effect_handle_set_echo_params(&handle, &param) != 0)
+    {
+        fprintf(stderr, "FAIL: handle echo set params for delay accessor\n");
+        failures++;
+        return;
+    }
+
+    size_t delay_samples = 0;
+    if (effect_handle_get_echo_delay_samples(&handle, &delay_samples) != 0)
+    {
+        fprintf(stderr, "FAIL: handle echo delay accessor returned error\n");
+        failures++;
+        return;
+    }
+
+    if (delay_samples != 2)
+    {
+        fprintf(stderr, "FAIL: handle echo delay accessor expected=2 actual=%zu\n", delay_samples);
+        failures++;
+    }
+}
+
+static void test_handle_echo_delay_accessor_rejects_wrong_type(void)
+{
+    EffectHandle handle = {0};
+    if (effect_handle_init(&handle, EFFECT_TYPE_OVERDRIVE) != 0)
+    {
+        fprintf(stderr, "FAIL: handle overdrive init for delay accessor type test\n");
+        failures++;
+        return;
+    }
+
+    size_t delay_samples = 0;
+    if (effect_handle_get_echo_delay_samples(&handle, &delay_samples) == 0)
+    {
+        fprintf(stderr, "FAIL: handle echo delay accessor accepted non-echo handle\n");
+        failures++;
+    }
+}
+
 static void test_handle_reset_restores_defaults(void)
 {
     const uint16_t input[] = {
@@ -1394,6 +1452,8 @@ int main(void)
     test_handle_rejects_wrong_param_setter();
     test_handle_process_rejects_null_buffers();
     test_handle_echo_parity();
+    test_handle_echo_delay_accessor();
+    test_handle_echo_delay_accessor_rejects_wrong_type();
     test_handle_reset_restores_defaults();
 
     if (failures != 0)

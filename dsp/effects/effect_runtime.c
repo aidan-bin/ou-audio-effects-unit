@@ -161,6 +161,16 @@ int effect_handle_set_compression_params(EffectHandle* handle, const Compression
     return effect_instance_set_compression_params(&handle->instance, param);
 }
 
+int effect_handle_get_echo_delay_samples(const EffectHandle* handle, size_t* delay_samples) {
+    if (handle == NULL || delay_samples == NULL || handle->initialized == 0 ||
+        handle->instance.type != EFFECT_TYPE_ECHO) {
+        return -1;
+    }
+
+    *delay_samples = handle->instance.params.echo.delay_samples;
+    return 0;
+}
+
 int effect_handle_process(const EffectHandle* handle, const uint16_t* in_buf, uint16_t* out_buf,
     size_t num_samples) {
     if (handle == NULL || handle->initialized == 0) {

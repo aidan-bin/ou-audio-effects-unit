@@ -43,6 +43,7 @@ int effect_handle_reset(EffectHandle* handle);
 int effect_handle_set_overdrive_params(EffectHandle* handle, const OverdriveParam* param);
 int effect_handle_set_echo_params(EffectHandle* handle, const EchoParam* param);
 int effect_handle_set_compression_params(EffectHandle* handle, const CompressionParam* param);
+int effect_handle_get_echo_delay_samples(const EffectHandle* handle, size_t* delay_samples);
 int effect_handle_process(const EffectHandle* handle, const uint16_t* in_buf, uint16_t* out_buf,
     size_t num_samples);
 
