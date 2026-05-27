@@ -25,7 +25,7 @@ def _load_effects_library():
 
 libeffects = _load_effects_library()
 
-x_axis = int(65535 / 2)
+X_AXIS = int(65535 / 2)
 fixed_point_q = 8
 
 EFFECT_TYPE_OVERDRIVE = 0
@@ -165,21 +165,29 @@ class EffectRuntime:
 
         result = libeffects.effect_handle_process(
             ctypes.byref(self.handle),
-            ctypes.cast(in_samples_array, ctypes.POINTER(ctypes.c_uint16)),
-            ctypes.cast(out_samples_array, ctypes.POINTER(ctypes.c_uint16)),
+            in_samples_array,
+            out_samples_array,
             out_samples_count,
         )
         if result != 0:
             raise RuntimeError("Failed to process effect runtime")
 
-        return [(out_samples_array[i] - x_axis) for i in range(out_samples_count)]
+        return self._decode_samples(out_samples_array, out_samples_count)
+
+    @staticmethod
+    def _encode_samples(in_samples_list):
+        return [(round(sample) + X_AXIS) for sample in in_samples_list]
+
+    @staticmethod
+    def _decode_samples(out_samples_array, out_samples_count):
+        return [(out_samples_array[i] - X_AXIS) for i in range(out_samples_count)]
 
     def process(self, in_samples_list):
-        samples = [(round(sample) + x_axis) for sample in in_samples_list]
+        samples = self._encode_samples(in_samples_list)
         return self._process(samples, len(samples))
 
     def process_echo(self, in_samples_list, delay_samples):
-        samples = [(round(sample) + x_axis) for sample in in_samples_list]
+        samples = self._encode_samples(in_samples_list)
         num_samples = len(samples) - int(delay_samples)
 
         if num_samples < 0:
