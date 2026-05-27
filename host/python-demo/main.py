@@ -1,4 +1,3 @@
-import ctypes
 from PyQt5 import QtWidgets, uic
 import numpy as np
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -64,10 +63,17 @@ class Ui(QtWidgets.QMainWindow):
         self.compression_param.threshold = self.ui.compressionThresholdSpinBox.value()
         self.compression_param.ratio = self._scale_q(self.ui.compressionRatioSpinBox.value())
 
-    def _apply_runtime(self, label, runtime, setter, samples, processor):
+    def _apply_standard_effect(self, label, runtime, setter, samples):
         print(f"Adding {label}...")
         setter()
-        return np.asarray(processor(runtime, samples))
+        return np.asarray(runtime.process(samples.tolist()))
+
+    def _apply_echo_effect(self, samples):
+        print("Adding echo...")
+        delay_samples = int(self.echo_param.delay_samples)
+        padded_signal = np.pad(samples, (delay_samples, 0))
+        self.echo_runtime.set_echo(self.echo_param)
+        return np.asarray(self.echo_runtime.process_echo(padded_signal.tolist(), delay_samples))
 
     def _append_signal(self, signal, component):
         if len(component) < len(signal):
@@ -171,33 +177,22 @@ class Ui(QtWidgets.QMainWindow):
         temp = self.input_signal.copy()
 
         if self.ui.overdriveEnabledCheckBox.isChecked():
-            temp = self._apply_runtime(
+            temp = self._apply_standard_effect(
                 "overdrive",
                 self.overdrive_runtime,
                 lambda: self.overdrive_runtime.set_overdrive(self.overdrive_param),
                 temp,
-                lambda runtime, signal: runtime.process(signal.tolist()),
             )
 
         if self.ui.echoEnabledCheckBox.isChecked():
-            temp = self._apply_runtime(
-                "echo",
-                self.echo_runtime,
-                lambda: self.echo_runtime.set_echo(self.echo_param),
-                temp,
-                lambda runtime, signal: runtime.process_echo(
-                    np.pad(signal, (int(self.echo_param.delay_samples), 0)).tolist(),
-                    int(self.echo_param.delay_samples),
-                ),
-            )
+            temp = self._apply_echo_effect(temp)
 
         if self.ui.compressionEnabledCheckBox.isChecked():
-            temp = self._apply_runtime(
+            temp = self._apply_standard_effect(
                 "compression",
                 self.compression_runtime,
                 lambda: self.compression_runtime.set_compression(self.compression_param),
                 temp,
-                lambda runtime, signal: runtime.process(signal.tolist()),
             )
 
         self.output_signal = temp.copy()
@@ -216,7 +211,7 @@ class Ui(QtWidgets.QMainWindow):
     def open_file_handler(self):
         file_name, _filter = QtWidgets.QFileDialog.getOpenFileName(self, "Open audio file", ".", "Audio files (*.wav)")
 
-        if file_name is not None:
+        if file_name:
             self._load_wave_file(file_name)
 
 
