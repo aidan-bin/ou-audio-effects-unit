@@ -1570,20 +1570,49 @@ void startI2cHandlerTask(void const * argument)
 	const uint32_t trials = 5;
 	const uint32_t blockingTimeOutMs = 100;	// Time out for each HAL call (a blocking operation)
 	const uint32_t tryAgainDelayMs = 100;	// How long to wait before trying HAL call again
-	TickType_t ticksToWaitToDrop = pdMS_TO_TICKS(5000);	// Ticks to wait before dropping message
 	TimeOut_t timeOut;
 	
   /* Infinite loop */
   for(;;)
   {
+    TickType_t ticksToWaitToDrop = pdMS_TO_TICKS(5000);	// Reset budget for each message
+    bool messageFailed = true;
 		I2CMessage message; 
 		
-		xQueueReceive(i2cQueueHandle, (uint32_t *) &message, portMAX_DELAY);
+    if (xQueueReceive(i2cQueueHandle, (void *) &message, portMAX_DELAY) != pdPASS)
+    {
+      continue;
+    }
+
+    /* Validate required message fields before using them. */
+    if (message.pFailed == NULL || message.pPayload == NULL || message.items == 0)
+    {
+      if (message.pFailed != NULL)
+      {
+        *(message.pFailed) = true;
+      }
+
+      if (message.rxTxBar == false && message.pPayload != NULL)
+      {
+        vPortFree(message.pPayload);
+      }
+
+      if (message.sourceTask == romHandlerTaskHandle)
+      {
+        xSemaphoreGive(i2cFailedRomSemaphoreHandle);
+      }
+      else if (message.sourceTask == displayHandlerTaskHandle)
+      {
+        xSemaphoreGive(i2cFailedDisplaySemaphoreHandle);
+      }
+
+      continue;
+    }
 		
 		/* Check if device is ready, delay to check again if not, drop message if timed out */
 		vTaskSetTimeOutState(&timeOut);
 		
-		HAL_StatusTypeDef status;
+    HAL_StatusTypeDef status = HAL_ERROR;
 		
 		do
 		{
@@ -1597,32 +1626,25 @@ void startI2cHandlerTask(void const * argument)
 		
 		if (status != HAL_OK)
 		{
-			continue;
+      messageFailed = true;
+      if (message.rxTxBar == false)
+      {
+        vPortFree(message.pPayload);
+      }
 		}
-		
-		/* Transmit or receive message, dropping message if timed out */
-		if (message.rxTxBar)
+    /* Transmit or receive message, dropping message if timed out */
+    else if (message.rxTxBar)
 		{
 			/* Receive */
 			status = HAL_I2C_Master_Receive_IT(&hi2c1, message.address, message.pPayload, message.items);
 		
 			if (xSemaphoreTake(i2cCompletionSemaphoreHandle, ticksToWaitToDrop) != pdTRUE || status != HAL_OK)
 			{
-				*(message.pFailed) = true;
+        messageFailed = true;
 			}
 			else
 			{
-				*(message.pFailed) = false;
-			}
-			
-			/* Notify task that pFailed is valid (i.e., operation completed) */
-			if (message.sourceTask == romHandlerTaskHandle)
-			{
-				xSemaphoreGive(i2cFailedRomSemaphoreHandle);
-			}
-			else if (message.sourceTask == displayHandlerTaskHandle)
-			{
-				xSemaphoreGive(i2cFailedDisplaySemaphoreHandle);
+        messageFailed = false;
 			}
 		}
 		else
@@ -1632,25 +1654,27 @@ void startI2cHandlerTask(void const * argument)
 		
 			if (xSemaphoreTake(i2cCompletionSemaphoreHandle, ticksToWaitToDrop) != pdTRUE || status != HAL_OK)
 			{
-				*(message.pFailed) = true;
+        messageFailed = true;
 			}
 			else
 			{
-				*(message.pFailed) = false;
-			}
-			
-			/* Notify task that pFailed is valid (i.e., operation completed) */
-			if (message.sourceTask == romHandlerTaskHandle)
-			{
-				xSemaphoreGive(i2cFailedRomSemaphoreHandle);
-			}
-			else if (message.sourceTask == displayHandlerTaskHandle)
-			{
-				xSemaphoreGive(i2cFailedDisplaySemaphoreHandle);
+        messageFailed = false;
 			}
 			
 			vPortFree(message.pPayload);
 		}
+
+    *(message.pFailed) = messageFailed;
+
+    /* Notify task that pFailed is valid (i.e., operation completed) */
+    if (message.sourceTask == romHandlerTaskHandle)
+    {
+      xSemaphoreGive(i2cFailedRomSemaphoreHandle);
+    }
+    else if (message.sourceTask == displayHandlerTaskHandle)
+    {
+      xSemaphoreGive(i2cFailedDisplaySemaphoreHandle);
+    }
   }
   /* USER CODE END startI2cHandlerTask */
 }
