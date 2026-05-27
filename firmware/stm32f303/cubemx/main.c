@@ -47,6 +47,11 @@ typedef struct
 	uint8_t activeEffectSelection;	// Which effect is currently selected (i.e., an index of ordered)
 } EffectsState;
 
+static bool effect_is_valid(Effect effect)
+{
+  return effect >= OVERDRIVE && effect <= COMPRESSION;
+}
+
 typedef struct
 {
 	/* Effects configurations */
@@ -1133,6 +1138,11 @@ void startEffectsTask(void const * argument)
     for (int i = 0; i < 3; i++)
 		{
 			Effect effect = latchedEffectsState.ordered[i];
+      if (!effect_is_valid(effect))
+      {
+        processFailed = true;
+        break;
+      }
 			
 			if (latchedEffectsState.isEnabled[effect])
 			{
