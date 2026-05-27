@@ -1118,14 +1118,16 @@ void startEffectsTask(void const * argument)
 		inputBuf = currAdcBuf;
 		outputBuf = currDacBuf;
 		
+		taskENTER_CRITICAL();
 		latchedEffectsState = effectsState;
 		latchedEffectsParams = effectsParams;
+		taskEXIT_CRITICAL();
 
-    if (effect_slots_sync_params(&effectSlots, &latchedEffectsParams) != 0)
-    {
-      vPortFree(echoDelaySamplesBuf);
-      continue;
-    }
+		if (effect_slots_sync_params(&effectSlots, &latchedEffectsParams) != 0)
+		{
+			vPortFree(echoDelaySamplesBuf);
+			continue;
+		}
 		
 		for (int i = 0; i < 3; i++)
 		{
