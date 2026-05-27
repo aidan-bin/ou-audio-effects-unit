@@ -63,9 +63,9 @@ class Ui(QtWidgets.QMainWindow):
         self.compression_param.threshold = self.ui.compressionThresholdSpinBox.value()
         self.compression_param.ratio = self._scale_q(self.ui.compressionRatioSpinBox.value())
 
-    def _apply_standard_effect(self, label, runtime, setter, samples):
+    def _apply_standard_effect(self, label, runtime, setter, params, samples):
         print(f"Adding {label}...")
-        setter()
+        setter(params)
         return np.asarray(runtime.process(samples.tolist()))
 
     def _apply_echo_effect(self, samples):
@@ -179,7 +179,8 @@ class Ui(QtWidgets.QMainWindow):
             temp = self._apply_standard_effect(
                 "overdrive",
                 self.overdrive_runtime,
-                lambda: self.overdrive_runtime.set_overdrive(self.overdrive_param),
+                self.overdrive_runtime.set_overdrive,
+                self.overdrive_param,
                 temp,
             )
 
@@ -190,7 +191,8 @@ class Ui(QtWidgets.QMainWindow):
             temp = self._apply_standard_effect(
                 "compression",
                 self.compression_runtime,
-                lambda: self.compression_runtime.set_compression(self.compression_param),
+                self.compression_runtime.set_compression,
+                self.compression_param,
                 temp,
             )
 
