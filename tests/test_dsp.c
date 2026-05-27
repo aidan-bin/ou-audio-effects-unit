@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "effects.h"
+#include "effect_runtime.h"
 #include "fast_math.h"
 
 #define Q_ONE (1U << FIXED_POINT_Q)
@@ -916,6 +917,231 @@ static void test_echo_attack_monotonic_positive_case(void)
     }
 }
 
+static void test_runtime_overdrive_dispatch_matches_direct(void)
+{
+    const uint16_t input[] = {
+        (uint16_t)(X_AXIS - 900),
+        (uint16_t)(X_AXIS + 900),
+    };
+
+    OverdriveParam param = {
+        .level = MAX_OVERDRIVE_LEVEL,
+        .gain = Q_ONE,
+        .tone = Q_ONE,
+        .mix = Q_ONE,
+    };
+
+    uint16_t direct_output[2] = {0};
+    buf_overdrive(input, direct_output, 2, &param);
+
+    EffectInstance instance;
+    effect_instance_init(&instance, EFFECT_TYPE_OVERDRIVE);
+    if (effect_instance_set_overdrive_params(&instance, &param) != 0)
+    {
+        fprintf(stderr, "FAIL: runtime overdrive set params\n");
+        failures++;
+        return;
+    }
+
+    uint16_t runtime_output[2] = {0};
+    if (effect_instance_process(&instance, input, runtime_output, 2) != 0)
+    {
+        fprintf(stderr, "FAIL: runtime overdrive process\n");
+        failures++;
+        return;
+    }
+
+    expect_eq_u16_array(direct_output, runtime_output, 2, "runtime overdrive dispatch parity");
+}
+
+static void test_runtime_compression_dispatch_matches_direct(void)
+{
+    const uint16_t input[] = {
+        (uint16_t)(X_AXIS - 1000),
+        (uint16_t)(X_AXIS + 1000),
+    };
+
+    CompressionParam param = {
+        .threshold = 300,
+        .ratio = Q_ONE,
+    };
+
+    uint16_t direct_output[2] = {0};
+    buf_compression(input, direct_output, 2, &param);
+
+    EffectInstance instance;
+    effect_instance_init(&instance, EFFECT_TYPE_COMPRESSION);
+    if (effect_instance_set_compression_params(&instance, &param) != 0)
+    {
+        fprintf(stderr, "FAIL: runtime compression set params\n");
+        failures++;
+        return;
+    }
+
+    uint16_t runtime_output[2] = {0};
+    if (effect_instance_process(&instance, input, runtime_output, 2) != 0)
+    {
+        fprintf(stderr, "FAIL: runtime compression process\n");
+        failures++;
+        return;
+    }
+
+    expect_eq_u16_array(direct_output, runtime_output, 2, "runtime compression dispatch parity");
+}
+
+static void test_runtime_rejects_wrong_param_setter(void)
+{
+    EffectInstance instance;
+    effect_instance_init(&instance, EFFECT_TYPE_ECHO);
+
+    OverdriveParam overdrive = {
+        .level = MAX_OVERDRIVE_LEVEL,
+        .gain = Q_ONE,
+        .tone = Q_ONE,
+        .mix = 0,
+    };
+
+    if (effect_instance_set_overdrive_params(&instance, &overdrive) == 0)
+    {
+        fprintf(stderr, "FAIL: runtime accepted wrong param setter\n");
+        failures++;
+    }
+}
+
+static void test_runtime_overdrive_setter_normalizes_params(void)
+{
+    const uint16_t input[] = {
+        (uint16_t)(X_AXIS - 900),
+        (uint16_t)(X_AXIS + 900),
+    };
+
+    OverdriveParam raw_param = {
+        .level = (size_t)MAX_OVERDRIVE_LEVEL + 1,
+        .gain = Q_ONE + 64,
+        .tone = 0,
+        .mix = Q_ONE + 64,
+    };
+
+    OverdriveParam clamped_param = {
+        .level = MAX_OVERDRIVE_LEVEL,
+        .gain = Q_ONE,
+        .tone = MIN_OVERDRIVE_TONE,
+        .mix = Q_ONE,
+    };
+
+    uint16_t direct_output[2] = {0};
+    buf_overdrive(input, direct_output, 2, &clamped_param);
+
+    EffectInstance instance;
+    effect_instance_init(&instance, EFFECT_TYPE_OVERDRIVE);
+    if (effect_instance_set_overdrive_params(&instance, &raw_param) != 0)
+    {
+        fprintf(stderr, "FAIL: runtime overdrive normalize set params\n");
+        failures++;
+        return;
+    }
+
+    uint16_t runtime_output[2] = {0};
+    if (effect_instance_process(&instance, input, runtime_output, 2) != 0)
+    {
+        fprintf(stderr, "FAIL: runtime overdrive normalize process\n");
+        failures++;
+        return;
+    }
+
+    expect_eq_u16_array(direct_output, runtime_output, 2, "runtime overdrive normalize parity");
+}
+
+static void test_runtime_echo_setter_normalizes_params(void)
+{
+    const uint16_t input_with_delay[] = {
+        (uint16_t)(X_AXIS + 10),
+        (uint16_t)(X_AXIS + 20),
+        (uint16_t)(X_AXIS + 30),
+        (uint16_t)(X_AXIS + 40),
+        (uint16_t)(X_AXIS + 50),
+        (uint16_t)(X_AXIS + 60),
+    };
+
+    EchoParam raw_param = {
+        .delay_samples = 2,
+        .pre_delay = 3,
+        .density = Q_ONE + 64,
+        .attack = Q_ONE + 64,
+        .decay = Q_ONE + 64,
+    };
+
+    EchoParam clamped_param = {
+        .delay_samples = 2,
+        .pre_delay = 2,
+        .density = Q_ONE,
+        .attack = Q_ONE,
+        .decay = Q_ONE,
+    };
+
+    uint16_t direct_output[4] = {0};
+    buf_echo(input_with_delay, direct_output, 4, &clamped_param);
+
+    EffectInstance instance;
+    effect_instance_init(&instance, EFFECT_TYPE_ECHO);
+    if (effect_instance_set_echo_params(&instance, &raw_param) != 0)
+    {
+        fprintf(stderr, "FAIL: runtime echo normalize set params\n");
+        failures++;
+        return;
+    }
+
+    uint16_t runtime_output[4] = {0};
+    if (effect_instance_process(&instance, input_with_delay, runtime_output, 4) != 0)
+    {
+        fprintf(stderr, "FAIL: runtime echo normalize process\n");
+        failures++;
+        return;
+    }
+
+    expect_eq_u16_array(direct_output, runtime_output, 4, "runtime echo normalize parity");
+}
+
+static void test_runtime_compression_setter_normalizes_params(void)
+{
+    const uint16_t input[] = {
+        0,
+        UINT16_MAX,
+    };
+
+    CompressionParam raw_param = {
+        .threshold = X_AXIS + 1000,
+        .ratio = Q_ONE + 64,
+    };
+
+    CompressionParam clamped_param = {
+        .threshold = X_AXIS,
+        .ratio = Q_ONE,
+    };
+
+    uint16_t direct_output[2] = {0};
+    buf_compression(input, direct_output, 2, &clamped_param);
+
+    EffectInstance instance;
+    effect_instance_init(&instance, EFFECT_TYPE_COMPRESSION);
+    if (effect_instance_set_compression_params(&instance, &raw_param) != 0)
+    {
+        fprintf(stderr, "FAIL: runtime compression normalize set params\n");
+        failures++;
+        return;
+    }
+
+    uint16_t runtime_output[2] = {0};
+    if (effect_instance_process(&instance, input, runtime_output, 2) != 0)
+    {
+        fprintf(stderr, "FAIL: runtime compression normalize process\n");
+        failures++;
+        return;
+    }
+
+    expect_eq_u16_array(direct_output, runtime_output, 2, "runtime compression normalize parity");
+}
+
 int main(void)
 {
     test_q_tanh_clamps();
@@ -951,6 +1177,12 @@ int main(void)
     test_echo_positive_mix_saturates_at_u16_max();
     test_echo_negative_mix_saturates_at_zero();
     test_echo_attack_monotonic_positive_case();
+    test_runtime_overdrive_dispatch_matches_direct();
+    test_runtime_compression_dispatch_matches_direct();
+    test_runtime_rejects_wrong_param_setter();
+    test_runtime_overdrive_setter_normalizes_params();
+    test_runtime_echo_setter_normalizes_params();
+    test_runtime_compression_setter_normalizes_params();
 
     if (failures != 0)
     {

@@ -1,0 +1,171 @@
+#include "effect_runtime.h"
+
+#include <string.h>
+
+static size_t clamp_range(size_t value, size_t min, size_t max);
+static size_t clamp_qn(size_t value);
+static OverdriveParam normalize_overdrive_params(const OverdriveParam* param);
+static EchoParam normalize_echo_params(const EchoParam* param);
+static CompressionParam normalize_compression_params(const CompressionParam* param);
+
+static OverdriveParam default_overdrive_params(void) {
+    OverdriveParam param = {
+        .level = MAX_OVERDRIVE_LEVEL,
+        .gain = MAX_OVERDRIVE_GAIN,
+        .tone = MIN_OVERDRIVE_TONE,
+        .mix = 0,
+    };
+
+    return param;
+}
+
+static EchoParam default_echo_params(void) {
+    EchoParam param = {
+        .delay_samples = 1,
+        .pre_delay = MIN_ECHO_PRE_DELAY,
+        .density = MAX_ECHO_DENSITY,
+        .attack = MAX_ECHO_ATTACK,
+        .decay = MAX_ECHO_DECAY,
+    };
+
+    return param;
+}
+
+static CompressionParam default_compression_params(void) {
+    CompressionParam param = {
+        .threshold = X_AXIS,
+        .ratio = 0,
+    };
+
+    return param;
+}
+
+void effect_instance_init(EffectInstance* instance, EffectType type) {
+    if (instance == NULL) {
+        return;
+    }
+
+    instance->type = type;
+    effect_instance_reset(instance);
+}
+
+void effect_instance_reset(EffectInstance* instance) {
+    if (instance == NULL) {
+        return;
+    }
+
+    switch (instance->type) {
+    case EFFECT_TYPE_OVERDRIVE:
+        instance->params.overdrive = default_overdrive_params();
+        break;
+    case EFFECT_TYPE_ECHO:
+        instance->params.echo = default_echo_params();
+        break;
+    case EFFECT_TYPE_COMPRESSION:
+        instance->params.compression = default_compression_params();
+        break;
+    default:
+        memset(&instance->params, 0, sizeof(instance->params));
+        break;
+    }
+}
+
+int effect_instance_set_overdrive_params(EffectInstance* instance, const OverdriveParam* param) {
+    if (instance == NULL || param == NULL || instance->type != EFFECT_TYPE_OVERDRIVE) {
+        return -1;
+    }
+
+    instance->params.overdrive = normalize_overdrive_params(param);
+    return 0;
+}
+
+int effect_instance_set_echo_params(EffectInstance* instance, const EchoParam* param) {
+    if (instance == NULL || param == NULL || instance->type != EFFECT_TYPE_ECHO) {
+        return -1;
+    }
+
+    instance->params.echo = normalize_echo_params(param);
+    return 0;
+}
+
+int effect_instance_set_compression_params(EffectInstance* instance, const CompressionParam* param) {
+    if (instance == NULL || param == NULL || instance->type != EFFECT_TYPE_COMPRESSION) {
+        return -1;
+    }
+
+    instance->params.compression = normalize_compression_params(param);
+    return 0;
+}
+
+int effect_instance_process(const EffectInstance* instance, const uint16_t* in_buf, uint16_t* out_buf,
+    size_t num_samples) {
+    if (instance == NULL || in_buf == NULL || out_buf == NULL) {
+        return -1;
+    }
+
+    switch (instance->type) {
+    case EFFECT_TYPE_OVERDRIVE:
+        buf_overdrive(in_buf, out_buf, num_samples, &instance->params.overdrive);
+        return 0;
+    case EFFECT_TYPE_ECHO:
+        buf_echo(in_buf, out_buf, num_samples, &instance->params.echo);
+        return 0;
+    case EFFECT_TYPE_COMPRESSION:
+        buf_compression(in_buf, out_buf, num_samples, &instance->params.compression);
+        return 0;
+    default:
+        return -1;
+    }
+}
+
+static size_t clamp_range(size_t value, size_t min, size_t max) {
+    if (value < min) {
+        return min;
+    }
+
+    if (value > max) {
+        return max;
+    }
+
+    return value;
+}
+
+static size_t clamp_qn(size_t value) {
+    return clamp_range(value, 0, (1U << FIXED_POINT_Q));
+}
+
+static OverdriveParam normalize_overdrive_params(const OverdriveParam* param) {
+    OverdriveParam out = *param;
+
+    out.level = clamp_range(out.level, 0, MAX_OVERDRIVE_LEVEL);
+    out.gain = clamp_qn(out.gain);
+    out.tone = clamp_range(out.tone, MIN_OVERDRIVE_TONE, MAX_OVERDRIVE_TONE);
+    out.mix = clamp_qn(out.mix);
+
+    return out;
+}
+
+static EchoParam normalize_echo_params(const EchoParam* param) {
+    EchoParam out = *param;
+
+    out.delay_samples = clamp_range(out.delay_samples, 0, MAX_ECHO_DELAY_SAMPLES);
+    out.pre_delay = clamp_range(out.pre_delay, MIN_ECHO_PRE_DELAY, MAX_ECHO_DELAY_SAMPLES);
+    if (out.delay_samples != 0 && out.pre_delay > out.delay_samples) {
+        out.pre_delay = out.delay_samples;
+    }
+
+    out.density = clamp_qn(out.density);
+    out.attack = clamp_qn(out.attack);
+    out.decay = clamp_qn(out.decay);
+
+    return out;
+}
+
+static CompressionParam normalize_compression_params(const CompressionParam* param) {
+    CompressionParam out = *param;
+
+    out.threshold = clamp_range(out.threshold, 0, X_AXIS);
+    out.ratio = clamp_qn(out.ratio);
+
+    return out;
+}
