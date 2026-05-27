@@ -118,6 +118,58 @@ int effect_instance_process(const EffectInstance* instance, const uint16_t* in_b
     }
 }
 
+int effect_handle_init(EffectHandle* handle, EffectType type) {
+    if (handle == NULL) {
+        return -1;
+    }
+
+    effect_instance_init(&handle->instance, type);
+    handle->initialized = 1;
+    return 0;
+}
+
+int effect_handle_reset(EffectHandle* handle) {
+    if (handle == NULL || handle->initialized == 0) {
+        return -1;
+    }
+
+    effect_instance_reset(&handle->instance);
+    return 0;
+}
+
+int effect_handle_set_overdrive_params(EffectHandle* handle, const OverdriveParam* param) {
+    if (handle == NULL || handle->initialized == 0) {
+        return -1;
+    }
+
+    return effect_instance_set_overdrive_params(&handle->instance, param);
+}
+
+int effect_handle_set_echo_params(EffectHandle* handle, const EchoParam* param) {
+    if (handle == NULL || handle->initialized == 0) {
+        return -1;
+    }
+
+    return effect_instance_set_echo_params(&handle->instance, param);
+}
+
+int effect_handle_set_compression_params(EffectHandle* handle, const CompressionParam* param) {
+    if (handle == NULL || handle->initialized == 0) {
+        return -1;
+    }
+
+    return effect_instance_set_compression_params(&handle->instance, param);
+}
+
+int effect_handle_process(const EffectHandle* handle, const uint16_t* in_buf, uint16_t* out_buf,
+    size_t num_samples) {
+    if (handle == NULL || handle->initialized == 0) {
+        return -1;
+    }
+
+    return effect_instance_process(&handle->instance, in_buf, out_buf, num_samples);
+}
+
 static size_t clamp_range(size_t value, size_t min, size_t max) {
     if (value < min) {
         return min;

@@ -1142,6 +1142,115 @@ static void test_runtime_compression_setter_normalizes_params(void)
     expect_eq_u16_array(direct_output, runtime_output, 2, "runtime compression normalize parity");
 }
 
+static void test_handle_rejects_use_before_init(void)
+{
+    EffectHandle handle = {0};
+    uint16_t input[1] = {(uint16_t)X_AXIS};
+    uint16_t output[1] = {0};
+
+    if (effect_handle_process(&handle, input, output, 1) == 0)
+    {
+        fprintf(stderr, "FAIL: handle accepted process before init\n");
+        failures++;
+    }
+}
+
+static void test_handle_overdrive_parity(void)
+{
+    const uint16_t input[] = {
+        (uint16_t)(X_AXIS - 900),
+        (uint16_t)(X_AXIS + 900),
+    };
+
+    OverdriveParam param = {
+        .level = MAX_OVERDRIVE_LEVEL,
+        .gain = Q_ONE,
+        .tone = Q_ONE,
+        .mix = Q_ONE,
+    };
+
+    uint16_t direct_output[2] = {0};
+    buf_overdrive(input, direct_output, 2, &param);
+
+    EffectHandle handle = {0};
+    if (effect_handle_init(&handle, EFFECT_TYPE_OVERDRIVE) != 0)
+    {
+        fprintf(stderr, "FAIL: handle overdrive init\n");
+        failures++;
+        return;
+    }
+
+    if (effect_handle_set_overdrive_params(&handle, &param) != 0)
+    {
+        fprintf(stderr, "FAIL: handle overdrive set params\n");
+        failures++;
+        return;
+    }
+
+    uint16_t handle_output[2] = {0};
+    if (effect_handle_process(&handle, input, handle_output, 2) != 0)
+    {
+        fprintf(stderr, "FAIL: handle overdrive process\n");
+        failures++;
+        return;
+    }
+
+    expect_eq_u16_array(direct_output, handle_output, 2, "handle overdrive parity");
+}
+
+static void test_handle_reset_restores_defaults(void)
+{
+    const uint16_t input[] = {
+        (uint16_t)(X_AXIS - 1200),
+        (uint16_t)(X_AXIS + 1200),
+    };
+
+    CompressionParam custom = {
+        .threshold = 300,
+        .ratio = Q_ONE,
+    };
+
+    CompressionParam defaults = {
+        .threshold = X_AXIS,
+        .ratio = 0,
+    };
+
+    EffectHandle handle = {0};
+    if (effect_handle_init(&handle, EFFECT_TYPE_COMPRESSION) != 0)
+    {
+        fprintf(stderr, "FAIL: handle compression init\n");
+        failures++;
+        return;
+    }
+
+    if (effect_handle_set_compression_params(&handle, &custom) != 0)
+    {
+        fprintf(stderr, "FAIL: handle compression set custom\n");
+        failures++;
+        return;
+    }
+
+    if (effect_handle_reset(&handle) != 0)
+    {
+        fprintf(stderr, "FAIL: handle compression reset\n");
+        failures++;
+        return;
+    }
+
+    uint16_t handle_output[2] = {0};
+    if (effect_handle_process(&handle, input, handle_output, 2) != 0)
+    {
+        fprintf(stderr, "FAIL: handle compression process after reset\n");
+        failures++;
+        return;
+    }
+
+    uint16_t direct_output[2] = {0};
+    buf_compression(input, direct_output, 2, &defaults);
+
+    expect_eq_u16_array(direct_output, handle_output, 2, "handle reset default parity");
+}
+
 int main(void)
 {
     test_q_tanh_clamps();
@@ -1183,6 +1292,9 @@ int main(void)
     test_runtime_overdrive_setter_normalizes_params();
     test_runtime_echo_setter_normalizes_params();
     test_runtime_compression_setter_normalizes_params();
+    test_handle_rejects_use_before_init();
+    test_handle_overdrive_parity();
+    test_handle_reset_restores_defaults();
 
     if (failures != 0)
     {
