@@ -24,6 +24,8 @@ From the repository root:
 ./scripts/demo.sh
 ```
 
+The demo launcher builds the shared DSP library, creates/uses a local virtualenv at `.local/python-demo-venv`, installs Python demo dependencies from `host/python-demo/requirements.txt`, and starts the UI.
+
 ## Firmware Snapshot
 
 Current STM32 firmware lives under [firmware/stm32f303/cubemx](firmware/stm32f303/cubemx).
