@@ -1102,15 +1102,16 @@ void startEffectsTask(void const * argument)
 		echoDelaySamplesBuf = (uint16_t *) pvPortMalloc(NUM_DELAY_SAMPLES * sizeof(uint16_t));
     if (echoDelaySamplesBuf == NULL)
     {
-      continue;
+      processFailed = true;
+      goto effects_iteration_cleanup;
     }
 		
 		HAL_DMA_Start_IT(&hdma_memtomem_dma1_channel1, (uint32_t) delaySamplesBuf, (uint32_t) echoDelaySamplesBuf, NUM_DELAY_SAMPLES);
 		
 		if (xSemaphoreTake(delaySamplesDmaSemaphoreHandle, ticksToWait) != pdTRUE)
 		{
-      vPortFree(echoDelaySamplesBuf);
-			continue;
+      processFailed = true;
+      goto effects_iteration_cleanup;
 		}
 		
 		/* Apply effects (in order) to inputBuf, storing in outputBuf.
@@ -1125,11 +1126,11 @@ void startEffectsTask(void const * argument)
 
 		if (effect_slots_sync_params(&effectSlots, &latchedEffectsParams) != 0)
 		{
-			vPortFree(echoDelaySamplesBuf);
-			continue;
+      processFailed = true;
+      goto effects_iteration_cleanup;
 		}
 		
-		for (int i = 0; i < 3; i++)
+    for (int i = 0; i < 3; i++)
 		{
 			Effect effect = latchedEffectsState.ordered[i];
 			
@@ -1229,6 +1230,8 @@ void startEffectsTask(void const * argument)
 				outputBuf = temp;
 			}
 		}
+
+effects_iteration_cleanup:
 
     if (echoInputBuf != NULL)
     {
