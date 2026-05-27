@@ -49,21 +49,21 @@ class Ui(QtWidgets.QMainWindow):
         self.ui.openFilePushButton.clicked.connect(self.open_file_handler)
 
     def _scale_q(self, value):
-        return ctypes.c_size_t(int(value * 2 ** effects.fixed_point_q))
+        return int(value * 2 ** effects.fixed_point_q)
 
     def _update_effect_params(self):
-        self.overdrive_param.level = ctypes.c_size_t(self.ui.overdriveLevelSpinBox.value())
+        self.overdrive_param.level = self.ui.overdriveLevelSpinBox.value()
         self.overdrive_param.gain = self._scale_q(self.ui.overdriveGainSpinBox.value())
         self.overdrive_param.tone = self._scale_q(self.ui.overdriveToneSpinBox.value())
         self.overdrive_param.mix = self._scale_q(self.ui.overdriveMixSpinBox.value())
 
-        self.echo_param.delay_samples = ctypes.c_size_t(self.ui.echoDelaySpinBox.value())
-        self.echo_param.pre_delay = ctypes.c_size_t(self.ui.echoPreDelaySpinBox.value())
+        self.echo_param.delay_samples = self.ui.echoDelaySpinBox.value()
+        self.echo_param.pre_delay = self.ui.echoPreDelaySpinBox.value()
         self.echo_param.density = self._scale_q(self.ui.echoDensitySpinBox.value())
         self.echo_param.attack = self._scale_q(self.ui.echoAttackSpinBox.value())
         self.echo_param.decay = self._scale_q(self.ui.echoDecaySpinBox.value())
 
-        self.compression_param.threshold = ctypes.c_size_t(self.ui.compressionThresholdSpinBox.value())
+        self.compression_param.threshold = self.ui.compressionThresholdSpinBox.value()
         self.compression_param.ratio = self._scale_q(self.ui.compressionRatioSpinBox.value())
 
     def _apply_overdrive(self, samples):
@@ -73,9 +73,10 @@ class Ui(QtWidgets.QMainWindow):
 
     def _apply_echo(self, samples):
         print("Adding echo...")
-        padded_samples = np.pad(samples, (self.echo_param.delay_samples, 0))
+        delay_samples = int(self.echo_param.delay_samples)
+        padded_samples = np.pad(samples, (delay_samples, 0))
         self.echo_runtime.set_echo(self.echo_param)
-        return np.asarray(self.echo_runtime.process_echo(padded_samples.tolist(), self.echo_param.delay_samples))
+        return np.asarray(self.echo_runtime.process_echo(padded_samples.tolist(), delay_samples))
 
     def _apply_compression(self, samples):
         print("Adding compression...")

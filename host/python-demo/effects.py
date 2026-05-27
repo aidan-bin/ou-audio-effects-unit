@@ -99,30 +99,6 @@ class EffectHandle(ctypes.Structure):
 
 UINT16_PTR = ctypes.POINTER(ctypes.c_uint16)
 
-libeffects.buf_overdrive.argtypes = [
-    UINT16_PTR,
-    UINT16_PTR,
-    ctypes.c_size_t,
-    ctypes.POINTER(OverdriveParam),
-]
-libeffects.buf_overdrive.restype = None
-
-libeffects.buf_echo.argtypes = [
-    UINT16_PTR,
-    UINT16_PTR,
-    ctypes.c_size_t,
-    ctypes.POINTER(EchoParam),
-]
-libeffects.buf_echo.restype = None
-
-libeffects.buf_compression.argtypes = [
-    UINT16_PTR,
-    UINT16_PTR,
-    ctypes.c_size_t,
-    ctypes.POINTER(CompressionParam),
-]
-libeffects.buf_compression.restype = None
-
 libeffects.effect_handle_init.argtypes = [ctypes.POINTER(EffectHandle), ctypes.c_int]
 libeffects.effect_handle_init.restype = ctypes.c_int
 
@@ -210,21 +186,3 @@ class EffectRuntime:
             raise ValueError("Echo input must include delay_samples of padding")
 
         return self._process(samples, num_samples)
-
-
-def overdrive(in_samples_list, param):
-    runtime = EffectRuntime(EFFECT_TYPE_OVERDRIVE)
-    runtime.set_overdrive(param)
-    return runtime.process(in_samples_list)
-
-
-def echo(in_samples_list, param):
-    runtime = EffectRuntime(EFFECT_TYPE_ECHO)
-    runtime.set_echo(param)
-    return runtime.process(in_samples_list)
-
-
-def compression(in_samples_list, param):
-    runtime = EffectRuntime(EFFECT_TYPE_COMPRESSION)
-    runtime.set_compression(param)
-    return runtime.process(in_samples_list)
