@@ -1734,14 +1734,12 @@ void startRomHandlerTask(void const * argument)
 		if (xSemaphoreTake(i2cFailedRomSemaphoreHandle, pdMS_TO_TICKS(timeOutMs))!= pdTRUE)
 		{
 			HAL_GPIO_WritePin(GPIOC, nNVM_WE_Pin, GPIO_PIN_SET);
-			vPortFree(message.pPayload);
 			continue;
 		}
 		
 		if (failed)
 		{
 			HAL_GPIO_WritePin(GPIOC, nNVM_WE_Pin, GPIO_PIN_SET);
-			vPortFree(message.pPayload);
 			continue;
 		}
 		
@@ -1830,14 +1828,12 @@ void startRomHandlerTask(void const * argument)
 		if (xSemaphoreTake(i2cFailedRomSemaphoreHandle, pdMS_TO_TICKS(updateFrequencyMs))!= pdTRUE)
 		{
 			HAL_GPIO_WritePin(GPIOC, nNVM_WE_Pin, GPIO_PIN_SET);
-			vPortFree(message.pPayload);
 			continue;	// Update period already elapsed, so just continue
 		}
 		
 		if (failed)
 		{
 			HAL_GPIO_WritePin(GPIOC, nNVM_WE_Pin, GPIO_PIN_SET);
-			vPortFree(message.pPayload);
 			continue;	// Try again immediately
 		}
 		
