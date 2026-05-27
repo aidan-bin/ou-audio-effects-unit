@@ -20,8 +20,6 @@ class Ui(QtWidgets.QMainWindow):
         self.input_signal = np.zeros(2)
         self.output_signal = np.zeros(2)
 
-        self.sample_rate = 0
-
         self.overdrive_param = effects.OverdriveParam()
         self.echo_param = effects.EchoParam()
         self.compression_param = effects.CompressionParam()
@@ -82,6 +80,19 @@ class Ui(QtWidgets.QMainWindow):
         print("Adding compression...")
         self.compression_runtime.set_compression(self.compression_param)
         return np.asarray(self.compression_runtime.process(samples.tolist()))
+
+    def _play_signal(self, signal):
+        gain = self.ui.gainDoubleSpinBox.value()
+        wav_file = np.array(gain * signal, dtype=np.int16)
+        sample_rate = self.ui.sampleRateSpinBox.value()
+        sd.play(wav_file, samplerate=sample_rate, loop=True)
+
+    def _load_wave_file(self, file_name):
+        with wave.open(file_name) as audio_file:
+            samples = audio_file.getnframes()
+            audio = audio_file.readframes(samples)
+        self.input_signal = np.frombuffer(audio, dtype=np.int16)
+        self.plot()
 
     def plot(self):
         self.figure.clear()
@@ -181,20 +192,10 @@ class Ui(QtWidgets.QMainWindow):
         self.plot()
 
     def play_input_signal_handler(self):
-        # Convert to wav file and play
-        gain = self.ui.gainDoubleSpinBox.value()
-        wav_file = np.array(gain * self.input_signal, dtype=np.int16)
-        sample_rate = self.ui.sampleRateSpinBox.value()
-
-        sd.play(wav_file, samplerate=sample_rate, loop=True)
+        self._play_signal(self.input_signal)
 
     def play_output_signal_handler(self):
-        # Convert to wav file and play
-        gain = self.ui.gainDoubleSpinBox.value()
-        wav_file = np.array(gain * self.output_signal, dtype=np.int16)
-        sample_rate = self.ui.sampleRateSpinBox.value()
-
-        sd.play(wav_file, samplerate=sample_rate, loop=True)
+        self._play_signal(self.output_signal)
 
     def stop_playing_handler(self):
         sd.stop()
@@ -203,11 +204,7 @@ class Ui(QtWidgets.QMainWindow):
         file_name, _filter = QtWidgets.QFileDialog.getOpenFileName(self, "Open audio file", ".", "Audio files (*.wav)")
 
         if file_name is not None:
-            file = wave.open(file_name)
-            samples = file.getnframes()
-            audio = file.readframes(samples)
-            self.input_signal = np.frombuffer(audio, dtype=np.int16)
-            self.plot()
+            self._load_wave_file(file_name)
 
 
 def main():
