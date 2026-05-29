@@ -52,6 +52,106 @@ static bool effect_is_valid(Effect effect)
   return effect >= OVERDRIVE && effect <= COMPRESSION;
 }
 
+static void effects_state_set_default_order(EffectsState *state)
+{
+  if (state == NULL)
+  {
+    return;
+  }
+
+  state->ordered[0] = OVERDRIVE;
+  state->ordered[1] = ECHO;
+  state->ordered[2] = COMPRESSION;
+}
+
+static bool effects_state_order_valid(const EffectsState *state)
+{
+  if (state == NULL)
+  {
+    return false;
+  }
+
+  bool seen[NUM_EFFECTS] = {false};
+
+  for (int i = 0; i < NUM_EFFECTS; i++)
+  {
+    if (!effect_is_valid(state->ordered[i]))
+    {
+      return false;
+    }
+
+    if (seen[state->ordered[i]])
+    {
+      return false;
+    }
+
+    seen[state->ordered[i]] = true;
+  }
+
+  return true;
+}
+
+static void effects_state_normalize(EffectsState *state)
+{
+  if (state == NULL)
+  {
+    return;
+  }
+
+  if (!effects_state_order_valid(state))
+  {
+    effects_state_set_default_order(state);
+  }
+
+  if (state->activeEffectSelection >= NUM_EFFECTS)
+  {
+    state->activeEffectSelection = 0;
+  }
+}
+
+static bool effects_state_get_active_effect(const EffectsState *state, Effect *activeEffect)
+{
+  if (state == NULL || activeEffect == NULL)
+  {
+    return false;
+  }
+
+  if (!effects_state_order_valid(state))
+  {
+    return false;
+  }
+
+  if (state->activeEffectSelection >= NUM_EFFECTS)
+  {
+    return false;
+  }
+
+  *activeEffect = state->ordered[state->activeEffectSelection];
+  return effect_is_valid(*activeEffect);
+}
+
+static size_t map_adc_to_param(uint32_t adcValue, size_t min, size_t max, uint32_t adcMax)
+{
+  if (adcMax == 0)
+  {
+    return min;
+  }
+
+  if (max < min)
+  {
+    size_t temp = min;
+    min = max;
+    max = temp;
+  }
+
+  if (adcValue > adcMax)
+  {
+    adcValue = adcMax;
+  }
+
+  return (((uint32_t) adcValue << FIXED_POINT_Q) / adcMax * (max - min) + min) >> FIXED_POINT_Q;
+}
+
 typedef struct
 {
 	/* Effects configurations */
@@ -1131,6 +1231,8 @@ void startEffectsTask(void const * argument)
 		latchedEffectsParams = effectsParams;
 		taskEXIT_CRITICAL();
 
+    effects_state_normalize(&latchedEffectsState);
+
 		if (effect_slots_sync_params(&effectSlots, &latchedEffectsParams) != 0)
 		{
       processFailed = true;
@@ -1140,11 +1242,6 @@ void startEffectsTask(void const * argument)
     for (int i = 0; i < NUM_EFFECTS; i++)
 		{
 			Effect effect = latchedEffectsState.ordered[i];
-      if (!effect_is_valid(effect))
-      {
-        processFailed = true;
-        break;
-      }
 			
 			if (latchedEffectsState.isEnabled[effect])
 			{
@@ -1329,26 +1426,18 @@ void startSwHandlerTask(void const * argument)
     bool switchAEnabled = HAL_GPIO_ReadPin(SWITCH_A_GPIO_Port, SWITCH_A_Pin) == GPIO_PIN_SET;
     bool switchBEnabled = HAL_GPIO_ReadPin(SWITCH_B_GPIO_Port, SWITCH_B_Pin) == GPIO_PIN_SET;
     bool switchCEnabled = HAL_GPIO_ReadPin(SWITCH_C_GPIO_Port, SWITCH_C_Pin) == GPIO_PIN_SET;
-    Effect effect_a;
-    Effect effect_b;
-    Effect effect_c;
+    EffectsState latchedEffectsState;
 
     taskENTER_CRITICAL();
-    effect_a = effectsState.ordered[0];
-    effect_b = effectsState.ordered[1];
-    effect_c = effectsState.ordered[2];
+    latchedEffectsState = effectsState;
     taskEXIT_CRITICAL();
 
-    if (!effect_is_valid(effect_a) || !effect_is_valid(effect_b) || !effect_is_valid(effect_c))
-    {
-      osDelay(pollingFrequencyMs);
-      continue;
-    }
+    effects_state_normalize(&latchedEffectsState);
 
     taskENTER_CRITICAL();
-    effectsState.isEnabled[effect_a] = switchAEnabled;
-    effectsState.isEnabled[effect_b] = switchBEnabled;
-    effectsState.isEnabled[effect_c] = switchCEnabled;
+    effectsState.isEnabled[latchedEffectsState.ordered[0]] = switchAEnabled;
+    effectsState.isEnabled[latchedEffectsState.ordered[1]] = switchBEnabled;
+    effectsState.isEnabled[latchedEffectsState.ordered[2]] = switchCEnabled;
     taskEXIT_CRITICAL();
 
 		osDelay(pollingFrequencyMs);
@@ -1407,19 +1496,15 @@ void startPotHandlerTask(void const * argument)
 				continue;
 			}
 
+      EffectsState latchedEffectsState;
       Effect activeEffect;
       taskENTER_CRITICAL();
-      if (effectsState.activeEffectSelection < NUM_EFFECTS)
-      {
-        activeEffect = effectsState.ordered[effectsState.activeEffectSelection];
-      }
-      else
-      {
-        activeEffect = (Effect) NUM_EFFECTS;
-      }
+      latchedEffectsState = effectsState;
       taskEXIT_CRITICAL();
 
-      if (!effect_is_valid(activeEffect))
+      effects_state_normalize(&latchedEffectsState);
+
+      if (!effects_state_get_active_effect(&latchedEffectsState, &activeEffect))
       {
         continue;
       }
@@ -1432,11 +1517,9 @@ void startPotHandlerTask(void const * argument)
 					case 0:
 					{
 						taskENTER_CRITICAL();	// Effects params are accessed by other tasks and this is not atomic
-						/* Assumes max > min and 0 <= adcValue <= adcMax */
 						size_t min = effectsParams.overdriveMin.gain;
 						size_t max = effectsParams.overdriveMax.gain;
-						/* Convert adcValue to value in [min, max] through linear mapping */
-						effectsParams.overdrive.gain = (((uint32_t) adcValue << FIXED_POINT_Q) / adcMax * (max - min) + min) >> FIXED_POINT_Q;
+            effectsParams.overdrive.gain = map_adc_to_param(adcValue, min, max, adcMax);
 						taskEXIT_CRITICAL();
 					} break;
 					case 1:
@@ -1444,7 +1527,7 @@ void startPotHandlerTask(void const * argument)
 						taskENTER_CRITICAL();
 						size_t min = effectsParams.overdriveMin.level;
 						size_t max = effectsParams.overdriveMax.level;
-						effectsParams.overdrive.level = (((uint32_t) adcValue << FIXED_POINT_Q) / adcMax * (max - min) + min) >> FIXED_POINT_Q;
+            effectsParams.overdrive.level = map_adc_to_param(adcValue, min, max, adcMax);
 						taskEXIT_CRITICAL();
 					} break;
 					case 2:
@@ -1452,7 +1535,7 @@ void startPotHandlerTask(void const * argument)
 						taskENTER_CRITICAL();
 						size_t min = effectsParams.overdriveMin.tone;
 						size_t max = effectsParams.overdriveMax.tone;
-						effectsParams.overdrive.tone = (((uint32_t) adcValue << FIXED_POINT_Q) / adcMax * (max - min) + min) >> FIXED_POINT_Q;
+            effectsParams.overdrive.tone = map_adc_to_param(adcValue, min, max, adcMax);
 						taskEXIT_CRITICAL();
 					} break;
 					case 3:
@@ -1460,7 +1543,7 @@ void startPotHandlerTask(void const * argument)
 						taskENTER_CRITICAL();
 						size_t min = effectsParams.overdriveMin.mix;
 						size_t max = effectsParams.overdriveMax.mix;
-						effectsParams.overdrive.mix = (((uint32_t) adcValue << FIXED_POINT_Q) / adcMax * (max - min) + min) >> FIXED_POINT_Q;
+            effectsParams.overdrive.mix = map_adc_to_param(adcValue, min, max, adcMax);
 						taskEXIT_CRITICAL();
 					} break;
 					default: break;
@@ -1475,7 +1558,7 @@ void startPotHandlerTask(void const * argument)
 						taskENTER_CRITICAL();
 						size_t min = effectsParams.echoMin.pre_delay;
 						size_t max = effectsParams.echoMax.pre_delay;
-						effectsParams.echo.pre_delay = (((uint32_t) adcValue << FIXED_POINT_Q) / adcMax * (max - min) + min) >> FIXED_POINT_Q;
+            effectsParams.echo.pre_delay = map_adc_to_param(adcValue, min, max, adcMax);
 						taskEXIT_CRITICAL();
 					} break;
 					case 1:
@@ -1483,7 +1566,7 @@ void startPotHandlerTask(void const * argument)
 						taskENTER_CRITICAL();
 						size_t min = effectsParams.echoMin.density;
 						size_t max = effectsParams.echoMax.density;
-						effectsParams.echo.density = (((uint32_t) adcValue << FIXED_POINT_Q) / adcMax * (max - min) + min) >> FIXED_POINT_Q;
+            effectsParams.echo.density = map_adc_to_param(adcValue, min, max, adcMax);
 						taskEXIT_CRITICAL();
 					} break;
 					case 2:
@@ -1491,7 +1574,7 @@ void startPotHandlerTask(void const * argument)
 						taskENTER_CRITICAL();
 						size_t min = effectsParams.echoMin.attack;
 						size_t max = effectsParams.echoMax.attack;
-						effectsParams.echo.attack = (((uint32_t) adcValue << FIXED_POINT_Q) / adcMax * (max - min) + min) >> FIXED_POINT_Q;
+            effectsParams.echo.attack = map_adc_to_param(adcValue, min, max, adcMax);
 						taskEXIT_CRITICAL();
 					} break;
 					case 3:
@@ -1499,7 +1582,7 @@ void startPotHandlerTask(void const * argument)
 						taskENTER_CRITICAL();
 						size_t min = effectsParams.echoMin.decay;
 						size_t max = effectsParams.echoMax.decay;
-						effectsParams.echo.decay = (((uint32_t) adcValue << FIXED_POINT_Q) / adcMax * (max - min) + min) >> FIXED_POINT_Q;
+            effectsParams.echo.decay = map_adc_to_param(adcValue, min, max, adcMax);
 						taskEXIT_CRITICAL();
 					} break;
 					default: break;
@@ -1514,7 +1597,7 @@ void startPotHandlerTask(void const * argument)
 						taskENTER_CRITICAL();
 						size_t min = effectsParams.compressionMin.threshold;
 						size_t max = effectsParams.compressionMax.threshold;
-						effectsParams.compression.threshold = (((uint32_t) adcValue << FIXED_POINT_Q) / adcMax * (max - min) + min) >> FIXED_POINT_Q;
+            effectsParams.compression.threshold = map_adc_to_param(adcValue, min, max, adcMax);
 						taskEXIT_CRITICAL();
 					} break;
 					case 1:
@@ -1522,7 +1605,7 @@ void startPotHandlerTask(void const * argument)
 						taskENTER_CRITICAL();
 						size_t min = effectsParams.compressionMin.ratio;
 						size_t max = effectsParams.compressionMax.ratio;
-						effectsParams.compression.ratio = (((uint32_t) adcValue << FIXED_POINT_Q) / adcMax * (max - min) + min) >> FIXED_POINT_Q;
+            effectsParams.compression.ratio = map_adc_to_param(adcValue, min, max, adcMax);
 						taskEXIT_CRITICAL();
 					} break;
 					case 2:	break;
@@ -1791,6 +1874,7 @@ void startRomHandlerTask(void const * argument)
 		EffectsState latchedEffectsState = effectsState;
 		EffectsParams latchedEffectsParams = effectsParams;
 		taskEXIT_CRITICAL();
+    effects_state_normalize(&latchedEffectsState);
 		
 		size_t numBytesToWrite = sizeof(EffectsState) + sizeof(EffectsParams);
 		size_t payloadSizeBytes = sizeof(uint16_t) + numBytesToWrite;	// One 16-bit address to start page write
