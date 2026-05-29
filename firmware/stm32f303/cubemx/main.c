@@ -279,6 +279,9 @@ static volatile EffectsState effectsState;
 /* Structure to manage individual effects' configurations (including min/max values) */
 static volatile EffectsParams effectsParams;
 
+/* Set by I2C ISR callbacks and consumed by i2c handler task. */
+static volatile bool i2cTransferFailed = true;
+
 /* DMA buffer for ADC samples (note: samples are in order of decreasing age) */
 static volatile uint16_t adcBuf[ADC_BUF_LEN] = {0};
 
@@ -332,6 +335,28 @@ static int effect_slots_get_echo_delay_samples(const EffectSlots *slots, size_t 
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+static void drain_semaphore(osSemaphoreId semaphoreHandle)
+{
+  if (semaphoreHandle == NULL)
+  {
+    return;
+  }
+
+  while (xSemaphoreTake(semaphoreHandle, 0) == pdTRUE)
+  {
+  }
+}
+
+static void i2c_signal_completion_from_isr(bool transferFailed)
+{
+  i2cTransferFailed = transferFailed;
+
+  if (i2cCompletionSemaphoreHandle != NULL)
+  {
+    xSemaphoreGiveFromISR(i2cCompletionSemaphoreHandle, NULL);
+  }
+}
 
 static void effect_slots_init(EffectSlots *slots)
 {
@@ -457,6 +482,9 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
   /* add semaphores, ... */
+  drain_semaphore(i2cCompletionSemaphoreHandle);
+  drain_semaphore(i2cFailedRomSemaphoreHandle);
+  drain_semaphore(i2cFailedDisplaySemaphoreHandle);
   /* USER CODE END RTOS_SEMAPHORES */
 
   /* USER CODE BEGIN RTOS_TIMERS */
@@ -1116,6 +1144,38 @@ void HAL_DAC_ConvCpltCallbackCh1(DAC_HandleTypeDef* hdac)
 	xTaskNotifyFromISR(effectsTaskHandle, (uint32_t) dacBufB, eSetValueWithOverwrite, NULL);
 }
 
+void HAL_I2C_MasterTxCpltCallback(I2C_HandleTypeDef *hi2c)
+{
+  if (hi2c == &hi2c1)
+  {
+    i2c_signal_completion_from_isr(false);
+  }
+}
+
+void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *hi2c)
+{
+  if (hi2c == &hi2c1)
+  {
+    i2c_signal_completion_from_isr(false);
+  }
+}
+
+void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c)
+{
+  if (hi2c == &hi2c1)
+  {
+    i2c_signal_completion_from_isr(true);
+  }
+}
+
+void HAL_I2C_AbortCpltCallback(I2C_HandleTypeDef *hi2c)
+{
+  if (hi2c == &hi2c1)
+  {
+    i2c_signal_completion_from_isr(true);
+  }
+}
+
 void HAL_DMA_CpltCallback(DMA_HandleTypeDef* hdma)
 {
 	if (hdma == &hdma_memtomem_dma1_channel1)
@@ -1719,9 +1779,13 @@ void startI2cHandlerTask(void const * argument)
     else if (message.rxTxBar)
 		{
 			/* Receive */
-			status = HAL_I2C_Master_Receive_IT(&hi2c1, message.address, message.pPayload, message.items);
-		
-			if (xSemaphoreTake(i2cCompletionSemaphoreHandle, ticksToWaitToDrop) != pdTRUE || status != HAL_OK)
+          drain_semaphore(i2cCompletionSemaphoreHandle);
+      i2cTransferFailed = true;
+          status = HAL_I2C_Master_Receive_IT(&hi2c1, message.address, message.pPayload, message.items);
+
+          if (status != HAL_OK ||
+          xSemaphoreTake(i2cCompletionSemaphoreHandle, ticksToWaitToDrop) != pdTRUE ||
+          i2cTransferFailed)
 			{
         messageFailed = true;
 			}
@@ -1733,9 +1797,13 @@ void startI2cHandlerTask(void const * argument)
 		else
 		{
 			/* Transmit */
-			status = HAL_I2C_Master_Transmit_IT(&hi2c1, message.address, message.pPayload, message.items);
-		
-			if (xSemaphoreTake(i2cCompletionSemaphoreHandle, ticksToWaitToDrop) != pdTRUE || status != HAL_OK)
+      drain_semaphore(i2cCompletionSemaphoreHandle);
+      i2cTransferFailed = true;
+      status = HAL_I2C_Master_Transmit_IT(&hi2c1, message.address, message.pPayload, message.items);
+
+      if (status != HAL_OK ||
+      xSemaphoreTake(i2cCompletionSemaphoreHandle, ticksToWaitToDrop) != pdTRUE ||
+      i2cTransferFailed)
 			{
         messageFailed = true;
 			}
@@ -1773,6 +1841,7 @@ void startRomHandlerTask(void const * argument)
 {
   /* USER CODE BEGIN startRomHandlerTask */
 	const uint16_t updateFrequencyMs = 5000;
+  const uint16_t bootstrapRetryDelayMs = 10;
 	
 	uint16_t readAddress = 0;
 	uint16_t writeAddress = 0;
@@ -1797,6 +1866,7 @@ void startRomHandlerTask(void const * argument)
     message.pPayload = pvPortMalloc(addressPayloadSizeBytes);	// Freed by I2C handler task
     if (message.pPayload == NULL)
     {
+      osDelay(bootstrapRetryDelayMs);
       continue;
     }
     message.pPayload[0] = (readAddress & 0xFF00) >> 8;	// Upper byte of address
@@ -1806,23 +1876,29 @@ void startRomHandlerTask(void const * argument)
 		message.pFailed = &failed;
 		
 		HAL_GPIO_WritePin(GPIOC, nNVM_WE_Pin, GPIO_PIN_RESET);
+
+    drain_semaphore(i2cFailedRomSemaphoreHandle);
+    failed = true;
 		
 		if (xQueueSend(i2cQueueHandle, (void *) &message, pdMS_TO_TICKS(timeOutMs)) != pdPASS)
 		{
 			HAL_GPIO_WritePin(GPIOC, nNVM_WE_Pin, GPIO_PIN_SET);
 			vPortFree(message.pPayload);
+      osDelay(bootstrapRetryDelayMs);
 			continue;
 		}
 		
 		if (xSemaphoreTake(i2cFailedRomSemaphoreHandle, pdMS_TO_TICKS(timeOutMs))!= pdTRUE)
 		{
 			HAL_GPIO_WritePin(GPIOC, nNVM_WE_Pin, GPIO_PIN_SET);
+      osDelay(bootstrapRetryDelayMs);
 			continue;
 		}
 		
 		if (failed)
 		{
 			HAL_GPIO_WritePin(GPIOC, nNVM_WE_Pin, GPIO_PIN_SET);
+      osDelay(bootstrapRetryDelayMs);
 			continue;
 		}
 		
@@ -1836,26 +1912,33 @@ void startRomHandlerTask(void const * argument)
 		message.pPayload = pvPortMalloc(payloadSizeBytes);
     if (message.pPayload == NULL)
     {
+      osDelay(bootstrapRetryDelayMs);
       continue;
     }
 		message.items = payloadSizeBytes;
 		message.pFailed = &failed;
+
+    drain_semaphore(i2cFailedRomSemaphoreHandle);
+    failed = true;
 		
 		if (xQueueSend(i2cQueueHandle, (void *) &message, pdMS_TO_TICKS(timeOutMs)) != pdPASS)
 		{
 			vPortFree(message.pPayload);
+      osDelay(bootstrapRetryDelayMs);
 			continue;
 		}
 		
 		if (xSemaphoreTake(i2cFailedRomSemaphoreHandle, pdMS_TO_TICKS(timeOutMs))!= pdTRUE)
 		{
 			vPortFree(message.pPayload);
+      osDelay(bootstrapRetryDelayMs);
 			continue;
 		}
 		
 		if (failed)
 		{
 			vPortFree(message.pPayload);
+      osDelay(bootstrapRetryDelayMs);
 			continue;
 		}
 		
@@ -1879,7 +1962,7 @@ void startRomHandlerTask(void const * argument)
 		size_t numBytesToWrite = sizeof(EffectsState) + sizeof(EffectsParams);
 		size_t payloadSizeBytes = sizeof(uint16_t) + numBytesToWrite;	// One 16-bit address to start page write
 		
-		bool failed;
+    bool failed = true;
 		
 		I2CMessage message;
 		
@@ -1901,6 +1984,9 @@ void startRomHandlerTask(void const * argument)
 		message.pFailed = &failed;
 		
 		HAL_GPIO_WritePin(GPIOC, nNVM_WE_Pin, GPIO_PIN_RESET);
+
+    drain_semaphore(i2cFailedRomSemaphoreHandle);
+    failed = true;
 		
 		if (xQueueSend(i2cQueueHandle, (void *) &message, pdMS_TO_TICKS(updateFrequencyMs)) != pdPASS)
 		{
