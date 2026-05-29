@@ -348,14 +348,67 @@ static void drain_semaphore(osSemaphoreId semaphoreHandle)
   }
 }
 
+static bool start_dma_transfer_and_wait(DMA_HandleTypeDef *hdma, uint32_t srcAddress, uint32_t dstAddress, uint32_t dataLength, TickType_t ticksToWait)
+{
+  if (hdma == NULL)
+  {
+    return false;
+  }
+
+  drain_semaphore(delaySamplesDmaSemaphoreHandle);
+
+  if (HAL_DMA_Start_IT(hdma, srcAddress, dstAddress, dataLength) != HAL_OK)
+  {
+    return false;
+  }
+
+  return xSemaphoreTake(delaySamplesDmaSemaphoreHandle, ticksToWait) == pdTRUE;
+}
+
+static bool start_adc_conversion_it(ADC_HandleTypeDef *hadc, ADC_ChannelConfTypeDef *config)
+{
+  if (hadc == NULL || config == NULL)
+  {
+    return false;
+  }
+
+  if (HAL_ADC_ConfigChannel(hadc, config) != HAL_OK)
+  {
+    return false;
+  }
+
+  return HAL_ADC_Start_IT(hadc) == HAL_OK;
+}
+
+static void notify_task_from_isr(osThreadId taskHandle, uint32_t value)
+{
+  if (taskHandle == NULL)
+  {
+    return;
+  }
+
+  BaseType_t higherPriorityTaskWoken = pdFALSE;
+  xTaskNotifyFromISR(taskHandle, value, eSetValueWithOverwrite, &higherPriorityTaskWoken);
+  portYIELD_FROM_ISR(higherPriorityTaskWoken);
+}
+
+static void give_semaphore_from_isr(osSemaphoreId semaphoreHandle)
+{
+  if (semaphoreHandle == NULL)
+  {
+    return;
+  }
+
+  BaseType_t higherPriorityTaskWoken = pdFALSE;
+  xSemaphoreGiveFromISR(semaphoreHandle, &higherPriorityTaskWoken);
+  portYIELD_FROM_ISR(higherPriorityTaskWoken);
+}
+
 static void i2c_signal_completion_from_isr(bool transferFailed)
 {
   i2cTransferFailed = transferFailed;
 
-  if (i2cCompletionSemaphoreHandle != NULL)
-  {
-    xSemaphoreGiveFromISR(i2cCompletionSemaphoreHandle, NULL);
-  }
+  give_semaphore_from_isr(i2cCompletionSemaphoreHandle);
 }
 
 static void effect_slots_init(EffectSlots *slots)
@@ -482,6 +535,7 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
   /* add semaphores, ... */
+  drain_semaphore(delaySamplesDmaSemaphoreHandle);
   drain_semaphore(i2cCompletionSemaphoreHandle);
   drain_semaphore(i2cFailedRomSemaphoreHandle);
   drain_semaphore(i2cFailedDisplaySemaphoreHandle);
@@ -1101,14 +1155,14 @@ static void MX_GPIO_Init(void)
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-	xTaskNotifyFromISR(btnHandlerTaskHandle, GPIO_Pin, eSetValueWithOverwrite, NULL);
+  notify_task_from_isr(btnHandlerTaskHandle, GPIO_Pin);
 }
 
 void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc)
 {
 	if (hadc == &hadc3)
 	{
-		xTaskNotifyFromISR(effectsTaskHandle, (uint32_t) adcBufA, eSetValueWithOverwrite, NULL);
+    notify_task_from_isr(effectsTaskHandle, (uint32_t) adcBufA);
 	}
 }
 
@@ -1126,22 +1180,22 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 {
 	if (hadc == &hadc1)
 	{
-		xTaskNotifyFromISR(potHandlerTaskHandle, HAL_ADC_GetValue(hadc), eSetValueWithOverwrite, NULL);
+    notify_task_from_isr(potHandlerTaskHandle, HAL_ADC_GetValue(hadc));
 	}
 	else if (hadc == &hadc3)
 	{
-		xTaskNotifyFromISR(effectsTaskHandle, (uint32_t) adcBufB, eSetValueWithOverwrite, NULL);
+    notify_task_from_isr(effectsTaskHandle, (uint32_t) adcBufB);
 	}
 }
 
 void HAL_DAC_ConvHalfCpltCallbackCh1(DAC_HandleTypeDef* hdac)
 {
-	xTaskNotifyFromISR(effectsTaskHandle, (uint32_t) dacBufA, eSetValueWithOverwrite, NULL);
+  notify_task_from_isr(effectsTaskHandle, (uint32_t) dacBufA);
 }
 	
 void HAL_DAC_ConvCpltCallbackCh1(DAC_HandleTypeDef* hdac)
 {
-	xTaskNotifyFromISR(effectsTaskHandle, (uint32_t) dacBufB, eSetValueWithOverwrite, NULL);
+  notify_task_from_isr(effectsTaskHandle, (uint32_t) dacBufB);
 }
 
 void HAL_I2C_MasterTxCpltCallback(I2C_HandleTypeDef *hi2c)
@@ -1180,7 +1234,7 @@ void HAL_DMA_CpltCallback(DMA_HandleTypeDef* hdma)
 {
 	if (hdma == &hdma_memtomem_dma1_channel1)
 	{
-		xSemaphoreGiveFromISR(delaySamplesDmaSemaphoreHandle, NULL);
+    give_semaphore_from_isr(delaySamplesDmaSemaphoreHandle);
 	}
 }
 /* USER CODE END 4 */
@@ -1200,9 +1254,13 @@ void startEffectsTask(void const * argument)
 	
 	/* Start ADC and DAC. Note: ADC expects buffers to be ready to be filled,
 			DAC expects buffers to be ready to be read from. Software must ensure this. */
-	HAL_ADC_Start_DMA(&hadc3, (uint32_t *) adcBuf, ADC_BUF_LEN);
-	HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t *) dacBuf, DAC_BUF_LEN, DAC_ALIGN_12B_R);
-	HAL_TIM_OC_Start(&htim2, TIM_CHANNEL_1);
+  if (HAL_ADC_Start_DMA(&hadc3, (uint32_t *) adcBuf, ADC_BUF_LEN) != HAL_OK ||
+    HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t *) dacBuf, DAC_BUF_LEN, DAC_ALIGN_12B_R) != HAL_OK ||
+    HAL_TIM_OC_Start(&htim2, TIM_CHANNEL_1) != HAL_OK)
+  {
+    vTaskDelete(NULL);
+    return;
+  }
 	
   /* Infinite loop */
   for(;;)
@@ -1244,14 +1302,19 @@ void startEffectsTask(void const * argument)
 		}
 		
 		/* Add ADC samples to delaySamplesBuf (must shift current samples first, then insert at end) */
-		HAL_DMA_Start_IT(&hdma_memtomem_dma1_channel1, (uint32_t) &delaySamplesBuf[SAMPLE_BUF_LEN], (uint32_t) delaySamplesBuf, NUM_DELAY_SAMPLES - SAMPLE_BUF_LEN);
-		
-		if (xSemaphoreTake(delaySamplesDmaSemaphoreHandle, ticksToWait) != pdTRUE)
+    if (!start_dma_transfer_and_wait(&hdma_memtomem_dma1_channel1,
+        (uint32_t) &delaySamplesBuf[SAMPLE_BUF_LEN],
+        (uint32_t) delaySamplesBuf,
+        NUM_DELAY_SAMPLES - SAMPLE_BUF_LEN,
+        ticksToWait))
 		{
 			continue;
 		}
 		
-    HAL_DMA_Start(&hdma_memtomem_dma1_channel1, (uint32_t) currAdcBuf, (uint32_t) &delaySamplesBuf[NUM_DELAY_SAMPLES - SAMPLE_BUF_LEN], SAMPLE_BUF_LEN);
+    if (HAL_DMA_Start(&hdma_memtomem_dma1_channel1, (uint32_t) currAdcBuf, (uint32_t) &delaySamplesBuf[NUM_DELAY_SAMPLES - SAMPLE_BUF_LEN], SAMPLE_BUF_LEN) != HAL_OK)
+    {
+      continue;
+    }
 		
 		/* Wait for DAC buffer (with timeout, and make sure it is a DAC buffer) */
     if (xTaskNotifyWait(0, 0xFFFFFFFFUL, &notificationValue, ticksToWait) != pdTRUE)
@@ -1273,9 +1336,11 @@ void startEffectsTask(void const * argument)
       goto effects_iteration_cleanup;
     }
 		
-		HAL_DMA_Start_IT(&hdma_memtomem_dma1_channel1, (uint32_t) delaySamplesBuf, (uint32_t) echoDelaySamplesBuf, NUM_DELAY_SAMPLES);
-		
-		if (xSemaphoreTake(delaySamplesDmaSemaphoreHandle, ticksToWait) != pdTRUE)
+    if (!start_dma_transfer_and_wait(&hdma_memtomem_dma1_channel1,
+        (uint32_t) delaySamplesBuf,
+        (uint32_t) echoDelaySamplesBuf,
+        NUM_DELAY_SAMPLES,
+        ticksToWait))
 		{
       processFailed = true;
       goto effects_iteration_cleanup;
@@ -1329,18 +1394,22 @@ void startEffectsTask(void const * argument)
 					
           if (numDelaySamples > 0)
 					{
-            HAL_DMA_Start_IT(&hdma_memtomem_dma1_channel1, (uint32_t) &echoDelaySamplesBuf[NUM_DELAY_SAMPLES - numDelaySamples], (uint32_t) echoInputBuf, numDelaySamples);
-						
-            if (xSemaphoreTake(delaySamplesDmaSemaphoreHandle, ticksToWait) != pdTRUE)
+            if (!start_dma_transfer_and_wait(&hdma_memtomem_dma1_channel1,
+                (uint32_t) &echoDelaySamplesBuf[NUM_DELAY_SAMPLES - numDelaySamples],
+                (uint32_t) echoInputBuf,
+                numDelaySamples,
+                ticksToWait))
             {
               processFailed = true;
               break;
             }
 					}
 					
-					HAL_DMA_Start_IT(&hdma_memtomem_dma1_channel1, (uint32_t) inputBuf, (uint32_t) &echoInputBuf[numDelaySamples], SAMPLE_BUF_LEN);
-					
-					if (xSemaphoreTake(delaySamplesDmaSemaphoreHandle, ticksToWait) != pdTRUE)
+          if (!start_dma_transfer_and_wait(&hdma_memtomem_dma1_channel1,
+              (uint32_t) inputBuf,
+              (uint32_t) &echoInputBuf[numDelaySamples],
+              SAMPLE_BUF_LEN,
+              ticksToWait))
 					{
             processFailed = true;
             break;
@@ -1548,8 +1617,10 @@ void startPotHandlerTask(void const * argument)
 			}
 			
 			/* Start ADC and wait (skip if timed out since data is obsolete) */
-			HAL_ADC_ConfigChannel(&hadc1, &sConfig);
-			HAL_ADC_Start_IT(&hadc1);
+      if (!start_adc_conversion_it(&hadc1, &sConfig))
+      {
+        continue;
+      }
 
       if (xTaskNotifyWait(0, 0xFFFFFFFFUL, &adcValue, ticksToWait) != pdTRUE)
 			{
