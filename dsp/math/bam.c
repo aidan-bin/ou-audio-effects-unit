@@ -11,87 +11,11 @@
  *  - The quadrant is given directly by the two MSBs
  */
 
-#include <stdio.h>
-#include <math.h>
-#include <stdlib.h>
 #include "bam.h"
-
-int main()
-{
-    FILE *fp = fopen("sin.bin", "wb");
-    FILE *fp1 = fopen("real_sin.bin", "wb");
-
-    if (fp == NULL || fp1 == NULL)
-    {
-        if (fp != NULL)
-        {
-            fclose(fp);
-        }
-
-        if (fp1 != NULL)
-        {
-            fclose(fp1);
-        }
-
-        return 1;
-    }
-
-    int16_t *sample_buf = malloc(sizeof(int16_t) * 361);
-    int16_t *real_sin_buf = malloc(sizeof(int16_t) * 361);
-
-    if (sample_buf == NULL || real_sin_buf == NULL)
-    {
-        free(sample_buf);
-        free(real_sin_buf);
-        fclose(fp);
-        fclose(fp1);
-        return 1;
-    }
-
-    for (int i = 0; i <= 360; i++)
-    {
-        bam_t angle = float_deg_to_bam(i);
-        //printf("sin(%d BAM or %f degrees) = %f\n", angle, bam_to_float_deg(angle), ((float) bam_sin(angle)) * pow(2, -8));
-        sample_buf[i] = bam_sin(angle);
-        real_sin_buf[i] = sin(i * M_PI / 180) * pow(2, 8);
-
-        printf("\ti = %d, rad = %f\n", i, i * M_PI / 180);
-        printf("sample_buf[%d] = %d\n", i, sample_buf[i]);
-        printf("real_sin_buf[%d] = %d\n", i, real_sin_buf[i]);
-    }
-
-    fwrite(sample_buf, sizeof(int16_t), 361, fp);
-
-    fclose(fp);
-
-    fwrite(real_sin_buf, sizeof(int16_t), 361, fp1);
-
-    fclose(fp1);
-    free(sample_buf);
-    free(real_sin_buf);
-    
-
-    /*
-    // Creating BAM angle from degrees
-    bam_t bam_angle = float_deg_to_bam(359);
-
-    printf("bam_angle = %d units or %f degrees\n", bam_angle, bam_to_float_deg(bam_angle));
-
-    // Creating BAM angle from pi radians
-    bam_angle = 3 * BAM_PI_RAD / 4;
-
-    printf("bam_angle = %d units or %f degrees\n", bam_angle, bam_to_float_deg(bam_angle));
-
-    // Adding two BAM angles, no need to worry about overflow
-    bam_t tmp = bam_angle + BAM_180_DEG;
-
-    printf("bam_angle + 180 degrees = %d units or %f degrees\n", tmp, bam_to_float_deg(tmp));
-    */
-}
 
 float bam_to_float_deg(bam_t angle)
 {   
-    return (float) angle * 180 / BAM_180_DEG;
+    return (float) angle * 180.0f / (float)(1U << (BAM_N - 1));
 }
 
 float ubam_to_float_deg(ubam_t angle)
@@ -101,7 +25,7 @@ float ubam_to_float_deg(ubam_t angle)
 
 bam_t float_deg_to_bam(float angle)
 {
-    return (bam_t) (angle * BAM_180_DEG / 180);
+    return (bam_t) (angle * (float)(1U << (BAM_N - 1)) / 180.0f);
 }
 
 ubam_t float_deg_to_ubam(float angle)

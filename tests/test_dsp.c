@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "bam.h"
 #include "effects.h"
 #include "effect_runtime.h"
 #include "fast_math.h"
@@ -1142,6 +1143,36 @@ static void test_runtime_echo_zero_delay_normalizes_to_copy(void)
     expect_eq_u16_array(direct_output, runtime_output, 4, "runtime zero-delay echo normalize parity");
 }
 
+static void test_bam_conversion_round_trip(void)
+{
+    bam_t signed_half_turn = float_deg_to_bam(90.0f);
+    bam_t signed_negative_half_turn = float_deg_to_bam(-90.0f);
+    ubam_t unsigned_three_quarters_turn = float_deg_to_ubam(270.0f);
+
+    expect_eq_i16((int16_t)(UBAM_180_DEG / 2), signed_half_turn, "bam 90 degree conversion");
+    expect_eq_i16((int16_t)(-(int16_t)(UBAM_180_DEG / 2)), signed_negative_half_turn,
+        "bam -90 degree conversion");
+
+    if (unsigned_three_quarters_turn != (ubam_t)(UBAM_180_DEG + UBAM_180_DEG / 2))
+    {
+        fprintf(stderr, "FAIL: ubam 270 degree conversion expected=%u actual=%u\n",
+            (unsigned)(UBAM_180_DEG + UBAM_180_DEG / 2), (unsigned)unsigned_three_quarters_turn);
+        failures++;
+    }
+
+    if (bam_to_float_deg(signed_half_turn) != 90.0f)
+    {
+        fprintf(stderr, "FAIL: bam 90 degree float round trip actual=%f\n", bam_to_float_deg(signed_half_turn));
+        failures++;
+    }
+
+    if (ubam_to_float_deg(unsigned_three_quarters_turn) != 270.0f)
+    {
+        fprintf(stderr, "FAIL: ubam 270 degree float round trip actual=%f\n", ubam_to_float_deg(unsigned_three_quarters_turn));
+        failures++;
+    }
+}
+
 static void test_runtime_compression_setter_normalizes_params(void)
 {
     const uint16_t input[] = {
@@ -1517,6 +1548,7 @@ int main(void)
     test_runtime_echo_setter_normalizes_params();
     test_runtime_echo_zero_delay_normalizes_to_copy();
     test_runtime_compression_setter_normalizes_params();
+    test_bam_conversion_round_trip();
     test_handle_rejects_use_before_init();
     test_handle_overdrive_parity();
     test_handle_rejects_wrong_param_setter();

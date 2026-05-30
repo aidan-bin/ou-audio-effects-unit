@@ -13,6 +13,7 @@ option(OU_BUILD_TESTS "Build DSP unit tests" ON)
 set(OU_DSP_SOURCES
     dsp/effects/effect_runtime.c
     dsp/effects/effects.c
+    dsp/math/bam.c
     dsp/math/fast_math.c
 )
 
