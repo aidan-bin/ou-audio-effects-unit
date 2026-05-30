@@ -21,8 +21,32 @@ int main()
     FILE *fp = fopen("sin.bin", "wb");
     FILE *fp1 = fopen("real_sin.bin", "wb");
 
+    if (fp == NULL || fp1 == NULL)
+    {
+        if (fp != NULL)
+        {
+            fclose(fp);
+        }
+
+        if (fp1 != NULL)
+        {
+            fclose(fp1);
+        }
+
+        return 1;
+    }
+
     int16_t *sample_buf = malloc(sizeof(int16_t) * 361);
     int16_t *real_sin_buf = malloc(sizeof(int16_t) * 361);
+
+    if (sample_buf == NULL || real_sin_buf == NULL)
+    {
+        free(sample_buf);
+        free(real_sin_buf);
+        fclose(fp);
+        fclose(fp1);
+        return 1;
+    }
 
     for (int i = 0; i <= 360; i++)
     {
@@ -43,6 +67,8 @@ int main()
     fwrite(real_sin_buf, sizeof(int16_t), 361, fp1);
 
     fclose(fp1);
+    free(sample_buf);
+    free(real_sin_buf);
     
 
     /*
@@ -75,7 +101,7 @@ float ubam_to_float_deg(ubam_t angle)
 
 bam_t float_deg_to_bam(float angle)
 {
-    return (ubam_t) (angle * BAM_180_DEG / 180);
+    return (bam_t) (angle * BAM_180_DEG / 180);
 }
 
 ubam_t float_deg_to_ubam(float angle)

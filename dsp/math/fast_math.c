@@ -15,11 +15,12 @@ int16_t q_tanh(int16_t x) {
     if (x > TANH_CLAMP_POINT)
         return Q_ONE;
 
-    int32_t x_squared = (x * x) >> FIXED_POINT_Q;
+    int64_t x64 = x;
+    int64_t x_squared = (x64 * x64) >> FIXED_POINT_Q;
 
-    int32_t a = ((10 * x * x_squared) >> FIXED_POINT_Q) + 105 * x;
-    int32_t b =
-        ((x_squared * x_squared) >> FIXED_POINT_Q) + (45 * x_squared) + (105 << FIXED_POINT_Q);
+    int64_t a = ((10 * x64 * x_squared) >> FIXED_POINT_Q) + 105 * x64;
+    int64_t b = ((x_squared * x_squared) >> FIXED_POINT_Q) + (45 * x_squared) +
+                ((int64_t)105 << FIXED_POINT_Q);
 
     return (int16_t)((a << FIXED_POINT_Q) / b);
 }
