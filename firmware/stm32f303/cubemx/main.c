@@ -404,6 +404,46 @@ static void give_semaphore_from_isr(osSemaphoreId semaphoreHandle)
   portYIELD_FROM_ISR(higherPriorityTaskWoken);
 }
 
+static bool i2c_source_task_is_valid(osThreadId sourceTask)
+{
+  return sourceTask == romHandlerTaskHandle || sourceTask == displayHandlerTaskHandle;
+}
+
+static void signal_i2c_source_task_completion(osThreadId sourceTask)
+{
+  if (sourceTask == romHandlerTaskHandle)
+  {
+    xSemaphoreGive(i2cFailedRomSemaphoreHandle);
+  }
+  else if (sourceTask == displayHandlerTaskHandle)
+  {
+    xSemaphoreGive(i2cFailedDisplaySemaphoreHandle);
+  }
+}
+
+static bool queue_i2c_message_and_wait(I2CMessage *message, osSemaphoreId completionSemaphoreHandle, TickType_t timeoutTicks)
+{
+  if (message == NULL || message->pFailed == NULL || completionSemaphoreHandle == NULL)
+  {
+    return false;
+  }
+
+  drain_semaphore(completionSemaphoreHandle);
+  *(message->pFailed) = true;
+
+  if (xQueueSend(i2cQueueHandle, (void *) message, timeoutTicks) != pdPASS)
+  {
+    return false;
+  }
+
+  if (xSemaphoreTake(completionSemaphoreHandle, timeoutTicks) != pdTRUE)
+  {
+    return false;
+  }
+
+  return !(*(message->pFailed));
+}
+
 static void i2c_signal_completion_from_isr(bool transferFailed)
 {
   i2cTransferFailed = transferFailed;
@@ -1798,8 +1838,8 @@ void startI2cHandlerTask(void const * argument)
       continue;
     }
 
-    /* Validate required message fields before using them. */
-    if (message.pFailed == NULL || message.pPayload == NULL || message.items == 0)
+    /* Validate required message fields and source task before using them. */
+    if (message.pFailed == NULL || message.pPayload == NULL || message.items == 0 || !i2c_source_task_is_valid(message.sourceTask))
     {
       if (message.pFailed != NULL)
       {
@@ -1811,14 +1851,7 @@ void startI2cHandlerTask(void const * argument)
         vPortFree(message.pPayload);
       }
 
-      if (message.sourceTask == romHandlerTaskHandle)
-      {
-        xSemaphoreGive(i2cFailedRomSemaphoreHandle);
-      }
-      else if (message.sourceTask == displayHandlerTaskHandle)
-      {
-        xSemaphoreGive(i2cFailedDisplaySemaphoreHandle);
-      }
+      signal_i2c_source_task_completion(message.sourceTask);
 
       continue;
     }
@@ -1889,14 +1922,7 @@ void startI2cHandlerTask(void const * argument)
     *(message.pFailed) = messageFailed;
 
     /* Notify task that pFailed is valid (i.e., operation completed) */
-    if (message.sourceTask == romHandlerTaskHandle)
-    {
-      xSemaphoreGive(i2cFailedRomSemaphoreHandle);
-    }
-    else if (message.sourceTask == displayHandlerTaskHandle)
-    {
-      xSemaphoreGive(i2cFailedDisplaySemaphoreHandle);
-    }
+    signal_i2c_source_task_completion(message.sourceTask);
   }
   /* USER CODE END startI2cHandlerTask */
 }
@@ -1947,28 +1973,11 @@ void startRomHandlerTask(void const * argument)
 		message.pFailed = &failed;
 		
 		HAL_GPIO_WritePin(GPIOC, nNVM_WE_Pin, GPIO_PIN_RESET);
-
-    drain_semaphore(i2cFailedRomSemaphoreHandle);
-    failed = true;
 		
-		if (xQueueSend(i2cQueueHandle, (void *) &message, pdMS_TO_TICKS(timeOutMs)) != pdPASS)
+    if (!queue_i2c_message_and_wait(&message, i2cFailedRomSemaphoreHandle, pdMS_TO_TICKS(timeOutMs)))
 		{
 			HAL_GPIO_WritePin(GPIOC, nNVM_WE_Pin, GPIO_PIN_SET);
 			vPortFree(message.pPayload);
-      osDelay(bootstrapRetryDelayMs);
-			continue;
-		}
-		
-		if (xSemaphoreTake(i2cFailedRomSemaphoreHandle, pdMS_TO_TICKS(timeOutMs))!= pdTRUE)
-		{
-			HAL_GPIO_WritePin(GPIOC, nNVM_WE_Pin, GPIO_PIN_SET);
-      osDelay(bootstrapRetryDelayMs);
-			continue;
-		}
-		
-		if (failed)
-		{
-			HAL_GPIO_WritePin(GPIOC, nNVM_WE_Pin, GPIO_PIN_SET);
       osDelay(bootstrapRetryDelayMs);
 			continue;
 		}
@@ -1988,25 +1997,8 @@ void startRomHandlerTask(void const * argument)
     }
 		message.items = payloadSizeBytes;
 		message.pFailed = &failed;
-
-    drain_semaphore(i2cFailedRomSemaphoreHandle);
-    failed = true;
 		
-		if (xQueueSend(i2cQueueHandle, (void *) &message, pdMS_TO_TICKS(timeOutMs)) != pdPASS)
-		{
-			vPortFree(message.pPayload);
-      osDelay(bootstrapRetryDelayMs);
-			continue;
-		}
-		
-		if (xSemaphoreTake(i2cFailedRomSemaphoreHandle, pdMS_TO_TICKS(timeOutMs))!= pdTRUE)
-		{
-			vPortFree(message.pPayload);
-      osDelay(bootstrapRetryDelayMs);
-			continue;
-		}
-		
-		if (failed)
+    if (!queue_i2c_message_and_wait(&message, i2cFailedRomSemaphoreHandle, pdMS_TO_TICKS(timeOutMs)))
 		{
 			vPortFree(message.pPayload);
       osDelay(bootstrapRetryDelayMs);
@@ -2055,27 +2047,12 @@ void startRomHandlerTask(void const * argument)
 		message.pFailed = &failed;
 		
 		HAL_GPIO_WritePin(GPIOC, nNVM_WE_Pin, GPIO_PIN_RESET);
-
-    drain_semaphore(i2cFailedRomSemaphoreHandle);
-    failed = true;
 		
-		if (xQueueSend(i2cQueueHandle, (void *) &message, pdMS_TO_TICKS(updateFrequencyMs)) != pdPASS)
+    if (!queue_i2c_message_and_wait(&message, i2cFailedRomSemaphoreHandle, pdMS_TO_TICKS(updateFrequencyMs)))
 		{
 			HAL_GPIO_WritePin(GPIOC, nNVM_WE_Pin, GPIO_PIN_SET);
 			vPortFree(message.pPayload);
 			continue;	// Update period already elapsed, so just continue
-		}
-		
-		if (xSemaphoreTake(i2cFailedRomSemaphoreHandle, pdMS_TO_TICKS(updateFrequencyMs))!= pdTRUE)
-		{
-			HAL_GPIO_WritePin(GPIOC, nNVM_WE_Pin, GPIO_PIN_SET);
-			continue;	// Update period already elapsed, so just continue
-		}
-		
-		if (failed)
-		{
-			HAL_GPIO_WritePin(GPIOC, nNVM_WE_Pin, GPIO_PIN_SET);
-			continue;	// Try again immediately
 		}
 		
 		HAL_GPIO_WritePin(GPIOC, nNVM_WE_Pin, GPIO_PIN_SET);
