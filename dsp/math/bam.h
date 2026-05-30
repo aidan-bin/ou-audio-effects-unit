@@ -15,7 +15,7 @@ typedef uint16_t ubam_t;    // Unsigned BAM type [0,360)
 #define BAM_MAX_ANGLE ((bam_t) -1)                          // Max angle that can be represented in BAM before wrapping back to 0
 #define UBAM_MAX_ANGLE ((ubam_t) -1)                        // Max angle that can be represented in BAM before wrapping back to 0
 
-#define BAM_PLUS_180_DEG(angle) (angle ^ BAM_180_DEG)
+#define BAM_PLUS_180_DEG(angle) ((angle) ^ BAM_180_DEG)
 
 #ifndef FIXED_POINT_Q
 #define FIXED_POINT_Q 8   // N in QN for fixed-point numbers

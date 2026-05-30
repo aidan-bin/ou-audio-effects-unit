@@ -211,9 +211,10 @@ static EchoParam normalize_echo_params(const EchoParam* param) {
     EchoParam out = *param;
 
     out.delay_samples = clamp_range(out.delay_samples, 0, MAX_ECHO_DELAY_SAMPLES);
-    out.pre_delay = clamp_range(out.pre_delay, MIN_ECHO_PRE_DELAY, MAX_ECHO_DELAY_SAMPLES);
-    if (out.delay_samples != 0 && out.pre_delay > out.delay_samples) {
-        out.pre_delay = out.delay_samples;
+    if (out.delay_samples == 0) {
+        out.pre_delay = 0;
+    } else {
+        out.pre_delay = clamp_range(out.pre_delay, MIN_ECHO_PRE_DELAY, out.delay_samples);
     }
 
     out.density = clamp_qn(out.density);
