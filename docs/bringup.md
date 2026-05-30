@@ -2,7 +2,7 @@
 
 ## Scope
 
-This checklist is for first power-on and first audio-path validation on the STM32 target represented by [firmware/stm32f303/cubemx](../firmware/stm32f303/cubemx).
+This checklist is for first power-on and first audio-path validation on the STM32 target using the local CubeMX-generated firmware project.
 
 ## Prerequisites
 
@@ -13,7 +13,7 @@ This checklist is for first power-on and first audio-path validation on the STM3
 
 ## Bring-Up Checklist
 
-1. Program firmware generated from [firmware/stm32f303/cubemx/STM32F303RETx-Audio-Effects-Unit.ioc](../firmware/stm32f303/cubemx/STM32F303RETx-Audio-Effects-Unit.ioc).
+1. Program firmware generated locally from the CubeMX project.
 2. Confirm board powers correctly and remains stable.
 3. Confirm ADC input path produces valid samples.
 4. Confirm DAC output path produces audible output.
@@ -33,5 +33,5 @@ Display/OLED support path exists in firmware, but display behavior should be tre
 
 - No audio out: verify power rails, codec analog path, and DAC DMA activity.
 - Distorted passthrough: check input biasing and output filter network against [hardware/LTspice](../hardware/LTspice) assumptions.
-- Controls unresponsive: verify GPIO and task scheduling in [firmware/stm32f303/cubemx/main.c](../firmware/stm32f303/cubemx/main.c).
+- Controls unresponsive: verify GPIO and task scheduling in the generated firmware source.
 - Peripheral issues: verify I2C addressing and queue flow in firmware I2C task path.

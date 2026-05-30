@@ -23,11 +23,11 @@ Signal convention in DSP code is unsigned 16-bit with midpoint as the x-axis.
 
 ## Firmware Path
 
-Current firmware is centered in [firmware/stm32f303/cubemx/main.c](../firmware/stm32f303/cubemx/main.c).
+The STM32 firmware is generated locally with CubeMX and is not tracked in Git.
 
 The runtime model is FreeRTOS task-based with DMA-backed ADC/DAC audio movement and ping-pong sample buffers.
 
-High-level subsystems in current code include:
+High-level subsystems in the firmware include:
 
 - effect processing
 - button/switch/pot handlers

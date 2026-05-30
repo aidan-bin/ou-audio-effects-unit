@@ -264,13 +264,9 @@ osMessageQId displayCommandQueueHandle;
 uint8_t displayCommandQueueBuffer[ 16 * sizeof( uint16_t ) ];
 osStaticMessageQDef_t displayCommandQueueControlBlock;
 osSemaphoreId delaySamplesDmaSemaphoreHandle;
-osStaticSemaphoreDef_t delaySamplesDmaSemaphoreControlBlock;
 osSemaphoreId i2cCompletionSemaphoreHandle;
-osStaticSemaphoreDef_t i2cCompletionSemaphoreControlBlock;
 osSemaphoreId i2cFailedRomSemaphoreHandle;
-osStaticSemaphoreDef_t i2cFailedRomSemaphoreControlBlock;
 osSemaphoreId i2cFailedDisplaySemaphoreHandle;
-osStaticSemaphoreDef_t i2cFailedDisplaySemaphoreControlBlock;
 /* USER CODE BEGIN PV */
 
 /* Structure to keep track of the effects group configuration state */
@@ -516,6 +512,7 @@ static int effect_slots_process(const EffectSlots *slots, Effect effect, const u
   */
 int main(void)
 {
+
   /* USER CODE BEGIN 1 */
 
   /* USER CODE END 1 */
@@ -558,19 +555,19 @@ int main(void)
 
   /* Create the semaphores(s) */
   /* definition and creation of delaySamplesDmaSemaphore */
-  osSemaphoreStaticDef(delaySamplesDmaSemaphore, &delaySamplesDmaSemaphoreControlBlock);
+  osSemaphoreDef(delaySamplesDmaSemaphore);
   delaySamplesDmaSemaphoreHandle = osSemaphoreCreate(osSemaphore(delaySamplesDmaSemaphore), 1);
 
   /* definition and creation of i2cCompletionSemaphore */
-  osSemaphoreStaticDef(i2cCompletionSemaphore, &i2cCompletionSemaphoreControlBlock);
+  osSemaphoreDef(i2cCompletionSemaphore);
   i2cCompletionSemaphoreHandle = osSemaphoreCreate(osSemaphore(i2cCompletionSemaphore), 1);
 
   /* definition and creation of i2cFailedRomSemaphore */
-  osSemaphoreStaticDef(i2cFailedRomSemaphore, &i2cFailedRomSemaphoreControlBlock);
+  osSemaphoreDef(i2cFailedRomSemaphore);
   i2cFailedRomSemaphoreHandle = osSemaphoreCreate(osSemaphore(i2cFailedRomSemaphore), 1);
 
   /* definition and creation of i2cFailedDisplaySemaphore */
-  osSemaphoreStaticDef(i2cFailedDisplaySemaphore, &i2cFailedDisplaySemaphoreControlBlock);
+  osSemaphoreDef(i2cFailedDisplaySemaphore);
   i2cFailedDisplaySemaphoreHandle = osSemaphoreCreate(osSemaphore(i2cFailedDisplaySemaphore), 1);
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
@@ -639,6 +636,7 @@ int main(void)
   osKernelStart();
 
   /* We should never get here as control is now taken by the scheduler */
+
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
@@ -675,6 +673,7 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+
   /** Initializes the CPU, AHB and APB buses clocks
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
@@ -720,6 +719,7 @@ static void MX_ADC1_Init(void)
   /* USER CODE BEGIN ADC1_Init 1 */
 
   /* USER CODE END ADC1_Init 1 */
+
   /** Common config
   */
   hadc1.Instance = ADC1;
@@ -740,6 +740,7 @@ static void MX_ADC1_Init(void)
   {
     Error_Handler();
   }
+
   /** Configure the ADC multi-mode
   */
   multimode.Mode = ADC_MODE_INDEPENDENT;
@@ -747,6 +748,7 @@ static void MX_ADC1_Init(void)
   {
     Error_Handler();
   }
+
   /** Configure Regular Channel
   */
   sConfig.Channel = ADC_CHANNEL_1;
@@ -783,6 +785,7 @@ static void MX_ADC3_Init(void)
   /* USER CODE BEGIN ADC3_Init 1 */
 
   /* USER CODE END ADC3_Init 1 */
+
   /** Common config
   */
   hadc3.Instance = ADC3;
@@ -803,6 +806,7 @@ static void MX_ADC3_Init(void)
   {
     Error_Handler();
   }
+
   /** Configure the ADC multi-mode
   */
   multimode.Mode = ADC_MODE_INDEPENDENT;
@@ -810,6 +814,7 @@ static void MX_ADC3_Init(void)
   {
     Error_Handler();
   }
+
   /** Configure Regular Channel
   */
   sConfig.Channel = ADC_CHANNEL_1;
@@ -845,6 +850,7 @@ static void MX_DAC1_Init(void)
   /* USER CODE BEGIN DAC1_Init 1 */
 
   /* USER CODE END DAC1_Init 1 */
+
   /** DAC Initialization
   */
   hdac1.Instance = DAC1;
@@ -852,6 +858,7 @@ static void MX_DAC1_Init(void)
   {
     Error_Handler();
   }
+
   /** DAC channel OUT1 config
   */
   sConfig.DAC_Trigger = DAC_TRIGGER_T2_TRGO;
@@ -894,12 +901,14 @@ static void MX_I2C1_Init(void)
   {
     Error_Handler();
   }
+
   /** Configure Analogue filter
   */
   if (HAL_I2CEx_ConfigAnalogFilter(&hi2c1, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
   {
     Error_Handler();
   }
+
   /** Configure Digital filter
   */
   if (HAL_I2CEx_ConfigDigitalFilter(&hi2c1, 0) != HAL_OK)
@@ -1139,6 +1148,9 @@ static void MX_DMA_Init(void)
 static void MX_GPIO_Init(void)
 {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
+  /* USER CODE BEGIN MX_GPIO_Init_1 */
+
+  /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
@@ -1189,6 +1201,9 @@ static void MX_GPIO_Init(void)
   HAL_NVIC_SetPriority(EXTI15_10_IRQn, 5, 0);
   HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
+  /* USER CODE BEGIN MX_GPIO_Init_2 */
+
+  /* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
@@ -2079,7 +2094,7 @@ void startDisplayHandlerTask(void const * argument)
   /* USER CODE END startDisplayHandlerTask */
 }
 
- /**
+/**
   * @brief  Period elapsed callback in non blocking mode
   * @note   This function is called  when TIM1 interrupt took place, inside
   * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
@@ -2092,7 +2107,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   /* USER CODE BEGIN Callback 0 */
 
   /* USER CODE END Callback 0 */
-  if (htim->Instance == TIM1) {
+  if (htim->Instance == TIM1)
+  {
     HAL_IncTick();
   }
   /* USER CODE BEGIN Callback 1 */
@@ -2114,8 +2130,7 @@ void Error_Handler(void)
   }
   /* USER CODE END Error_Handler_Debug */
 }
-
-#ifdef  USE_FULL_ASSERT
+#ifdef USE_FULL_ASSERT
 /**
   * @brief  Reports the name of the source file and the source line number
   *         where the assert_param error has occurred.
@@ -2131,5 +2146,3 @@ void assert_failed(uint8_t *file, uint32_t line)
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
-
-/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

@@ -28,7 +28,7 @@ The demo launcher builds the shared DSP library, creates/uses a local virtualenv
 
 ## Firmware Snapshot
 
-Current STM32 firmware lives under [firmware/stm32f303/cubemx](firmware/stm32f303/cubemx).
+The STM32 firmware project is generated locally with CubeMX and is not checked into this repository.
 
 - FreeRTOS task-based control flow
 - ping-pong sample buffering

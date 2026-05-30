@@ -38,4 +38,7 @@ __pycache__/
 *-cache.lib
 fp-info-cache
 
+# CubeMX artifacts
+firmware/stm32f303/cubemx/
+
 .local/
