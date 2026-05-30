@@ -1102,6 +1102,46 @@ static void test_runtime_echo_setter_normalizes_params(void)
     expect_eq_u16_array(direct_output, runtime_output, 4, "runtime echo normalize parity");
 }
 
+static void test_runtime_echo_zero_delay_normalizes_to_copy(void)
+{
+    const uint16_t input_with_delay[] = {
+        (uint16_t)(X_AXIS + 10),
+        (uint16_t)(X_AXIS + 20),
+        (uint16_t)(X_AXIS + 30),
+        (uint16_t)(X_AXIS + 40),
+    };
+
+    EchoParam raw_param = {
+        .delay_samples = 0,
+        .pre_delay = 3,
+        .density = Q_ONE,
+        .attack = Q_ONE,
+        .decay = Q_ONE,
+    };
+
+    uint16_t direct_output[4] = {0};
+    buf_echo(input_with_delay, direct_output, 4, &raw_param);
+
+    EffectInstance instance;
+    effect_instance_init(&instance, EFFECT_TYPE_ECHO);
+    if (effect_instance_set_echo_params(&instance, &raw_param) != 0)
+    {
+        fprintf(stderr, "FAIL: runtime zero-delay echo normalize set params\n");
+        failures++;
+        return;
+    }
+
+    uint16_t runtime_output[4] = {0};
+    if (effect_instance_process(&instance, input_with_delay, runtime_output, 4) != 0)
+    {
+        fprintf(stderr, "FAIL: runtime zero-delay echo normalize process\n");
+        failures++;
+        return;
+    }
+
+    expect_eq_u16_array(direct_output, runtime_output, 4, "runtime zero-delay echo normalize parity");
+}
+
 static void test_runtime_compression_setter_normalizes_params(void)
 {
     const uint16_t input[] = {
@@ -1475,6 +1515,7 @@ int main(void)
     test_runtime_rejects_wrong_param_setter();
     test_runtime_overdrive_setter_normalizes_params();
     test_runtime_echo_setter_normalizes_params();
+    test_runtime_echo_zero_delay_normalizes_to_copy();
     test_runtime_compression_setter_normalizes_params();
     test_handle_rejects_use_before_init();
     test_handle_overdrive_parity();
