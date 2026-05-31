@@ -65,6 +65,16 @@ target_link_libraries(ou_firmware_app PRIVATE ou_dsp)
 if(OU_BUILD_TESTS)
     enable_testing()
 
+    add_library(ou_firmware_mocks STATIC
+        tests/mocks/hal_mock.c
+        tests/mocks/freertos_mock.c
+    )
+
+    target_include_directories(ou_firmware_mocks
+        PUBLIC
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests
+    )
+
     add_executable(ou_dsp_tests
         tests/test_dsp.c
     )
@@ -110,4 +120,16 @@ if(OU_BUILD_TESTS)
     endif()
 
     add_test(NAME ou_firmware_control_logic_tests COMMAND ou_firmware_control_logic_tests)
+
+    add_executable(ou_firmware_peripheral_mocks_tests
+        tests/test_firmware_peripheral_mocks.c
+    )
+
+    target_link_libraries(ou_firmware_peripheral_mocks_tests PRIVATE ou_firmware_mocks)
+
+    if(APPLE OR UNIX)
+        target_link_libraries(ou_firmware_peripheral_mocks_tests PRIVATE m)
+    endif()
+
+    add_test(NAME ou_firmware_peripheral_mocks_tests COMMAND ou_firmware_peripheral_mocks_tests)
 endif()
