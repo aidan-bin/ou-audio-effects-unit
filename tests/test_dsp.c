@@ -51,9 +51,9 @@ static void test_q_tanh_clamps(void)
 
 static void test_q_tanh_odd_symmetry(void)
 {
-    for (int16_t x = 1; x <= (5 * Q_ONE); x += 13)
+    for (int32_t x = 1; x <= (int32_t)(5 * Q_ONE); x += 13)
     {
-        int16_t positive = q_tanh(x);
+        int16_t positive = q_tanh((int16_t)x);
         int16_t negative = q_tanh((int16_t)-x);
 
         if (negative != (int16_t)-positive)
@@ -62,6 +62,38 @@ static void test_q_tanh_odd_symmetry(void)
                 positive, negative);
             failures++;
         }
+    }
+}
+
+static void test_overdrive_extreme_inputs_stay_bounded(void)
+{
+    const uint16_t input[] = {
+        0,
+        (uint16_t)X_AXIS,
+        UINT16_MAX,
+    };
+
+    uint16_t output[3] = {0};
+    OverdriveParam param = {
+        .level = MAX_OVERDRIVE_LEVEL,
+        .gain = Q_ONE,
+        .tone = MAX_OVERDRIVE_TONE,
+        .mix = Q_ONE,
+    };
+
+    buf_overdrive(input, output, 3, &param);
+
+    if (!(output[0] <= (uint16_t)X_AXIS && output[1] == (uint16_t)X_AXIS && output[2] >= (uint16_t)X_AXIS))
+    {
+        fprintf(stderr, "FAIL: overdrive extreme bounds low=%u mid=%u high=%u\n", output[0],
+            output[1], output[2]);
+        failures++;
+    }
+
+    if (output[0] > output[2])
+    {
+        fprintf(stderr, "FAIL: overdrive extreme monotonic low=%u high=%u\n", output[0], output[2]);
+        failures++;
     }
 }
 
@@ -496,6 +528,36 @@ static void test_compression_sign_symmetry(void)
     }
 }
 
+static void test_compression_extreme_inputs_stay_ordered(void)
+{
+    const uint16_t input[] = {
+        0,
+        (uint16_t)(X_AXIS - 1000),
+        (uint16_t)X_AXIS,
+        (uint16_t)(X_AXIS + 1000),
+        UINT16_MAX,
+    };
+
+    uint16_t output[5] = {0};
+    CompressionParam param = {
+        .threshold = 300,
+        .ratio = Q_ONE,
+    };
+
+    buf_compression(input, output, 5, &param);
+
+    for (size_t i = 1; i < 5; i++)
+    {
+        if (output[i - 1] > output[i])
+        {
+            fprintf(stderr, "FAIL: compression ordering idx=%zu prev=%u curr=%u\n", i,
+                output[i - 1], output[i]);
+            failures++;
+            return;
+        }
+    }
+}
+
 static void test_echo_attack_zero_is_copy(void)
 {
     const EchoParam param = {
@@ -745,7 +807,7 @@ static void test_echo_high_density_clamps_spacing(void)
     const EchoParam param = {
         .delay_samples = 2,
         .pre_delay = 1,
-        .density = (2U * Q_ONE),
+        .density = (size_t)(2U * Q_ONE),
         .attack = Q_ONE,
         .decay = Q_ONE,
     };
@@ -1521,12 +1583,14 @@ int main(void)
     test_overdrive_level_above_max_clamps();
     test_overdrive_tone_above_max_clamps();
     test_overdrive_sign_symmetry();
+    test_overdrive_extreme_inputs_stay_bounded();
     test_compression_ratio_behavior();
     test_compression_zero_threshold_hard_clip();
     test_compression_ratio_above_one_clamps_to_hard_clip();
     test_compression_threshold_above_axis_clamps();
     test_compression_threshold_above_axis_clamps_negative_side();
     test_compression_sign_symmetry();
+    test_compression_extreme_inputs_stay_ordered();
     test_echo_attack_zero_is_copy();
     test_echo_zero_density_is_copy();
     test_echo_pre_delay_beyond_window_is_copy();

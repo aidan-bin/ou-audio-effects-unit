@@ -26,144 +26,12 @@
 #include <stdbool.h>
 #include <string.h>
 #include "effect_runtime.h"
+#include "effects_control_logic.h"
+#include "effects_state_manager.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-
-#define NUM_EFFECTS 3
-
-typedef enum
-{
-	OVERDRIVE,
-	ECHO,
-	COMPRESSION,
-} Effect;
-
-typedef struct
-{
-	Effect ordered[NUM_EFFECTS];		// Active effects in order
-	bool isEnabled[NUM_EFFECTS];		// Whether each active effect is enabled (indexable by ordered)
-	uint8_t activeEffectSelection;	// Which effect is currently selected (i.e., an index of ordered)
-} EffectsState;
-
-static bool effect_is_valid(Effect effect)
-{
-  return effect >= OVERDRIVE && effect <= COMPRESSION;
-}
-
-static void effects_state_set_default_order(EffectsState *state)
-{
-  if (state == NULL)
-  {
-    return;
-  }
-
-  state->ordered[0] = OVERDRIVE;
-  state->ordered[1] = ECHO;
-  state->ordered[2] = COMPRESSION;
-}
-
-static bool effects_state_order_valid(const EffectsState *state)
-{
-  if (state == NULL)
-  {
-    return false;
-  }
-
-  bool seen[NUM_EFFECTS] = {false};
-
-  for (int i = 0; i < NUM_EFFECTS; i++)
-  {
-    if (!effect_is_valid(state->ordered[i]))
-    {
-      return false;
-    }
-
-    if (seen[state->ordered[i]])
-    {
-      return false;
-    }
-
-    seen[state->ordered[i]] = true;
-  }
-
-  return true;
-}
-
-static void effects_state_normalize(EffectsState *state)
-{
-  if (state == NULL)
-  {
-    return;
-  }
-
-  if (!effects_state_order_valid(state))
-  {
-    effects_state_set_default_order(state);
-  }
-
-  if (state->activeEffectSelection >= NUM_EFFECTS)
-  {
-    state->activeEffectSelection = 0;
-  }
-}
-
-static bool effects_state_get_active_effect(const EffectsState *state, Effect *activeEffect)
-{
-  if (state == NULL || activeEffect == NULL)
-  {
-    return false;
-  }
-
-  if (!effects_state_order_valid(state))
-  {
-    return false;
-  }
-
-  if (state->activeEffectSelection >= NUM_EFFECTS)
-  {
-    return false;
-  }
-
-  *activeEffect = state->ordered[state->activeEffectSelection];
-  return effect_is_valid(*activeEffect);
-}
-
-static size_t map_adc_to_param(uint32_t adcValue, size_t min, size_t max, uint32_t adcMax)
-{
-  if (adcMax == 0)
-  {
-    return min;
-  }
-
-  if (max < min)
-  {
-    size_t temp = min;
-    min = max;
-    max = temp;
-  }
-
-  if (adcValue > adcMax)
-  {
-    adcValue = adcMax;
-  }
-
-  return (((uint32_t) adcValue << FIXED_POINT_Q) / adcMax * (max - min) + min) >> FIXED_POINT_Q;
-}
-
-typedef struct
-{
-	/* Effects configurations */
-	OverdriveParam overdrive;
-	EchoParam echo;
-	CompressionParam compression;
-	
-	/* Effects limits (min and max values for each effect, corresponding to each end of pot) */
-	OverdriveParam overdriveMin, overdriveMax;
-	EchoParam echoMin, echoMax;
-	CompressionParam compressionMin, compressionMax;
-} EffectsParams;
 
 typedef struct
 {
@@ -1619,9 +1487,7 @@ void startSwHandlerTask(void const * argument)
     effects_state_normalize(&latchedEffectsState);
 
     taskENTER_CRITICAL();
-    effectsState.isEnabled[latchedEffectsState.ordered[0]] = switchAEnabled;
-    effectsState.isEnabled[latchedEffectsState.ordered[1]] = switchBEnabled;
-    effectsState.isEnabled[latchedEffectsState.ordered[2]] = switchCEnabled;
+    effects_state_apply_switches((EffectsState *)&effectsState, switchAEnabled, switchBEnabled, switchCEnabled);
     taskEXIT_CRITICAL();
 
 		osDelay(pollingFrequencyMs);
@@ -1695,110 +1561,10 @@ void startPotHandlerTask(void const * argument)
         continue;
       }
 
-			/* Handle POT_x depending on active effect */
-      if (activeEffect == OVERDRIVE)
-			{
-				switch (pot)
-				{
-					case 0:
-					{
-						taskENTER_CRITICAL();	// Effects params are accessed by other tasks and this is not atomic
-						size_t min = effectsParams.overdriveMin.gain;
-						size_t max = effectsParams.overdriveMax.gain;
-            effectsParams.overdrive.gain = map_adc_to_param(adcValue, min, max, adcMax);
-						taskEXIT_CRITICAL();
-					} break;
-					case 1:
-					{
-						taskENTER_CRITICAL();
-						size_t min = effectsParams.overdriveMin.level;
-						size_t max = effectsParams.overdriveMax.level;
-            effectsParams.overdrive.level = map_adc_to_param(adcValue, min, max, adcMax);
-						taskEXIT_CRITICAL();
-					} break;
-					case 2:
-					{
-						taskENTER_CRITICAL();
-						size_t min = effectsParams.overdriveMin.tone;
-						size_t max = effectsParams.overdriveMax.tone;
-            effectsParams.overdrive.tone = map_adc_to_param(adcValue, min, max, adcMax);
-						taskEXIT_CRITICAL();
-					} break;
-					case 3:
-					{
-						taskENTER_CRITICAL();
-						size_t min = effectsParams.overdriveMin.mix;
-						size_t max = effectsParams.overdriveMax.mix;
-            effectsParams.overdrive.mix = map_adc_to_param(adcValue, min, max, adcMax);
-						taskEXIT_CRITICAL();
-					} break;
-					default: break;
-				}
-			}
-      else if (activeEffect == ECHO)
-			{
-				switch (pot)
-				{
-					case 0:
-					{
-						taskENTER_CRITICAL();
-						size_t min = effectsParams.echoMin.pre_delay;
-						size_t max = effectsParams.echoMax.pre_delay;
-            effectsParams.echo.pre_delay = map_adc_to_param(adcValue, min, max, adcMax);
-						taskEXIT_CRITICAL();
-					} break;
-					case 1:
-					{
-						taskENTER_CRITICAL();
-						size_t min = effectsParams.echoMin.density;
-						size_t max = effectsParams.echoMax.density;
-            effectsParams.echo.density = map_adc_to_param(adcValue, min, max, adcMax);
-						taskEXIT_CRITICAL();
-					} break;
-					case 2:
-					{
-						taskENTER_CRITICAL();
-						size_t min = effectsParams.echoMin.attack;
-						size_t max = effectsParams.echoMax.attack;
-            effectsParams.echo.attack = map_adc_to_param(adcValue, min, max, adcMax);
-						taskEXIT_CRITICAL();
-					} break;
-					case 3:
-					{
-						taskENTER_CRITICAL();
-						size_t min = effectsParams.echoMin.decay;
-						size_t max = effectsParams.echoMax.decay;
-            effectsParams.echo.decay = map_adc_to_param(adcValue, min, max, adcMax);
-						taskEXIT_CRITICAL();
-					} break;
-					default: break;
-				}
-			}
-      else if (activeEffect == COMPRESSION)
-			{
-				switch (pot)
-				{
-					case 0:
-					{
-						taskENTER_CRITICAL();
-						size_t min = effectsParams.compressionMin.threshold;
-						size_t max = effectsParams.compressionMax.threshold;
-            effectsParams.compression.threshold = map_adc_to_param(adcValue, min, max, adcMax);
-						taskEXIT_CRITICAL();
-					} break;
-					case 1:
-					{
-						taskENTER_CRITICAL();
-						size_t min = effectsParams.compressionMin.ratio;
-						size_t max = effectsParams.compressionMax.ratio;
-            effectsParams.compression.ratio = map_adc_to_param(adcValue, min, max, adcMax);
-						taskEXIT_CRITICAL();
-					} break;
-					case 2:	break;
-					case 3:	break;
-					default: break;
-				}
-			}
+      /* Handle POT_x depending on active effect */
+      taskENTER_CRITICAL();
+      (void)effects_params_apply_pot_sample((EffectsParams *)&effectsParams, activeEffect, (uint8_t)pot, adcValue, adcMax);
+      taskEXIT_CRITICAL();
 		}
   }
   /* USER CODE END startPotHandlerTask */

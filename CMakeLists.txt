@@ -17,6 +17,11 @@ set(OU_DSP_SOURCES
     dsp/math/fast_math.c
 )
 
+set(OU_FIRMWARE_APP_SOURCES
+    firmware/stm32f303/app/src/effects_state_manager.c
+    firmware/stm32f303/app/src/effects_control_logic.c
+)
+
 add_library(ou_dsp STATIC ${OU_DSP_SOURCES})
 target_include_directories(ou_dsp
     PUBLIC
@@ -48,6 +53,15 @@ if(OU_BUILD_SHARED_LIB)
     endif()
 endif()
 
+add_library(ou_firmware_app STATIC ${OU_FIRMWARE_APP_SOURCES})
+target_include_directories(ou_firmware_app
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/firmware/stm32f303/app/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/dsp/effects
+)
+
+target_link_libraries(ou_firmware_app PRIVATE ou_dsp)
+
 if(OU_BUILD_TESTS)
     enable_testing()
 
@@ -62,4 +76,38 @@ if(OU_BUILD_TESTS)
     endif()
 
     add_test(NAME ou_dsp_tests COMMAND ou_dsp_tests)
+
+    add_executable(ou_firmware_state_tests
+        tests/test_firmware_state.c
+    )
+
+    target_include_directories(ou_firmware_state_tests
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/firmware/stm32f303/app/include
+    )
+
+    target_link_libraries(ou_firmware_state_tests PRIVATE ou_firmware_app)
+
+    if(APPLE OR UNIX)
+        target_link_libraries(ou_firmware_state_tests PRIVATE m)
+    endif()
+
+    add_test(NAME ou_firmware_state_tests COMMAND ou_firmware_state_tests)
+
+    add_executable(ou_firmware_control_logic_tests
+        tests/test_firmware_control_logic.c
+    )
+
+    target_include_directories(ou_firmware_control_logic_tests
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/firmware/stm32f303/app/include
+    )
+
+    target_link_libraries(ou_firmware_control_logic_tests PRIVATE ou_firmware_app)
+
+    if(APPLE OR UNIX)
+        target_link_libraries(ou_firmware_control_logic_tests PRIVATE m)
+    endif()
+
+    add_test(NAME ou_firmware_control_logic_tests COMMAND ou_firmware_control_logic_tests)
 endif()
