@@ -10,6 +10,47 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 option(OU_BUILD_SHARED_LIB "Build shared effects library for host demo" ON)
 option(OU_BUILD_TESTS "Build DSP unit tests" ON)
 
+set(OU_FIRMWARE_APP_INCLUDE_DIR
+    ${CMAKE_CURRENT_SOURCE_DIR}/firmware/stm32f303/app/include
+)
+
+set(OU_FIRMWARE_APP_STANDARD_TESTS
+    effects_model
+    effects_pipeline
+    effects_task
+    pot_task
+    switch_task
+    button_task
+    task_integration
+    rom_task_support
+    peripheral_dispatch
+    rom_handler
+)
+
+function(ou_link_math_library target_name)
+    if(APPLE OR UNIX)
+        target_link_libraries(${target_name} PRIVATE m)
+    endif()
+endfunction()
+
+function(ou_add_firmware_app_test test_basename)
+    set(test_target ou_firmware_${test_basename}_tests)
+
+    add_executable(${test_target}
+        tests/test_firmware_${test_basename}.c
+    )
+
+    target_include_directories(${test_target}
+        PRIVATE
+            ${OU_FIRMWARE_APP_INCLUDE_DIR}
+    )
+
+    target_link_libraries(${test_target} PRIVATE ou_firmware_app)
+    ou_link_math_library(${test_target})
+
+    add_test(NAME ${test_target} COMMAND ${test_target})
+endfunction()
+
 set(OU_DSP_SOURCES
     dsp/effects/effect_runtime.c
     dsp/effects/effects.c
@@ -45,9 +86,7 @@ if(OU_BUILD_SHARED_LIB)
             ${CMAKE_CURRENT_SOURCE_DIR}/dsp/math
     )
 
-    if(APPLE OR UNIX)
-        target_link_libraries(ou_effects_shared PRIVATE m)
-    endif()
+    ou_link_math_library(ou_effects_shared)
 
     set_target_properties(ou_effects_shared PROPERTIES
         OUTPUT_NAME libeffects
@@ -64,7 +103,7 @@ endif()
 add_library(ou_firmware_app STATIC ${OU_FIRMWARE_APP_SOURCES})
 target_include_directories(ou_firmware_app
     PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/firmware/stm32f303/app/include
+    ${OU_FIRMWARE_APP_INCLUDE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/dsp/effects
 )
 
@@ -88,177 +127,20 @@ if(OU_BUILD_TESTS)
     )
 
     target_link_libraries(ou_dsp_tests PRIVATE ou_dsp)
-
-    if(APPLE OR UNIX)
-        target_link_libraries(ou_dsp_tests PRIVATE m)
-    endif()
-
+    ou_link_math_library(ou_dsp_tests)
     add_test(NAME ou_dsp_tests COMMAND ou_dsp_tests)
 
-    add_executable(ou_firmware_effects_model_tests
-        tests/test_firmware_effects_model.c
-    )
-
-    target_include_directories(ou_firmware_effects_model_tests
-        PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/firmware/stm32f303/app/include
-    )
-
-    target_link_libraries(ou_firmware_effects_model_tests PRIVATE ou_firmware_app)
-
-    if(APPLE OR UNIX)
-        target_link_libraries(ou_firmware_effects_model_tests PRIVATE m)
-    endif()
-
-    add_test(NAME ou_firmware_effects_model_tests COMMAND ou_firmware_effects_model_tests)
-
-    add_executable(ou_firmware_effects_pipeline_tests
-        tests/test_firmware_effects_pipeline.c
-    )
-
-    target_include_directories(ou_firmware_effects_pipeline_tests
-        PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/firmware/stm32f303/app/include
-    )
-
-    target_link_libraries(ou_firmware_effects_pipeline_tests PRIVATE ou_firmware_app)
-
-    if(APPLE OR UNIX)
-        target_link_libraries(ou_firmware_effects_pipeline_tests PRIVATE m)
-    endif()
-
-    add_test(NAME ou_firmware_effects_pipeline_tests COMMAND ou_firmware_effects_pipeline_tests)
-
-    add_executable(ou_firmware_effects_task_tests
-        tests/test_firmware_effects_task.c
-    )
-
-    target_include_directories(ou_firmware_effects_task_tests
-        PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/firmware/stm32f303/app/include
-    )
-
-    target_link_libraries(ou_firmware_effects_task_tests PRIVATE ou_firmware_app)
-
-    if(APPLE OR UNIX)
-        target_link_libraries(ou_firmware_effects_task_tests PRIVATE m)
-    endif()
-
-    add_test(NAME ou_firmware_effects_task_tests COMMAND ou_firmware_effects_task_tests)
-
-    add_executable(ou_firmware_pot_task_tests
-        tests/test_firmware_pot_task.c
-    )
-
-    target_include_directories(ou_firmware_pot_task_tests
-        PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/firmware/stm32f303/app/include
-    )
-
-    target_link_libraries(ou_firmware_pot_task_tests PRIVATE ou_firmware_app)
-
-    if(APPLE OR UNIX)
-        target_link_libraries(ou_firmware_pot_task_tests PRIVATE m)
-    endif()
-
-    add_test(NAME ou_firmware_pot_task_tests COMMAND ou_firmware_pot_task_tests)
-
-    add_executable(ou_firmware_switch_task_tests
-        tests/test_firmware_switch_task.c
-    )
-
-    target_include_directories(ou_firmware_switch_task_tests
-        PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/firmware/stm32f303/app/include
-    )
-
-    target_link_libraries(ou_firmware_switch_task_tests PRIVATE ou_firmware_app)
-
-    if(APPLE OR UNIX)
-        target_link_libraries(ou_firmware_switch_task_tests PRIVATE m)
-    endif()
-
-    add_test(NAME ou_firmware_switch_task_tests COMMAND ou_firmware_switch_task_tests)
-
-    add_executable(ou_firmware_button_task_tests
-        tests/test_firmware_button_task.c
-    )
-
-    target_include_directories(ou_firmware_button_task_tests
-        PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/firmware/stm32f303/app/include
-    )
-
-    target_link_libraries(ou_firmware_button_task_tests PRIVATE ou_firmware_app)
-
-    if(APPLE OR UNIX)
-        target_link_libraries(ou_firmware_button_task_tests PRIVATE m)
-    endif()
-
-    add_test(NAME ou_firmware_button_task_tests COMMAND ou_firmware_button_task_tests)
-
-    add_executable(ou_firmware_task_integration_tests
-        tests/test_firmware_task_integration.c
-    )
-
-    target_include_directories(ou_firmware_task_integration_tests
-        PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/firmware/stm32f303/app/include
-    )
-
-    target_link_libraries(ou_firmware_task_integration_tests PRIVATE ou_firmware_app)
-
-    if(APPLE OR UNIX)
-        target_link_libraries(ou_firmware_task_integration_tests PRIVATE m)
-    endif()
-
-    add_test(NAME ou_firmware_task_integration_tests COMMAND ou_firmware_task_integration_tests)
-
-    add_executable(ou_firmware_rom_task_support_tests
-        tests/test_firmware_rom_task_support.c
-    )
-
-    target_include_directories(ou_firmware_rom_task_support_tests
-        PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/firmware/stm32f303/app/include
-    )
-
-    target_link_libraries(ou_firmware_rom_task_support_tests PRIVATE ou_firmware_app)
-
-    if(APPLE OR UNIX)
-        target_link_libraries(ou_firmware_rom_task_support_tests PRIVATE m)
-    endif()
-
-    add_test(NAME ou_firmware_rom_task_support_tests COMMAND ou_firmware_rom_task_support_tests)
+    foreach(test_basename IN LISTS OU_FIRMWARE_APP_STANDARD_TESTS)
+        ou_add_firmware_app_test(${test_basename})
+    endforeach()
 
     add_executable(ou_firmware_peripheral_mocks_tests
         tests/test_firmware_peripheral_mocks.c
     )
 
     target_link_libraries(ou_firmware_peripheral_mocks_tests PRIVATE ou_firmware_mocks)
-
-    if(APPLE OR UNIX)
-        target_link_libraries(ou_firmware_peripheral_mocks_tests PRIVATE m)
-    endif()
-
+    ou_link_math_library(ou_firmware_peripheral_mocks_tests)
     add_test(NAME ou_firmware_peripheral_mocks_tests COMMAND ou_firmware_peripheral_mocks_tests)
-
-    add_executable(ou_firmware_peripheral_dispatch_tests
-        tests/test_firmware_peripheral_dispatch.c
-    )
-
-    target_include_directories(ou_firmware_peripheral_dispatch_tests
-        PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/firmware/stm32f303/app/include
-    )
-
-    target_link_libraries(ou_firmware_peripheral_dispatch_tests PRIVATE ou_firmware_app)
-
-    if(APPLE OR UNIX)
-        target_link_libraries(ou_firmware_peripheral_dispatch_tests PRIVATE m)
-    endif()
-
-    add_test(NAME ou_firmware_peripheral_dispatch_tests COMMAND ou_firmware_peripheral_dispatch_tests)
 
     add_executable(ou_firmware_i2c_handler_tests
         tests/test_firmware_i2c_handler.c
@@ -266,31 +148,10 @@ if(OU_BUILD_TESTS)
 
     target_include_directories(ou_firmware_i2c_handler_tests
         PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/firmware/stm32f303/app/include
+            ${OU_FIRMWARE_APP_INCLUDE_DIR}
     )
 
     target_link_libraries(ou_firmware_i2c_handler_tests PRIVATE ou_firmware_app ou_firmware_mocks)
-
-    if(APPLE OR UNIX)
-        target_link_libraries(ou_firmware_i2c_handler_tests PRIVATE m)
-    endif()
-
+    ou_link_math_library(ou_firmware_i2c_handler_tests)
     add_test(NAME ou_firmware_i2c_handler_tests COMMAND ou_firmware_i2c_handler_tests)
-
-    add_executable(ou_firmware_rom_handler_tests
-        tests/test_firmware_rom_handler.c
-    )
-
-    target_include_directories(ou_firmware_rom_handler_tests
-        PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/firmware/stm32f303/app/include
-    )
-
-    target_link_libraries(ou_firmware_rom_handler_tests PRIVATE ou_firmware_app)
-
-    if(APPLE OR UNIX)
-        target_link_libraries(ou_firmware_rom_handler_tests PRIVATE m)
-    endif()
-
-    add_test(NAME ou_firmware_rom_handler_tests COMMAND ou_firmware_rom_handler_tests)
 endif()
