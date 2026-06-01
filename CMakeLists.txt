@@ -236,6 +236,24 @@ if(OU_BUILD_TESTS)
 
     add_test(NAME ou_firmware_button_task_tests COMMAND ou_firmware_button_task_tests)
 
+    add_executable(ou_firmware_task_integration_tests
+        tests/test_firmware_task_integration.c
+    )
+
+    target_include_directories(ou_firmware_task_integration_tests
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/firmware/stm32f303/app/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/dsp/effects
+    )
+
+    target_link_libraries(ou_firmware_task_integration_tests PRIVATE ou_firmware_app)
+
+    if(APPLE OR UNIX)
+        target_link_libraries(ou_firmware_task_integration_tests PRIVATE m)
+    endif()
+
+    add_test(NAME ou_firmware_task_integration_tests COMMAND ou_firmware_task_integration_tests)
+
     add_executable(ou_firmware_rom_task_support_tests
         tests/test_firmware_rom_task_support.c
     )
