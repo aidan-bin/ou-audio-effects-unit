@@ -28,6 +28,7 @@
 #include "effects_control_logic.h"
 #include "effects_state_manager.h"
 #include "effects_pipeline.h"
+#include "effects_task.h"
 #include "i2c_handler.h"
 #include "i2c_task_support.h"
 #include "peripheral_dispatch.h"
@@ -195,6 +196,13 @@ static bool peripheral_adc_start_it(void *adcHandle, void *context);
 static uint32_t peripheral_adc_get_value(void *adcHandle, void *context);
 static void peripheral_i2c_signal_completion_from_isr(void *i2cContext, bool transferFailed, void *context);
 
+static bool effects_task_wait_for_adc_buffer(uint32_t timeoutTicks, uint16_t **bufPtr, void *context);
+static bool effects_task_wait_for_dac_buffer(uint32_t timeoutTicks, uint16_t **bufPtr, void *context);
+static bool effects_task_dma_copy(const uint16_t *src, uint16_t *dst, size_t count, uint32_t timeoutTicks,
+  void *context);
+static bool effects_task_read_latched_state(EffectsState *state, EffectsParams *params, void *context);
+static uint32_t effects_task_ms_to_ticks(uint32_t ms, void *context);
+
 static uint8_t *allocate_payload_adapter(size_t size, void *context);
 static void free_payload_adapter(uint8_t *payload, void *context);
 static void set_rom_write_enable_adapter(bool enabled, void *context);
@@ -293,6 +301,66 @@ static void peripheral_i2c_signal_completion_from_isr(void *i2cContext, bool tra
 {
   (void) context;
   i2c_task_signal_completion_from_isr((const I2CTaskSupportContext *) i2cContext, transferFailed);
+}
+
+static bool effects_task_wait_for_adc_buffer(uint32_t timeoutTicks, uint16_t **bufPtr, void *context)
+{
+  (void) context;
+
+  if (bufPtr == NULL)
+  {
+    return false;
+  }
+
+  uint32_t notificationValue;
+  if (xTaskNotifyWait(0, 0xFFFFFFFFUL, &notificationValue, (TickType_t) timeoutTicks) != pdTRUE)
+  {
+    return false;
+  }
+
+  *bufPtr = (uint16_t *) notificationValue;
+  return true;
+}
+
+static bool effects_task_wait_for_dac_buffer(uint32_t timeoutTicks, uint16_t **bufPtr, void *context)
+{
+  return effects_task_wait_for_adc_buffer(timeoutTicks, bufPtr, context);
+}
+
+static bool effects_task_dma_copy(const uint16_t *src, uint16_t *dst, size_t count, uint32_t timeoutTicks,
+    void *context)
+{
+  (void) context;
+
+  return peripheral_start_dma_transfer_and_wait(&hdma_memtomem_dma1_channel1,
+      (uint32_t) src,
+      (uint32_t) dst,
+      count,
+      delaySamplesDmaSemaphoreHandle,
+      timeoutTicks,
+      &peripheralDispatchOps);
+}
+
+static bool effects_task_read_latched_state(EffectsState *state, EffectsParams *params, void *context)
+{
+  (void) context;
+
+  if (state == NULL || params == NULL)
+  {
+    return false;
+  }
+
+  taskENTER_CRITICAL();
+  *state = effectsState;
+  *params = effectsParams;
+  taskEXIT_CRITICAL();
+  return true;
+}
+
+static uint32_t effects_task_ms_to_ticks(uint32_t ms, void *context)
+{
+  (void) context;
+  return pdMS_TO_TICKS(ms);
 }
 
 static uint8_t *allocate_payload_adapter(size_t size, void *context)
@@ -1154,6 +1222,33 @@ void startEffectsTask(void const * argument)
     vTaskDelete(NULL);
     return;
   }
+
+  EffectsTaskContext taskContext = {
+      .pipeline = &effectsPipeline,
+      .effectsState = &effectsState,
+      .effectsParams = &effectsParams,
+      .adcBufA = (uint16_t *) adcBufA,
+      .adcBufB = (uint16_t *) adcBufB,
+      .dacBufA = (uint16_t *) dacBufA,
+      .dacBufB = (uint16_t *) dacBufB,
+      .delaySamplesBuf = (uint16_t *) delaySamplesBuf,
+      .sampleBufLen = SAMPLE_BUF_LEN,
+      .delaySamplesLen = NUM_DELAY_SAMPLES,
+      .samplingPeriodUs = 25,
+      .processingSlackMs = 2,
+  };
+
+  EffectsTaskOps taskOps = {
+      .wait_for_adc_buffer = effects_task_wait_for_adc_buffer,
+      .wait_for_dac_buffer = effects_task_wait_for_dac_buffer,
+      .dma_copy = effects_task_dma_copy,
+      .alloc = allocate_payload_adapter,
+      .free = free_payload_adapter,
+      .read_latched_state = effects_task_read_latched_state,
+      .report_failure = NULL,
+      .ms_to_ticks = effects_task_ms_to_ticks,
+      .context = NULL,
+  };
 	
 	/* Start ADC and DAC. Note: ADC expects buffers to be ready to be filled,
 			DAC expects buffers to be ready to be read from. Software must ensure this. */
@@ -1225,210 +1320,7 @@ void startEffectsTask(void const * argument)
     if (xTaskNotifyWait(0, 0xFFFFFFFFUL, &notificationValue, ticksToWait) != pdTRUE)
 		{
 			continue;
-		}
-    currDacBuf = (uint16_t *) notificationValue;
-		
-		if (currDacBuf != dacBufA && currDacBuf != dacBufB)
-		{
-			continue;
-		}
-		
-		/* Allocate echoDelaySamplesBuf and copy over delaySamplesBuf */
-		echoDelaySamplesBuf = (uint16_t *) pvPortMalloc(NUM_DELAY_SAMPLES * sizeof(uint16_t));
-    if (echoDelaySamplesBuf == NULL)
-    {
-      processFailed = true;
-      goto effects_iteration_cleanup;
-    }
-		
-    if (!peripheral_start_dma_transfer_and_wait(&hdma_memtomem_dma1_channel1,
-      (uint32_t) delaySamplesBuf,
-      (uint32_t) echoDelaySamplesBuf,
-      NUM_DELAY_SAMPLES,
-      delaySamplesDmaSemaphoreHandle,
-      ticksToWait,
-      &peripheralDispatchOps))
-		{
-      processFailed = true;
-      goto effects_iteration_cleanup;
-		}
-		
-		/* Apply effects (in order) to inputBuf, storing in outputBuf.
-				inputBuf and outputBuf atart as the ADC and DAC buffers respectively. */
-		inputBuf = currAdcBuf;
-		outputBuf = currDacBuf;
-		
-		taskENTER_CRITICAL();
-		latchedEffectsState = effectsState;
-		latchedEffectsParams = effectsParams;
-		taskEXIT_CRITICAL();
-
-    effects_state_normalize(&latchedEffectsState);
-
-		if (effects_pipeline_sync_params(&effectsPipeline, &latchedEffectsParams) != 0)
-		{
-      processFailed = true;
-      goto effects_iteration_cleanup;
-		}
-		
-    for (int i = 0; i < NUM_EFFECTS; i++)
-		{
-			Effect effect = latchedEffectsState.ordered[i];
-			
-			if (latchedEffectsState.isEnabled[effect])
-			{
-				/* If the effect is echo, echoInputBuf must be prepared by
-						concatenating echoDelaySamples to inputBuf in a new buffer */
-				if (effect == ECHO)
-				{
-          size_t numDelaySamples = 0;	// Number of delayed samples needed (i.e., if index 0 represent n = 0 for signal x[n], x[-numDelaySamples] is the oldest sample)
-          if (effects_pipeline_get_echo_delay_samples(&effectsPipeline, &numDelaySamples) != 0)
-          {
-            processFailed = true;
-            break;
-          }
-          if (numDelaySamples > NUM_DELAY_SAMPLES)
-          {
-            numDelaySamples = NUM_DELAY_SAMPLES;
-          }
-					
-					echoInputBuf = pvPortMalloc((numDelaySamples + SAMPLE_BUF_LEN) * sizeof(uint16_t));
-          if (echoInputBuf == NULL)
-          {
-            processFailed = true;
-            break;
-          }
-					
-          if (numDelaySamples > 0)
-					{
-            if (!peripheral_start_dma_transfer_and_wait(&hdma_memtomem_dma1_channel1,
-              (uint32_t) &echoDelaySamplesBuf[NUM_DELAY_SAMPLES - numDelaySamples],
-              (uint32_t) echoInputBuf,
-              numDelaySamples,
-              delaySamplesDmaSemaphoreHandle,
-              ticksToWait,
-              &peripheralDispatchOps))
-            {
-              processFailed = true;
-              break;
-            }
-					}
-					
-            if (!peripheral_start_dma_transfer_and_wait(&hdma_memtomem_dma1_channel1,
-              (uint32_t) inputBuf,
-              (uint32_t) &echoInputBuf[numDelaySamples],
-              SAMPLE_BUF_LEN,
-              delaySamplesDmaSemaphoreHandle,
-              ticksToWait,
-              &peripheralDispatchOps))
-					{
-            processFailed = true;
-            break;
-					}
-				}
-				
-				/* Apply appropriate effect */
-        if (effect == ECHO)
-        {
-          if (effects_pipeline_process(&effectsPipeline, effect, echoInputBuf, outputBuf, SAMPLE_BUF_LEN) != 0)
-          {
-          processFailed = true;
-            break;
-          }
-        }
-        else if (effects_pipeline_process(&effectsPipeline, effect, inputBuf, outputBuf, SAMPLE_BUF_LEN) != 0)
-        {
-        processFailed = true;
-          break;
-        }
-				
-				/* If echo is enabled but not the first effect, also apply effect to delayed samples (echoDelaySamplesBuf).
-						This only needs to be done so echoes of delayed samples are consistent with non-delayed samples.*/
-				if (latchedEffectsState.isEnabled[ECHO] && latchedEffectsState.ordered[0] != ECHO)
-				{
-					/* Note: ECHO is ommitted since an effect can only appear once */
-					switch (effect)
-					{
-            case OVERDRIVE:
-            case COMPRESSION:
-              if (effects_pipeline_process(&effectsPipeline, effect, echoDelaySamplesBuf, echoDelaySamplesBuf, NUM_DELAY_SAMPLES) != 0)
-              {
-            processFailed = true;
-                break;
-              }
-              break;
-						default: break;
-					}
-				}
-
-        if (effect == ECHO && echoInputBuf != NULL)
-        {
-          vPortFree(echoInputBuf);
-          echoInputBuf = NULL;
-        }
-
-        if (processFailed)
-        {
-          break;
-        }
-				
-				/* Swap inputBuf and outputBuf. Since effects are applied sequentially,
-						outputBuf becomes the input for the next effect. */
-				temp = inputBuf;
-				inputBuf = outputBuf;
-				outputBuf = temp;
-			}
-		}
-
-effects_iteration_cleanup:
-
-    if (echoInputBuf != NULL)
-    {
-      vPortFree(echoInputBuf);
-    }
-
-    if (echoDelaySamplesBuf != NULL)
-    {
-      vPortFree(echoDelaySamplesBuf);
-    }
-
-    if (processFailed)
-    {
-      continue;
-    }
-		
-		/* If outputBuf is not the DAC buffer (i.e., the DAC buffer does not
-				have the final output), copy outputBuf to dacBuf */
-    if (outputBuf != currDacBuf)
-		{
-			memcpy(currDacBuf, outputBuf, (DAC_BUF_LEN / 2) * sizeof(uint16_t));
-		}
-  }
-  /* USER CODE END 5 */
-}
-
-/* USER CODE BEGIN Header_startBtnHandlerTask */
-/**
-* @brief Function implementing the btnHandlerTask thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_startBtnHandlerTask */
-void startBtnHandlerTask(void const * argument)
-{
-  /* USER CODE BEGIN startBtnHandlerTask */
-  /* Infinite loop */
-  for(;;)
-  {
-		/* Wait for interrupt from button */
-    uint32_t notificationValue;
-    if (xTaskNotifyWait(0, 0xFFFFFFFFUL, &notificationValue, portMAX_DELAY) != pdTRUE)
-    {
-      continue;
-    }
-    uint16_t pin = (uint16_t) notificationValue;
-		
-		switch (pin)
+      (void) effects_task_step(&taskContext, &taskOps);
 		{
 			case BTN_A_Pin:
 			{
