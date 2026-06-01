@@ -5,20 +5,11 @@
 
 #include "effects_control_logic.h"
 #include "effects_state_manager.h"
+#include "i2c_handler.h"
 #include "rom_handler.h"
 #include "rom_task_support.h"
 
 static int failures = 0;
-
-typedef struct
-{
-    void *sourceTask;
-    bool rxTxBar;
-    uint16_t address;
-    uint8_t *payload;
-    uint16_t items;
-    bool *pFailed;
-} RomTaskMessage;
 
 typedef struct
 {
@@ -68,7 +59,7 @@ static bool queue_message_and_wait(void *queueHandle, void *message, bool *pFail
     (void)timeoutTicks;
 
     RomTaskTestContext *ctx = (RomTaskTestContext *)context;
-    RomTaskMessage *romMessage = (RomTaskMessage *)message;
+    I2CHandlerMessage *romMessage = (I2CHandlerMessage *)message;
     ctx->queueCalls++;
     *pFailed = false;
 

@@ -1,19 +1,10 @@
 #include "rom_task_support.h"
 
+#include "i2c_handler.h"
 #include "rom_handler.h"
 
-typedef struct
-{
-    void *sourceTask;
-    bool rxTxBar;
-    uint16_t address;
-    uint8_t *payload;
-    uint16_t items;
-    bool *pFailed;
-} RomTaskMessage;
-
 static bool queue_message(const RomTaskSupportConfig *config, const RomTaskSupportOps *ops,
-    RomTaskMessage *message, bool *failed, uint32_t timeoutTicks)
+    I2CHandlerMessage *message, bool *failed, uint32_t timeoutTicks)
 {
     if (config == NULL || ops == NULL || message == NULL || failed == NULL ||
         ops->queue_message_and_wait == NULL)
@@ -63,7 +54,7 @@ bool rom_task_bootstrap_effects(const RomTaskSupportConfig *config, const RomTas
     const size_t payloadSizeBytes = rom_handler_read_payload_size();
 
     bool failed = true;
-    RomTaskMessage message = {0};
+    I2CHandlerMessage message = {0};
     message.sourceTask = config->sourceTask;
     message.pFailed = &failed;
 
@@ -135,7 +126,7 @@ bool rom_task_save_effects(const RomTaskSupportConfig *config, const RomTaskSupp
     const size_t payloadSizeBytes = rom_handler_write_payload_size();
 
     bool failed = true;
-    RomTaskMessage message = {0};
+    I2CHandlerMessage message = {0};
     message.sourceTask = config->sourceTask;
     message.pFailed = &failed;
 

@@ -26,36 +26,47 @@ static void give_semaphore_from_isr(osSemaphoreId semaphoreHandle)
     portYIELD_FROM_ISR(higherPriorityTaskWoken);
 }
 
-bool i2c_task_source_is_valid(const I2CTaskSupportContext *context, osThreadId sourceTask)
+bool i2c_task_source_is_valid(void *sourceTask, void *context)
 {
-    if (context == NULL)
+    const I2CTaskSupportContext *ctx = (const I2CTaskSupportContext *)context;
+
+    if (ctx == NULL)
     {
         return false;
     }
 
-    return sourceTask == context->romHandlerTaskHandle || sourceTask == context->displayHandlerTaskHandle;
+    osThreadId thread = (osThreadId)sourceTask;
+    return thread == ctx->romHandlerTaskHandle || thread == ctx->displayHandlerTaskHandle;
 }
 
-void i2c_task_signal_source_completion(const I2CTaskSupportContext *context, osThreadId sourceTask)
+void i2c_task_signal_source_completion(void *sourceTask, void *context)
 {
-    if (context == NULL)
+    const I2CTaskSupportContext *ctx = (const I2CTaskSupportContext *)context;
+
+    if (ctx == NULL)
     {
         return;
     }
 
-    if (sourceTask == context->romHandlerTaskHandle)
+    osThreadId thread = (osThreadId)sourceTask;
+    if (thread == ctx->romHandlerTaskHandle)
     {
-        xSemaphoreGive(context->i2cFailedRomSemaphoreHandle);
+        xSemaphoreGive(ctx->i2cFailedRomSemaphoreHandle);
     }
-    else if (sourceTask == context->displayHandlerTaskHandle)
+    else if (thread == ctx->displayHandlerTaskHandle)
     {
-        xSemaphoreGive(context->i2cFailedDisplaySemaphoreHandle);
+        xSemaphoreGive(ctx->i2cFailedDisplaySemaphoreHandle);
     }
 }
 
-bool i2c_task_queue_message_and_wait(osMessageQId i2cQueueHandle, void *message, bool *pFailed,
-    osSemaphoreId completionSemaphoreHandle, TickType_t timeoutTicks)
+bool i2c_task_queue_message_and_wait(void *queueHandle, void *message, bool *pFailed,
+    void *failedSemaphoreHandle, uint32_t timeoutTicks, void *context)
 {
+    (void)context;
+
+    osMessageQId i2cQueueHandle = (osMessageQId)queueHandle;
+    osSemaphoreId completionSemaphoreHandle = (osSemaphoreId)failedSemaphoreHandle;
+
     if (message == NULL || pFailed == NULL || completionSemaphoreHandle == NULL || i2cQueueHandle == NULL)
     {
         return false;
@@ -64,12 +75,12 @@ bool i2c_task_queue_message_and_wait(osMessageQId i2cQueueHandle, void *message,
     drain_semaphore(completionSemaphoreHandle);
     *pFailed = true;
 
-    if (xQueueSend(i2cQueueHandle, message, timeoutTicks) != pdPASS)
+    if (xQueueSend(i2cQueueHandle, message, (TickType_t)timeoutTicks) != pdPASS)
     {
         return false;
     }
 
-    if (xSemaphoreTake(completionSemaphoreHandle, timeoutTicks) != pdTRUE)
+    if (xSemaphoreTake(completionSemaphoreHandle, (TickType_t)timeoutTicks) != pdTRUE)
     {
         return false;
     }
@@ -86,16 +97,6 @@ void i2c_task_signal_completion_from_isr(const I2CTaskSupportContext *context, b
 
     *(context->i2cTransferFailed) = transferFailed;
     give_semaphore_from_isr(context->i2cCompletionSemaphoreHandle);
-}
-
-bool i2c_task_source_is_valid_adapter(void *sourceTask, void *context)
-{
-    return i2c_task_source_is_valid((const I2CTaskSupportContext *)context, (osThreadId)sourceTask);
-}
-
-void i2c_task_signal_source_completion_adapter(void *sourceTask, void *context)
-{
-    i2c_task_signal_source_completion((const I2CTaskSupportContext *)context, (osThreadId)sourceTask);
 }
 
 bool i2c_task_hal_is_device_ready(uint16_t address, uint32_t trials, uint32_t timeoutMs, void *context)

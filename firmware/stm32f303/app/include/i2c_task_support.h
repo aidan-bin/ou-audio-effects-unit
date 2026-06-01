@@ -18,16 +18,13 @@ typedef struct
     volatile bool *i2cTransferFailed;
 } I2CTaskSupportContext;
 
-bool i2c_task_source_is_valid(const I2CTaskSupportContext *context, osThreadId sourceTask);
-void i2c_task_signal_source_completion(const I2CTaskSupportContext *context, osThreadId sourceTask);
+bool i2c_task_source_is_valid(void *sourceTask, void *context);
+void i2c_task_signal_source_completion(void *sourceTask, void *context);
 
-bool i2c_task_queue_message_and_wait(osMessageQId i2cQueueHandle, void *message, bool *pFailed,
-    osSemaphoreId completionSemaphoreHandle, TickType_t timeoutTicks);
+bool i2c_task_queue_message_and_wait(void *queueHandle, void *message, bool *pFailed,
+    void *failedSemaphoreHandle, uint32_t timeoutTicks, void *context);
 
 void i2c_task_signal_completion_from_isr(const I2CTaskSupportContext *context, bool transferFailed);
-
-bool i2c_task_source_is_valid_adapter(void *sourceTask, void *context);
-void i2c_task_signal_source_completion_adapter(void *sourceTask, void *context);
 
 bool i2c_task_hal_is_device_ready(uint16_t address, uint32_t trials, uint32_t timeoutMs, void *context);
 bool i2c_task_hal_start_receive(uint16_t address, uint8_t *payload, uint16_t items, void *context);

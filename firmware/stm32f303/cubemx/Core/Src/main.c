@@ -36,16 +36,6 @@
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 
-typedef struct
-{
-	osThreadId sourceTask;
-	bool rxTxBar;					// Set to true if receive is enabled, false if transmit is enabled
-	uint16_t address;			// Receiving device address
-	uint8_t *pPayload;		// Pointer to payload buffer
-	uint16_t items;				// Number of items in payload buffer
-	bool *pFailed;				// Indicates whether message was dropped or not at any point in transmission
-} I2CMessage;
-
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -122,7 +112,7 @@ osThreadId displayHandlerTaskHandle;
 uint32_t displayHandlerTaskBuffer[ 128 ];
 osStaticThreadDef_t displayHandlerTaskControlBlock;
 osMessageQId i2cQueueHandle;
-uint8_t i2cQueueBuffer[ 16 * sizeof( I2CMessage ) ];
+uint8_t i2cQueueBuffer[ 16 * sizeof( I2CHandlerMessage ) ];
 osStaticMessageQDef_t i2cQueueControlBlock;
 osMessageQId displayCommandQueueHandle;
 uint8_t displayCommandQueueBuffer[ 16 * sizeof( uint16_t ) ];
@@ -192,8 +182,6 @@ void startRomHandlerTask(void const * argument);
 void startDisplayHandlerTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
-static bool queue_i2c_message_and_wait_adapter(void *queueHandle, void *message, bool *pFailed,
-  void *failedSemaphoreHandle, uint32_t timeoutTicks, void *context);
 static uint8_t *allocate_payload_adapter(size_t size, void *context);
 static void free_payload_adapter(uint8_t *payload, void *context);
 static void set_rom_write_enable_adapter(bool enabled, void *context);
@@ -273,18 +261,6 @@ static void give_semaphore_from_isr(osSemaphoreId semaphoreHandle)
   portYIELD_FROM_ISR(higherPriorityTaskWoken);
 }
 
-static bool queue_i2c_message_and_wait_adapter(void *queueHandle, void *message, bool *pFailed,
-    void *failedSemaphoreHandle, uint32_t timeoutTicks, void *context)
-{
-  (void) context;
-
-  return i2c_task_queue_message_and_wait((osMessageQId) queueHandle,
-      message,
-      pFailed,
-      (osSemaphoreId) failedSemaphoreHandle,
-      (TickType_t) timeoutTicks);
-}
-
 static uint8_t *allocate_payload_adapter(size_t size, void *context)
 {
   (void) context;
@@ -324,8 +300,8 @@ static void init_i2c_handler_interfaces(void)
   i2cHandlerConfig.tryAgainDelayMs = 100;
   i2cHandlerConfig.dropBudgetMs = 5000;
 
-  i2cHandlerOps.is_source_valid = i2c_task_source_is_valid_adapter;
-  i2cHandlerOps.signal_source_completion = i2c_task_signal_source_completion_adapter;
+  i2cHandlerOps.is_source_valid = i2c_task_source_is_valid;
+  i2cHandlerOps.signal_source_completion = i2c_task_signal_source_completion;
   i2cHandlerOps.is_device_ready = i2c_task_hal_is_device_ready;
   i2cHandlerOps.start_receive = i2c_task_hal_start_receive;
   i2cHandlerOps.start_transmit = i2c_task_hal_start_transmit;
@@ -345,7 +321,7 @@ static void init_rom_task_support_interfaces(void)
   romTaskSupportConfig.bootstrapTimeoutTicks = pdMS_TO_TICKS(100);
   romTaskSupportConfig.saveTimeoutTicks = pdMS_TO_TICKS(5000);
 
-  romTaskSupportOps.queue_message_and_wait = queue_i2c_message_and_wait_adapter;
+  romTaskSupportOps.queue_message_and_wait = i2c_task_queue_message_and_wait;
   romTaskSupportOps.allocate_payload = allocate_payload_adapter;
   romTaskSupportOps.free_payload = free_payload_adapter;
   romTaskSupportOps.set_write_enable = set_rom_write_enable_adapter;
@@ -432,7 +408,7 @@ int main(void)
 
   /* Create the queue(s) */
   /* definition and creation of i2cQueue */
-  osMessageQStaticDef(i2cQueue, 16, I2CMessage, i2cQueueBuffer, &i2cQueueControlBlock);
+  osMessageQStaticDef(i2cQueue, 16, I2CHandlerMessage, i2cQueueBuffer, &i2cQueueControlBlock);
   i2cQueueHandle = osMessageCreate(osMessageQ(i2cQueue), NULL);
 
   /* definition and creation of displayCommandQueue */
@@ -1581,24 +1557,15 @@ void startI2cHandlerTask(void const * argument)
   /* Infinite loop */
   for(;;)
   {
-		I2CMessage message; 
-		
+		I2CHandlerMessage message;
+
     if (xQueueReceive(i2cQueueHandle, (void *) &message, portMAX_DELAY) != pdPASS)
     {
       continue;
     }
 
-    I2CHandlerMessage handlerMessage = {
-      .sourceTask = message.sourceTask,
-      .rxTxBar = message.rxTxBar,
-      .address = message.address,
-      .payload = message.pPayload,
-      .items = message.items,
-      .pFailed = message.pFailed,
-    };
-
     (void) i2c_handler_process_message(
-        &handlerMessage,
+        &message,
         &i2cHandlerConfig,
         &i2cHandlerOps,
         &i2cTaskSupportContext);
