@@ -25,20 +25,16 @@
 /* USER CODE BEGIN Includes */
 #include <stdbool.h>
 #include <string.h>
-#include "effect_runtime.h"
 #include "effects_control_logic.h"
 #include "effects_state_manager.h"
+#include "effects_pipeline.h"
+#include "i2c_handler.h"
+#include "i2c_task_support.h"
+#include "rom_task_support.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-
-typedef struct
-{
-  EffectHandle overdrive;
-  EffectHandle echo;
-  EffectHandle compression;
-} EffectSlots;
 
 typedef struct
 {
@@ -146,6 +142,12 @@ static volatile EffectsParams effectsParams;
 /* Set by I2C ISR callbacks and consumed by i2c handler task. */
 static volatile bool i2cTransferFailed = true;
 
+static I2CTaskSupportContext i2cTaskSupportContext;
+static I2CHandlerConfig i2cHandlerConfig;
+static I2CHandlerOps i2cHandlerOps;
+static RomTaskSupportConfig romTaskSupportConfig;
+static RomTaskSupportOps romTaskSupportOps;
+
 /* DMA buffer for ADC samples (note: samples are in order of decreasing age) */
 static volatile uint16_t adcBuf[ADC_BUF_LEN] = {0};
 
@@ -190,10 +192,13 @@ void startRomHandlerTask(void const * argument);
 void startDisplayHandlerTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
-static void effect_slots_init(EffectSlots *slots);
-static int effect_slots_sync_params(EffectSlots *slots, const EffectsParams *params);
-static int effect_slots_process(const EffectSlots *slots, Effect effect, const uint16_t *inBuf, uint16_t *outBuf, size_t numSamples);
-static int effect_slots_get_echo_delay_samples(const EffectSlots *slots, size_t *delaySamples);
+static bool queue_i2c_message_and_wait_adapter(void *queueHandle, void *message, bool *pFailed,
+  void *failedSemaphoreHandle, uint32_t timeoutTicks, void *context);
+static uint8_t *allocate_payload_adapter(size_t size, void *context);
+static void free_payload_adapter(uint8_t *payload, void *context);
+static void set_rom_write_enable_adapter(bool enabled, void *context);
+static void init_i2c_handler_interfaces(void);
+static void init_rom_task_support_interfaces(void);
 
 /* USER CODE END PFP */
 
@@ -268,108 +273,83 @@ static void give_semaphore_from_isr(osSemaphoreId semaphoreHandle)
   portYIELD_FROM_ISR(higherPriorityTaskWoken);
 }
 
-static bool i2c_source_task_is_valid(osThreadId sourceTask)
+static bool queue_i2c_message_and_wait_adapter(void *queueHandle, void *message, bool *pFailed,
+    void *failedSemaphoreHandle, uint32_t timeoutTicks, void *context)
 {
-  return sourceTask == romHandlerTaskHandle || sourceTask == displayHandlerTaskHandle;
+  (void) context;
+
+  return i2c_task_queue_message_and_wait((osMessageQId) queueHandle,
+      message,
+      pFailed,
+      (osSemaphoreId) failedSemaphoreHandle,
+      (TickType_t) timeoutTicks);
 }
 
-static void signal_i2c_source_task_completion(osThreadId sourceTask)
+static uint8_t *allocate_payload_adapter(size_t size, void *context)
 {
-  if (sourceTask == romHandlerTaskHandle)
+  (void) context;
+
+  return (uint8_t *) pvPortMalloc(size);
+}
+
+static void free_payload_adapter(uint8_t *payload, void *context)
+{
+  (void) context;
+
+  if (payload != NULL)
   {
-    xSemaphoreGive(i2cFailedRomSemaphoreHandle);
-  }
-  else if (sourceTask == displayHandlerTaskHandle)
-  {
-    xSemaphoreGive(i2cFailedDisplaySemaphoreHandle);
+    vPortFree(payload);
   }
 }
 
-static bool queue_i2c_message_and_wait(I2CMessage *message, osSemaphoreId completionSemaphoreHandle, TickType_t timeoutTicks)
+static void set_rom_write_enable_adapter(bool enabled, void *context)
 {
-  if (message == NULL || message->pFailed == NULL || completionSemaphoreHandle == NULL)
-  {
-    return false;
-  }
+  (void) context;
 
-  drain_semaphore(completionSemaphoreHandle);
-  *(message->pFailed) = true;
-
-  if (xQueueSend(i2cQueueHandle, (void *) message, timeoutTicks) != pdPASS)
-  {
-    return false;
-  }
-
-  if (xSemaphoreTake(completionSemaphoreHandle, timeoutTicks) != pdTRUE)
-  {
-    return false;
-  }
-
-  return !(*(message->pFailed));
+  HAL_GPIO_WritePin(nNVM_WE_GPIO_Port, nNVM_WE_Pin, enabled ? GPIO_PIN_SET : GPIO_PIN_RESET);
 }
 
-static void i2c_signal_completion_from_isr(bool transferFailed)
+static void init_i2c_handler_interfaces(void)
 {
-  i2cTransferFailed = transferFailed;
+  i2cTaskSupportContext.hi2c = &hi2c1;
+  i2cTaskSupportContext.romHandlerTaskHandle = romHandlerTaskHandle;
+  i2cTaskSupportContext.displayHandlerTaskHandle = displayHandlerTaskHandle;
+  i2cTaskSupportContext.i2cCompletionSemaphoreHandle = i2cCompletionSemaphoreHandle;
+  i2cTaskSupportContext.i2cFailedRomSemaphoreHandle = i2cFailedRomSemaphoreHandle;
+  i2cTaskSupportContext.i2cFailedDisplaySemaphoreHandle = i2cFailedDisplaySemaphoreHandle;
+  i2cTaskSupportContext.i2cTransferFailed = &i2cTransferFailed;
 
-  give_semaphore_from_isr(i2cCompletionSemaphoreHandle);
+  i2cHandlerConfig.trials = 5;
+  i2cHandlerConfig.blockingTimeoutMs = 100;
+  i2cHandlerConfig.tryAgainDelayMs = 100;
+  i2cHandlerConfig.dropBudgetMs = 5000;
+
+  i2cHandlerOps.is_source_valid = i2c_task_source_is_valid_adapter;
+  i2cHandlerOps.signal_source_completion = i2c_task_signal_source_completion_adapter;
+  i2cHandlerOps.is_device_ready = i2c_task_hal_is_device_ready;
+  i2cHandlerOps.start_receive = i2c_task_hal_start_receive;
+  i2cHandlerOps.start_transmit = i2c_task_hal_start_transmit;
+  i2cHandlerOps.wait_for_completion = i2c_task_wait_for_completion;
+  i2cHandlerOps.free_payload = i2c_task_free_payload;
+  i2cHandlerOps.delay_ms = i2c_task_delay_ms;
 }
 
-static void effect_slots_init(EffectSlots *slots)
+static void init_rom_task_support_interfaces(void)
 {
-  if (slots == NULL)
-  {
-    return;
-  }
+  romTaskSupportConfig.sourceTask = romHandlerTaskHandle;
+  romTaskSupportConfig.i2cQueueHandle = i2cQueueHandle;
+  romTaskSupportConfig.i2cFailedRomSemaphoreHandle = i2cFailedRomSemaphoreHandle;
+  romTaskSupportConfig.deviceAddress = (ROM_I2C_ADDR << 1) & ~1U;
+  romTaskSupportConfig.readAddress = 0;
+  romTaskSupportConfig.writeAddress = 0;
+  romTaskSupportConfig.bootstrapTimeoutTicks = pdMS_TO_TICKS(100);
+  romTaskSupportConfig.saveTimeoutTicks = pdMS_TO_TICKS(5000);
 
-  effect_handle_init(&slots->overdrive, EFFECT_TYPE_OVERDRIVE);
-  effect_handle_init(&slots->echo, EFFECT_TYPE_ECHO);
-  effect_handle_init(&slots->compression, EFFECT_TYPE_COMPRESSION);
-}
-
-static int effect_slots_sync_params(EffectSlots *slots, const EffectsParams *params)
-{
-  if (slots == NULL || params == NULL)
-  {
-    return -1;
-  }
-
-  if (effect_handle_set_overdrive_params(&slots->overdrive, &params->overdrive) != 0)
-  {
-    return -1;
-  }
-
-  if (effect_handle_set_echo_params(&slots->echo, &params->echo) != 0)
-  {
-    return -1;
-  }
-
-  if (effect_handle_set_compression_params(&slots->compression, &params->compression) != 0)
-  {
-    return -1;
-  }
-
-  return 0;
-}
-
-static int effect_slots_process(const EffectSlots *slots, Effect effect, const uint16_t *inBuf, uint16_t *outBuf, size_t numSamples)
-{
-  if (slots == NULL)
-  {
-    return -1;
-  }
-
-  switch (effect)
-  {
-    case OVERDRIVE:
-      return effect_handle_process(&slots->overdrive, inBuf, outBuf, numSamples);
-    case ECHO:
-      return effect_handle_process(&slots->echo, inBuf, outBuf, numSamples);
-    case COMPRESSION:
-      return effect_handle_process(&slots->compression, inBuf, outBuf, numSamples);
-    default:
-      return -1;
-  }
+  romTaskSupportOps.queue_message_and_wait = queue_i2c_message_and_wait_adapter;
+  romTaskSupportOps.allocate_payload = allocate_payload_adapter;
+  romTaskSupportOps.free_payload = free_payload_adapter;
+  romTaskSupportOps.set_write_enable = set_rom_write_enable_adapter;
+  romTaskSupportOps.context = NULL;
 }
 
 /* USER CODE END 0 */
@@ -498,6 +478,8 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
+  init_i2c_handler_interfaces();
+  init_rom_task_support_interfaces();
   /* USER CODE END RTOS_THREADS */
 
   /* Start scheduler */
@@ -1089,16 +1071,6 @@ void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc)
 	}
 }
 
-static int effect_slots_get_echo_delay_samples(const EffectSlots *slots, size_t *delaySamples)
-{
-  if (slots == NULL || delaySamples == NULL)
-  {
-    return -1;
-  }
-
-  return effect_handle_get_echo_delay_samples(&slots->echo, delaySamples);
-}
-
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 {
 	if (hadc == &hadc1)
@@ -1125,7 +1097,7 @@ void HAL_I2C_MasterTxCpltCallback(I2C_HandleTypeDef *hi2c)
 {
   if (hi2c == &hi2c1)
   {
-    i2c_signal_completion_from_isr(false);
+    i2c_task_signal_completion_from_isr(&i2cTaskSupportContext, false);
   }
 }
 
@@ -1133,7 +1105,7 @@ void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *hi2c)
 {
   if (hi2c == &hi2c1)
   {
-    i2c_signal_completion_from_isr(false);
+    i2c_task_signal_completion_from_isr(&i2cTaskSupportContext, false);
   }
 }
 
@@ -1141,7 +1113,7 @@ void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c)
 {
   if (hi2c == &hi2c1)
   {
-    i2c_signal_completion_from_isr(true);
+    i2c_task_signal_completion_from_isr(&i2cTaskSupportContext, true);
   }
 }
 
@@ -1149,7 +1121,7 @@ void HAL_I2C_AbortCpltCallback(I2C_HandleTypeDef *hi2c)
 {
   if (hi2c == &hi2c1)
   {
-    i2c_signal_completion_from_isr(true);
+    i2c_task_signal_completion_from_isr(&i2cTaskSupportContext, true);
   }
 }
 
@@ -1172,8 +1144,12 @@ void HAL_DMA_CpltCallback(DMA_HandleTypeDef* hdma)
 void startEffectsTask(void const * argument)
 {
   /* USER CODE BEGIN 5 */
-  EffectSlots effectSlots;
-  effect_slots_init(&effectSlots);
+  EffectsPipeline effectsPipeline;
+  if (effects_pipeline_init(&effectsPipeline) != 0)
+  {
+    vTaskDelete(NULL);
+    return;
+  }
 	
 	/* Start ADC and DAC. Note: ADC expects buffers to be ready to be filled,
 			DAC expects buffers to be ready to be read from. Software must ensure this. */
@@ -1281,7 +1257,7 @@ void startEffectsTask(void const * argument)
 
     effects_state_normalize(&latchedEffectsState);
 
-		if (effect_slots_sync_params(&effectSlots, &latchedEffectsParams) != 0)
+		if (effects_pipeline_sync_params(&effectsPipeline, &latchedEffectsParams) != 0)
 		{
       processFailed = true;
       goto effects_iteration_cleanup;
@@ -1298,7 +1274,7 @@ void startEffectsTask(void const * argument)
 				if (effect == ECHO)
 				{
           size_t numDelaySamples = 0;	// Number of delayed samples needed (i.e., if index 0 represent n = 0 for signal x[n], x[-numDelaySamples] is the oldest sample)
-          if (effect_slots_get_echo_delay_samples(&effectSlots, &numDelaySamples) != 0)
+          if (effects_pipeline_get_echo_delay_samples(&effectsPipeline, &numDelaySamples) != 0)
           {
             processFailed = true;
             break;
@@ -1342,13 +1318,13 @@ void startEffectsTask(void const * argument)
 				/* Apply appropriate effect */
         if (effect == ECHO)
         {
-          if (effect_slots_process(&effectSlots, effect, echoInputBuf, outputBuf, SAMPLE_BUF_LEN) != 0)
+          if (effects_pipeline_process(&effectsPipeline, effect, echoInputBuf, outputBuf, SAMPLE_BUF_LEN) != 0)
           {
           processFailed = true;
             break;
           }
         }
-        else if (effect_slots_process(&effectSlots, effect, inputBuf, outputBuf, SAMPLE_BUF_LEN) != 0)
+        else if (effects_pipeline_process(&effectsPipeline, effect, inputBuf, outputBuf, SAMPLE_BUF_LEN) != 0)
         {
         processFailed = true;
           break;
@@ -1363,7 +1339,7 @@ void startEffectsTask(void const * argument)
 					{
             case OVERDRIVE:
             case COMPRESSION:
-              if (effect_slots_process(&effectSlots, effect, echoDelaySamplesBuf, echoDelaySamplesBuf, NUM_DELAY_SAMPLES) != 0)
+              if (effects_pipeline_process(&effectsPipeline, effect, echoDelaySamplesBuf, echoDelaySamplesBuf, NUM_DELAY_SAMPLES) != 0)
               {
             processFailed = true;
                 break;
@@ -1602,16 +1578,9 @@ void startLedTask(void const * argument)
 void startI2cHandlerTask(void const * argument)
 {
   /* USER CODE BEGIN startI2cHandlerTask */
-	const uint32_t trials = 5;
-	const uint32_t blockingTimeOutMs = 100;	// Time out for each HAL call (a blocking operation)
-	const uint32_t tryAgainDelayMs = 100;	// How long to wait before trying HAL call again
-	TimeOut_t timeOut;
-	
   /* Infinite loop */
   for(;;)
   {
-    TickType_t ticksToWaitToDrop = pdMS_TO_TICKS(5000);	// Reset budget for each message
-    bool messageFailed = true;
 		I2CMessage message; 
 		
     if (xQueueReceive(i2cQueueHandle, (void *) &message, portMAX_DELAY) != pdPASS)
@@ -1619,91 +1588,20 @@ void startI2cHandlerTask(void const * argument)
       continue;
     }
 
-    /* Validate required message fields and source task before using them. */
-    if (message.pFailed == NULL || message.pPayload == NULL || message.items == 0 || !i2c_source_task_is_valid(message.sourceTask))
-    {
-      if (message.pFailed != NULL)
-      {
-        *(message.pFailed) = true;
-      }
+    I2CHandlerMessage handlerMessage = {
+      .sourceTask = message.sourceTask,
+      .rxTxBar = message.rxTxBar,
+      .address = message.address,
+      .payload = message.pPayload,
+      .items = message.items,
+      .pFailed = message.pFailed,
+    };
 
-      if (message.rxTxBar == false && message.pPayload != NULL)
-      {
-        vPortFree(message.pPayload);
-      }
-
-      signal_i2c_source_task_completion(message.sourceTask);
-
-      continue;
-    }
-		
-		/* Check if device is ready, delay to check again if not, drop message if timed out */
-		vTaskSetTimeOutState(&timeOut);
-		
-    HAL_StatusTypeDef status = HAL_ERROR;
-		
-		do
-		{
-			status = HAL_I2C_IsDeviceReady(&hi2c1, message.address, trials, blockingTimeOutMs);
-			
-			if (status != HAL_OK)
-			{	
-				osDelay(tryAgainDelayMs);
-			}
-		} while (xTaskCheckForTimeOut(&timeOut, &ticksToWaitToDrop) != pdTRUE && status != HAL_OK);
-		
-		if (status != HAL_OK)
-		{
-      messageFailed = true;
-      if (message.rxTxBar == false)
-      {
-        vPortFree(message.pPayload);
-      }
-		}
-    /* Transmit or receive message, dropping message if timed out */
-    else if (message.rxTxBar)
-		{
-			/* Receive */
-          drain_semaphore(i2cCompletionSemaphoreHandle);
-      i2cTransferFailed = true;
-          status = HAL_I2C_Master_Receive_IT(&hi2c1, message.address, message.pPayload, message.items);
-
-          if (status != HAL_OK ||
-          xSemaphoreTake(i2cCompletionSemaphoreHandle, ticksToWaitToDrop) != pdTRUE ||
-          i2cTransferFailed)
-			{
-        messageFailed = true;
-			}
-			else
-			{
-        messageFailed = false;
-			}
-		}
-		else
-		{
-			/* Transmit */
-      drain_semaphore(i2cCompletionSemaphoreHandle);
-      i2cTransferFailed = true;
-      status = HAL_I2C_Master_Transmit_IT(&hi2c1, message.address, message.pPayload, message.items);
-
-      if (status != HAL_OK ||
-      xSemaphoreTake(i2cCompletionSemaphoreHandle, ticksToWaitToDrop) != pdTRUE ||
-      i2cTransferFailed)
-			{
-        messageFailed = true;
-			}
-			else
-			{
-        messageFailed = false;
-			}
-			
-			vPortFree(message.pPayload);
-		}
-
-    *(message.pFailed) = messageFailed;
-
-    /* Notify task that pFailed is valid (i.e., operation completed) */
-    signal_i2c_source_task_completion(message.sourceTask);
+    (void) i2c_handler_process_message(
+        &handlerMessage,
+        &i2cHandlerConfig,
+        &i2cHandlerOps,
+        &i2cTaskSupportContext);
   }
   /* USER CODE END startI2cHandlerTask */
 }
@@ -1720,78 +1618,27 @@ void startRomHandlerTask(void const * argument)
   /* USER CODE BEGIN startRomHandlerTask */
 	const uint16_t updateFrequencyMs = 5000;
   const uint16_t bootstrapRetryDelayMs = 10;
-	
-	uint16_t readAddress = 0;
-	uint16_t writeAddress = 0;
-	
-  /* Copy effectsState and effectsParams FROM ROM */
-  bool failed = true;
-	
-	do
-	{
-    failed = true;
-		const uint16_t timeOutMs = 100;
-    const size_t addressPayloadSizeBytes = sizeof(uint16_t);
-    size_t payloadSizeBytes = sizeof(EffectsState) + sizeof(EffectsParams);
-		
-		I2CMessage message;
-		
-		/* Send address first */
-		message.sourceTask = romHandlerTaskHandle;
-		message.rxTxBar = false;
-		message.address = (ROM_I2C_ADDR << 1) & ~1U;	// Address with write enabled
-		
-    message.pPayload = pvPortMalloc(addressPayloadSizeBytes);	// Freed by I2C handler task
-    if (message.pPayload == NULL)
+
+  while (true)
+  {
+    EffectsState loadedState;
+    EffectsParams loadedParams;
+
+    if (rom_task_bootstrap_effects(
+        &romTaskSupportConfig,
+        &romTaskSupportOps,
+        &loadedState,
+        &loadedParams))
     {
-      osDelay(bootstrapRetryDelayMs);
-      continue;
+      taskENTER_CRITICAL();
+      effectsState = loadedState;
+      effectsParams = loadedParams;
+      taskEXIT_CRITICAL();
+      break;
     }
-    message.pPayload[0] = (readAddress & 0xFF00) >> 8;	// Upper byte of address
-    message.pPayload[1] = readAddress & 0x00FF;	// Lower byte of address
-		
-		message.items = 2;
-		message.pFailed = &failed;
-		
-		HAL_GPIO_WritePin(GPIOC, nNVM_WE_Pin, GPIO_PIN_RESET);
-		
-    if (!queue_i2c_message_and_wait(&message, i2cFailedRomSemaphoreHandle, pdMS_TO_TICKS(timeOutMs)))
-		{
-			HAL_GPIO_WritePin(GPIOC, nNVM_WE_Pin, GPIO_PIN_SET);
-			vPortFree(message.pPayload);
-      osDelay(bootstrapRetryDelayMs);
-			continue;
-		}
-		
-		HAL_GPIO_WritePin(GPIOC, nNVM_WE_Pin, GPIO_PIN_SET);
-		
-		/* Read data */
-		
-		message.sourceTask = romHandlerTaskHandle;
-		message.rxTxBar = true;
-		message.address = (ROM_I2C_ADDR << 1) | 1U;	// Address with read enabled
-		message.pPayload = pvPortMalloc(payloadSizeBytes);
-    if (message.pPayload == NULL)
-    {
-      osDelay(bootstrapRetryDelayMs);
-      continue;
-    }
-		message.items = payloadSizeBytes;
-		message.pFailed = &failed;
-		
-    if (!queue_i2c_message_and_wait(&message, i2cFailedRomSemaphoreHandle, pdMS_TO_TICKS(timeOutMs)))
-		{
-			vPortFree(message.pPayload);
-      osDelay(bootstrapRetryDelayMs);
-			continue;
-		}
-		
-		taskENTER_CRITICAL();	// Effects configs are accessed by other tasks and this is not atomic
-    memcpy((void *) &effectsState, message.pPayload, sizeof(EffectsState));
-		memcpy(&effectsParams, &message.pPayload[sizeof(EffectsState)], sizeof(EffectsParams));
-		taskEXIT_CRITICAL();
-    vPortFree(message.pPayload);
-	} while (failed);
+
+    osDelay(bootstrapRetryDelayMs);
+  }
 	
   /* Infinite loop */
   for(;;)
@@ -1802,41 +1649,16 @@ void startRomHandlerTask(void const * argument)
 		EffectsParams latchedEffectsParams = effectsParams;
 		taskEXIT_CRITICAL();
     effects_state_normalize(&latchedEffectsState);
-		
-		size_t numBytesToWrite = sizeof(EffectsState) + sizeof(EffectsParams);
-		size_t payloadSizeBytes = sizeof(uint16_t) + numBytesToWrite;	// One 16-bit address to start page write
-		
-    bool failed = true;
-		
-		I2CMessage message;
-		
-		message.sourceTask = romHandlerTaskHandle;
-		message.rxTxBar = false;
-		message.address = (ROM_I2C_ADDR << 1) & ~1U;	// Address with write enabled
-		
-		message.pPayload = pvPortMalloc(payloadSizeBytes);	// Freed by I2C handler task
-    if (message.pPayload == NULL)
+
+    if (!rom_task_save_effects(
+        &romTaskSupportConfig,
+        &romTaskSupportOps,
+        &latchedEffectsState,
+        &latchedEffectsParams))
     {
       continue;
     }
-		message.pPayload[0] = (writeAddress & 0xFF00) >> 8;	// Upper byte of address
-    message.pPayload[1] = writeAddress & 0x00FF;	// Lower byte of address
-		memcpy(&message.pPayload[2], &latchedEffectsState, sizeof(EffectsState));
-		memcpy(&message.pPayload[2 + sizeof(EffectsState)], &latchedEffectsParams, sizeof(EffectsParams));
-		
-		message.items = payloadSizeBytes;	// Number of bytes in payload
-		message.pFailed = &failed;
-		
-		HAL_GPIO_WritePin(GPIOC, nNVM_WE_Pin, GPIO_PIN_RESET);
-		
-    if (!queue_i2c_message_and_wait(&message, i2cFailedRomSemaphoreHandle, pdMS_TO_TICKS(updateFrequencyMs)))
-		{
-			HAL_GPIO_WritePin(GPIOC, nNVM_WE_Pin, GPIO_PIN_SET);
-			vPortFree(message.pPayload);
-			continue;	// Update period already elapsed, so just continue
-		}
-		
-		HAL_GPIO_WritePin(GPIOC, nNVM_WE_Pin, GPIO_PIN_SET);
+
     osDelay(updateFrequencyMs);
   }
   /* USER CODE END startRomHandlerTask */

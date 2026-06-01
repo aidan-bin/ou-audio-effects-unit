@@ -20,6 +20,10 @@ set(OU_DSP_SOURCES
 set(OU_FIRMWARE_APP_SOURCES
     firmware/stm32f303/app/src/effects_state_manager.c
     firmware/stm32f303/app/src/effects_control_logic.c
+    firmware/stm32f303/app/src/effects_pipeline.c
+    firmware/stm32f303/app/src/i2c_handler.c
+    firmware/stm32f303/app/src/rom_task_support.c
+    firmware/stm32f303/app/src/rom_handler.c
 )
 
 add_library(ou_dsp STATIC ${OU_DSP_SOURCES})
@@ -121,6 +125,41 @@ if(OU_BUILD_TESTS)
 
     add_test(NAME ou_firmware_control_logic_tests COMMAND ou_firmware_control_logic_tests)
 
+    add_executable(ou_firmware_effects_pipeline_tests
+        tests/test_firmware_effects_pipeline.c
+    )
+
+    target_include_directories(ou_firmware_effects_pipeline_tests
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/firmware/stm32f303/app/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/dsp/effects
+    )
+
+    target_link_libraries(ou_firmware_effects_pipeline_tests PRIVATE ou_firmware_app)
+
+    if(APPLE OR UNIX)
+        target_link_libraries(ou_firmware_effects_pipeline_tests PRIVATE m)
+    endif()
+
+    add_test(NAME ou_firmware_effects_pipeline_tests COMMAND ou_firmware_effects_pipeline_tests)
+
+    add_executable(ou_firmware_rom_task_support_tests
+        tests/test_firmware_rom_task_support.c
+    )
+
+    target_include_directories(ou_firmware_rom_task_support_tests
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/firmware/stm32f303/app/include
+    )
+
+    target_link_libraries(ou_firmware_rom_task_support_tests PRIVATE ou_firmware_app)
+
+    if(APPLE OR UNIX)
+        target_link_libraries(ou_firmware_rom_task_support_tests PRIVATE m)
+    endif()
+
+    add_test(NAME ou_firmware_rom_task_support_tests COMMAND ou_firmware_rom_task_support_tests)
+
     add_executable(ou_firmware_peripheral_mocks_tests
         tests/test_firmware_peripheral_mocks.c
     )
@@ -132,4 +171,38 @@ if(OU_BUILD_TESTS)
     endif()
 
     add_test(NAME ou_firmware_peripheral_mocks_tests COMMAND ou_firmware_peripheral_mocks_tests)
+
+    add_executable(ou_firmware_i2c_handler_tests
+        tests/test_firmware_i2c_handler.c
+    )
+
+    target_include_directories(ou_firmware_i2c_handler_tests
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/firmware/stm32f303/app/include
+    )
+
+    target_link_libraries(ou_firmware_i2c_handler_tests PRIVATE ou_firmware_app ou_firmware_mocks)
+
+    if(APPLE OR UNIX)
+        target_link_libraries(ou_firmware_i2c_handler_tests PRIVATE m)
+    endif()
+
+    add_test(NAME ou_firmware_i2c_handler_tests COMMAND ou_firmware_i2c_handler_tests)
+
+    add_executable(ou_firmware_rom_handler_tests
+        tests/test_firmware_rom_handler.c
+    )
+
+    target_include_directories(ou_firmware_rom_handler_tests
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/firmware/stm32f303/app/include
+    )
+
+    target_link_libraries(ou_firmware_rom_handler_tests PRIVATE ou_firmware_app)
+
+    if(APPLE OR UNIX)
+        target_link_libraries(ou_firmware_rom_handler_tests PRIVATE m)
+    endif()
+
+    add_test(NAME ou_firmware_rom_handler_tests COMMAND ou_firmware_rom_handler_tests)
 endif()
