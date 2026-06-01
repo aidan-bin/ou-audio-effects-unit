@@ -32,6 +32,7 @@
 #include "i2c_handler.h"
 #include "i2c_task_support.h"
 #include "peripheral_dispatch.h"
+#include "pot_task.h"
 #include "rom_task_support.h"
 /* USER CODE END Includes */
 
@@ -203,6 +204,12 @@ static bool effects_task_dma_copy(const uint16_t *src, uint16_t *dst, size_t cou
 static bool effects_task_read_latched_state(EffectsState *state, EffectsParams *params, void *context);
 static uint32_t effects_task_ms_to_ticks(uint32_t ms, void *context);
 
+static bool pot_task_start_adc(uint8_t potIndex, void *context);
+static bool pot_task_wait_for_sample(uint32_t timeoutTicks, uint32_t *valueOut, void *context);
+static bool pot_task_read_active_effect(Effect *activeEffect, void *context);
+static void pot_task_apply_sample(Effect activeEffect, uint8_t potIndex, uint32_t adcValue,
+  uint32_t adcMax, void *context);
+
 static uint8_t *allocate_payload_adapter(size_t size, void *context);
 static void free_payload_adapter(uint8_t *payload, void *context);
 static void set_rom_write_enable_adapter(bool enabled, void *context);
@@ -361,6 +368,73 @@ static uint32_t effects_task_ms_to_ticks(uint32_t ms, void *context)
 {
   (void) context;
   return pdMS_TO_TICKS(ms);
+}
+
+static bool pot_task_start_adc(uint8_t potIndex, void *context)
+{
+  (void) context;
+
+  ADC_ChannelConfTypeDef sConfig;
+  sConfig.Channel = ADC_CHANNEL_1;
+  sConfig.Rank = ADC_REGULAR_RANK_1;
+  sConfig.SingleDiff = ADC_SINGLE_ENDED;
+  sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
+  sConfig.OffsetNumber = ADC_OFFSET_NONE;
+  sConfig.Offset = 0;
+
+  switch (potIndex)
+  {
+    case 0: sConfig.Channel = ADC_CHANNEL_1; break;
+    case 1: sConfig.Channel = ADC_CHANNEL_2; break;
+    case 2: sConfig.Channel = ADC_CHANNEL_4; break;
+    case 3: sConfig.Channel = ADC_CHANNEL_6; break;
+    default: return false;
+  }
+
+  return peripheral_start_adc_conversion_it(&hadc1, &sConfig, &peripheralDispatchOps);
+}
+
+static bool pot_task_wait_for_sample(uint32_t timeoutTicks, uint32_t *valueOut, void *context)
+{
+  (void) context;
+
+  if (valueOut == NULL)
+  {
+    return false;
+  }
+
+  return xTaskNotifyWait(0, 0xFFFFFFFFUL, valueOut, (TickType_t) timeoutTicks) == pdTRUE;
+}
+
+static bool pot_task_read_active_effect(Effect *activeEffect, void *context)
+{
+  (void) context;
+
+  if (activeEffect == NULL)
+  {
+    return false;
+  }
+
+  EffectsState latchedEffectsState;
+
+  taskENTER_CRITICAL();
+  latchedEffectsState = effectsState;
+  taskEXIT_CRITICAL();
+
+  effects_state_normalize(&latchedEffectsState);
+
+  return effects_state_get_active_effect(&latchedEffectsState, activeEffect);
+}
+
+static void pot_task_apply_sample(Effect activeEffect, uint8_t potIndex, uint32_t adcValue,
+    uint32_t adcMax, void *context)
+{
+  (void) context;
+
+  taskENTER_CRITICAL();
+  (void)effects_params_apply_pot_sample((EffectsParams *)&effectsParams, activeEffect, potIndex,
+      adcValue, adcMax);
+  taskEXIT_CRITICAL();
 }
 
 static uint8_t *allocate_payload_adapter(size_t size, void *context)
@@ -1385,67 +1459,25 @@ void startSwHandlerTask(void const * argument)
 void startPotHandlerTask(void const * argument)
 {
   /* USER CODE BEGIN startPotHandlerTask */
-	TickType_t samplingFrequency = pdMS_TO_TICKS(5);
-	TickType_t ticksToWait = samplingFrequency + pdMS_TO_TICKS(1);
-	
-	const uint16_t adcMax = UINT8_MAX;	// Pot values are converted to 8-bit
-	
-	ADC_ChannelConfTypeDef sConfig;
-	sConfig.Channel = ADC_CHANNEL_1;
-  sConfig.Rank = ADC_REGULAR_RANK_1;
-  sConfig.SingleDiff = ADC_SINGLE_ENDED;
-  sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
-  sConfig.OffsetNumber = ADC_OFFSET_NONE;
-  sConfig.Offset = 0;
+	PotTaskContext taskContext = {
+      .samplingFrequencyTicks = pdMS_TO_TICKS(5),
+      .timeoutSlackTicks = pdMS_TO_TICKS(1),
+      .adcMax = UINT8_MAX,
+      .potCount = 4,
+  };
+
+  PotTaskOps taskOps = {
+      .start_adc = pot_task_start_adc,
+      .wait_for_sample = pot_task_wait_for_sample,
+      .read_active_effect = pot_task_read_active_effect,
+      .apply_pot_sample = pot_task_apply_sample,
+      .context = NULL,
+  };
 	
   /* Infinite loop */
   for(;;)
   {
-		/* Sample each pot in turn */
-		for (int pot = 0; pot < 4; pot++)
-		{
-      ticksToWait = samplingFrequency + pdMS_TO_TICKS(1);
-			uint32_t adcValue;
-			
-			/* Set ADC to appropriate channel */
-			switch (pot)
-			{
-				case 0: sConfig.Channel = ADC_CHANNEL_1; break;	// POT_A
-				case 1: sConfig.Channel = ADC_CHANNEL_2; break;	// POT_B
-				case 2: sConfig.Channel = ADC_CHANNEL_4; break;	// POT_C
-				case 3: sConfig.Channel = ADC_CHANNEL_6; break;	// POT_D
-				default: break;
-			}
-			
-			/* Start ADC and wait (skip if timed out since data is obsolete) */
-      if (!peripheral_start_adc_conversion_it(&hadc1, &sConfig, &peripheralDispatchOps))
-      {
-        continue;
-      }
-
-      if (xTaskNotifyWait(0, 0xFFFFFFFFUL, &adcValue, ticksToWait) != pdTRUE)
-			{
-				continue;
-			}
-
-      EffectsState latchedEffectsState;
-      Effect activeEffect;
-      taskENTER_CRITICAL();
-      latchedEffectsState = effectsState;
-      taskEXIT_CRITICAL();
-
-      effects_state_normalize(&latchedEffectsState);
-
-      if (!effects_state_get_active_effect(&latchedEffectsState, &activeEffect))
-      {
-        continue;
-      }
-
-      /* Handle POT_x depending on active effect */
-      taskENTER_CRITICAL();
-      (void)effects_params_apply_pot_sample((EffectsParams *)&effectsParams, activeEffect, (uint8_t)pot, adcValue, adcMax);
-      taskEXIT_CRITICAL();
-		}
+    (void) pot_task_step(&taskContext, &taskOps);
   }
   /* USER CODE END startPotHandlerTask */
 }
