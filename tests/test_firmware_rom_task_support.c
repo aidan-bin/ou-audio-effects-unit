@@ -7,8 +7,9 @@
 #include "i2c_handler.h"
 #include "rom_handler.h"
 #include "rom_task_support.h"
+#include "harness/expect.h"
 
-static int failures = 0;
+int failures = 0;
 
 typedef struct
 {
@@ -22,33 +23,6 @@ typedef struct
     uint8_t savedPayload[1024];
     size_t savedPayloadSize;
 } RomTaskTestContext;
-
-static void expect_true(bool condition, const char *label)
-{
-    if (!condition)
-    {
-        fprintf(stderr, "FAIL: %s\n", label);
-        failures++;
-    }
-}
-
-static void expect_eq_u32(uint32_t expected, uint32_t actual, const char *label)
-{
-    if (expected != actual)
-    {
-        fprintf(stderr, "FAIL: %s expected=%u actual=%u\n", label, expected, actual);
-        failures++;
-    }
-}
-
-static void expect_eq_u16(uint16_t expected, uint16_t actual, const char *label)
-{
-    if (expected != actual)
-    {
-        fprintf(stderr, "FAIL: %s expected=%u actual=%u\n", label, expected, actual);
-        failures++;
-    }
-}
 
 static bool queue_message_and_wait(void *queueHandle, void *message, bool *pFailed,
     void *failedSemaphoreHandle, uint32_t timeoutTicks, void *context)
