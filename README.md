@@ -21,7 +21,7 @@ Includes overdrive/echo/compression DSP in C, STM32 firmware with FreeRTOS + DMA
 From the repository root:
 
 ```sh
-./scripts/demo.sh
+./scripts/run.sh demo
 ```
 
 The demo launcher builds the shared DSP library, creates/uses a local virtualenv at `.local/python-demo-venv`, installs Python demo dependencies from `host/python-demo/requirements.txt`, and starts the UI.
@@ -41,41 +41,41 @@ The STM32 firmware project is generated locally with CubeMX and is not checked i
 Run from repository root:
 
 ```sh
-./scripts/check.sh
+./scripts/run.sh
 ```
 
-`check.sh` runs dependency preflight (`doctor.sh`) before build+test.
+`run.sh` defaults to the `check` workflow, which runs dependency preflight before build+test.
 
 Run full verification (format + lint + build + tests):
 
 ```sh
-./scripts/check-full.sh
+./scripts/run.sh check-full
 ```
 
-`check-full.sh` runs dependency preflight (`doctor.sh`) before the full gate.
+`check-full` runs dependency preflight before the full gate.
 
 Or run tests only:
 
 ```sh
-./scripts/test.sh
+./scripts/run.sh test
 ```
 
 Check formatting without modifying files:
 
 ```sh
-./scripts/format-check.sh
+./scripts/run.sh format-check
 ```
 
 Clean generated artifacts:
 
 ```sh
-./scripts/clean.sh
+./scripts/run.sh clean
 ```
 
 Check local tool dependencies:
 
 ```sh
-./scripts/doctor.sh
+./scripts/run.sh doctor
 ```
 
 ## Hardware Snapshot

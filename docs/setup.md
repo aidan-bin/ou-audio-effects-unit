@@ -52,22 +52,22 @@ Build artifacts are written to:
 Run from repository root:
 
 ```sh
-./scripts/check.sh
+./scripts/run.sh
 ```
 
-This runs `./scripts/doctor.sh` first, then build + test.
+This runs dependency preflight first, then build + test.
 
 Optional tooling:
 
 ```sh
-./scripts/build.sh
-./scripts/format.sh
-./scripts/format-check.sh
-./scripts/lint.sh
-./scripts/test.sh
-./scripts/clean.sh
-./scripts/check-full.sh
-./scripts/doctor.sh
+./scripts/run.sh build
+./scripts/run.sh format
+./scripts/run.sh format-check
+./scripts/run.sh lint
+./scripts/run.sh test
+./scripts/run.sh clean
+./scripts/run.sh check-full
+./scripts/run.sh doctor
 ```
 
 ## Host Demo
@@ -75,13 +75,13 @@ Optional tooling:
 Run from repository root:
 
 ```sh
-./scripts/demo.sh
+./scripts/run.sh demo
 ```
 
 Equivalent explicit commands:
 
 ```sh
-./scripts/build.sh
+./scripts/run.sh build
 python3 -m pip install -r host/python-demo/requirements.txt
 python3 host/python-demo/main.py
 ```

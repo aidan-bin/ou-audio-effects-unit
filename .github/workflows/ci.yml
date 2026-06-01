@@ -21,7 +21,7 @@ jobs:
           sudo apt-get install -y cmake build-essential clang-format clang-tidy python3 python3-pip
 
       - name: Doctor
-        run: ./scripts/doctor.sh
+        run: ./scripts/run.sh doctor
 
       - name: Check
-        run: ./scripts/check-full.sh
+        run: ./scripts/run.sh check-full
