@@ -1,38 +1,12 @@
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <string.h>
 
 #include "effects_model.h"
 
-static int failures = 0;
+#include "harness/expect.h"
 
-static void expect_true(bool value, const char *label)
-{
-    if (!value)
-    {
-        fprintf(stderr, "FAIL: %s expected=true actual=false\n", label);
-        failures++;
-    }
-}
-
-static void expect_false(bool value, const char *label)
-{
-    if (value)
-    {
-        fprintf(stderr, "FAIL: %s expected=false actual=true\n", label);
-        failures++;
-    }
-}
-
-static void expect_eq_size(size_t expected, size_t actual, const char *label)
-{
-    if (expected != actual)
-    {
-        fprintf(stderr, "FAIL: %s expected=%zu actual=%zu\n", label, expected, actual);
-        failures++;
-    }
-}
+int failures = 0;
 
 static EffectsParams test_params_template(void)
 {

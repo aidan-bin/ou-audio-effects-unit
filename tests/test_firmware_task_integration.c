@@ -1,15 +1,15 @@
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "effects_model.h"
 #include "effects_task.h"
+#include "harness/expect.h"
 #include "pot_task.h"
 #include "switch_task.h"
 
-static int failures = 0;
+int failures = 0;
 
 typedef struct
 {
@@ -28,33 +28,6 @@ typedef struct
     uint32_t outstandingAllocs;
     uint32_t failureReports;
 } IntegrationState;
-
-static void expect_true(bool condition, const char *label)
-{
-    if (!condition)
-    {
-        fprintf(stderr, "FAIL: %s\n", label);
-        failures++;
-    }
-}
-
-static void expect_eq_u32(uint32_t expected, uint32_t actual, const char *label)
-{
-    if (expected != actual)
-    {
-        fprintf(stderr, "FAIL: %s expected=%u actual=%u\n", label, expected, actual);
-        failures++;
-    }
-}
-
-static void expect_eq_u16(uint16_t expected, uint16_t actual, const char *label)
-{
-    if (expected != actual)
-    {
-        fprintf(stderr, "FAIL: %s expected=%u actual=%u\n", label, expected, actual);
-        failures++;
-    }
-}
 
 static bool switch_read_switch(uint8_t index, bool *enabledOut, void *context)
 {

@@ -1,46 +1,10 @@
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdio.h>
 
 #include "effects_model.h"
+#include "harness/expect.h"
 
-static int failures = 0;
-
-static void expect_true(bool value, const char *label)
-{
-    if (!value)
-    {
-        fprintf(stderr, "FAIL: %s expected=true actual=false\n", label);
-        failures++;
-    }
-}
-
-static void expect_false(bool value, const char *label)
-{
-    if (value)
-    {
-        fprintf(stderr, "FAIL: %s expected=false actual=true\n", label);
-        failures++;
-    }
-}
-
-static void expect_eq_u8(uint8_t expected, uint8_t actual, const char *label)
-{
-    if (expected != actual)
-    {
-        fprintf(stderr, "FAIL: %s expected=%u actual=%u\n", label, expected, actual);
-        failures++;
-    }
-}
-
-static void expect_eq_size(size_t expected, size_t actual, const char *label)
-{
-    if (expected != actual)
-    {
-        fprintf(stderr, "FAIL: %s expected=%zu actual=%zu\n", label, expected, actual);
-        failures++;
-    }
-}
+int failures = 0;
 
 static void test_effects_state_order_valid_default_order(void)
 {

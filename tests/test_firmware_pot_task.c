@@ -1,11 +1,12 @@
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <string.h>
 
 #include "pot_task.h"
 
-static int failures = 0;
+#include "harness/expect.h"
+
+int failures = 0;
 
 typedef struct
 {
@@ -27,24 +28,6 @@ typedef struct
     uint32_t appliedSamples[4];
     uint32_t appliedAdcMax[4];
 } PotTaskTestState;
-
-static void expect_true(bool condition, const char *label)
-{
-    if (!condition)
-    {
-        fprintf(stderr, "FAIL: %s\n", label);
-        failures++;
-    }
-}
-
-static void expect_eq_u32(uint32_t expected, uint32_t actual, const char *label)
-{
-    if (expected != actual)
-    {
-        fprintf(stderr, "FAIL: %s expected=%u actual=%u\n", label, expected, actual);
-        failures++;
-    }
-}
 
 static bool start_adc(uint8_t potIndex, void *context)
 {
