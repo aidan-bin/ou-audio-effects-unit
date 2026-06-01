@@ -53,6 +53,15 @@ static inline void expect_eq_u32(uint32_t expected, uint32_t actual, const char 
     }
 }
 
+static inline void expect_ptr(const void *expected, const void *actual, const char *label)
+{
+    if (expected != actual)
+    {
+        fprintf(stderr, "FAIL: %s expected=%p actual=%p\n", label, expected, actual);
+        failures++;
+    }
+}
+
 static inline void expect_eq_size(size_t expected, size_t actual, const char *label)
 {
     if (expected != actual)

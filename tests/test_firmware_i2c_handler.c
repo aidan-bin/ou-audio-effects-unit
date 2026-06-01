@@ -7,25 +7,9 @@
 #include "mocks/freertos_mock.h"
 #include "mocks/hal_mock.h"
 
-static int failures = 0;
+#include "harness/expect.h"
 
-static void expect_true(bool condition, const char *label)
-{
-    if (!condition)
-    {
-        fprintf(stderr, "FAIL: %s\n", label);
-        failures++;
-    }
-}
-
-static void expect_eq_u32(uint32_t expected, uint32_t actual, const char *label)
-{
-    if (expected != actual)
-    {
-        fprintf(stderr, "FAIL: %s expected=%u actual=%u\n", label, expected, actual);
-        failures++;
-    }
-}
+int failures = 0;
 
 typedef struct
 {

@@ -6,25 +6,9 @@
 #include "effects_model.h"
 #include "rom_handler.h"
 
-static int failures = 0;
+#include "harness/expect.h"
 
-static void expect_true(bool value, const char *label)
-{
-    if (!value)
-    {
-        fprintf(stderr, "FAIL: %s\n", label);
-        failures++;
-    }
-}
-
-static void expect_eq_u8(uint8_t expected, uint8_t actual, const char *label)
-{
-    if (expected != actual)
-    {
-        fprintf(stderr, "FAIL: %s expected=%u actual=%u\n", label, expected, actual);
-        failures++;
-    }
-}
+int failures = 0;
 
 static void test_encode_address_big_endian(void)
 {

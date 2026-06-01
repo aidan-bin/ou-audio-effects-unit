@@ -4,50 +4,15 @@
 
 #include "mocks/freertos_mock.h"
 #include "mocks/hal_mock.h"
+#include "harness/expect.h"
 
-static int failures = 0;
+int failures = 0;
 static int g_i2cTxCallbackHits = 0;
 
 static void on_i2c_tx_complete(void *context)
 {
     (void)context;
     g_i2cTxCallbackHits++;
-}
-
-static void expect_true(int condition, const char *label)
-{
-    if (!condition)
-    {
-        fprintf(stderr, "FAIL: %s\n", label);
-        failures++;
-    }
-}
-
-static void expect_eq_u32(uint32_t expected, uint32_t actual, const char *label)
-{
-    if (expected != actual)
-    {
-        fprintf(stderr, "FAIL: %s expected=%u actual=%u\n", label, expected, actual);
-        failures++;
-    }
-}
-
-static void expect_eq_u16(uint16_t expected, uint16_t actual, const char *label)
-{
-    if (expected != actual)
-    {
-        fprintf(stderr, "FAIL: %s expected=%u actual=%u\n", label, expected, actual);
-        failures++;
-    }
-}
-
-static void expect_eq_u8(uint8_t expected, uint8_t actual, const char *label)
-{
-    if (expected != actual)
-    {
-        fprintf(stderr, "FAIL: %s expected=%u actual=%u\n", label, expected, actual);
-        failures++;
-    }
 }
 
 static void test_hal_i2c_tx_records_payload(void)

@@ -3,8 +3,9 @@
 #include <stdio.h>
 
 #include "peripheral_dispatch.h"
+#include "harness/expect.h"
 
-static int failures = 0;
+int failures = 0;
 
 typedef struct
 {
@@ -34,33 +35,6 @@ typedef struct
     uint32_t adcStartCount;
     bool adcStartResult;
 } PeripheralDispatchTestState;
-
-static void expect_true(bool condition, const char *label)
-{
-    if (!condition)
-    {
-        fprintf(stderr, "FAIL: %s\n", label);
-        failures++;
-    }
-}
-
-static void expect_eq_u32(uint32_t expected, uint32_t actual, const char *label)
-{
-    if (expected != actual)
-    {
-        fprintf(stderr, "FAIL: %s expected=%u actual=%u\n", label, expected, actual);
-        failures++;
-    }
-}
-
-static void expect_ptr(void *expected, void *actual, const char *label)
-{
-    if (expected != actual)
-    {
-        fprintf(stderr, "FAIL: %s expected=%p actual=%p\n", label, expected, actual);
-        failures++;
-    }
-}
 
 static bool test_semaphore_take(void *semaphoreHandle, uint32_t timeoutTicks, void *context)
 {
