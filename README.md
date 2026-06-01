@@ -33,7 +33,7 @@ The STM32 firmware project is generated locally with CubeMX and is not checked i
 - FreeRTOS task-based control flow
 - ping-pong sample buffering
 - DMA-driven ADC/DAC audio transfer
-- effect parameter/state handling
+- merged effect parameter/state/control handling in the firmware app
 - I2C infrastructure for peripherals (EEPROM and display path)
 
 ## Tests

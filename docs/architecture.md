@@ -29,11 +29,14 @@ The runtime model is FreeRTOS task-based with DMA-backed ADC/DAC audio movement 
 
 High-level subsystems in the firmware include:
 
+- effect model/state/control logic
 - effect processing
 - button/switch/pot handlers
 - LED task
 - I2C queue-driven peripheral path
 - ROM/display support paths
+
+Host-side firmware tests use op-vector style mocks for task boundaries. The test runtime stays host-only; HAL and FreeRTOS symbol mocks are reserved for modules that link those APIs directly.
 
 ## Host Demo Path
 
