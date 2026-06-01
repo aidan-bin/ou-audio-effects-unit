@@ -119,9 +119,6 @@ osStaticThreadDef_t displayHandlerTaskControlBlock;
 osMessageQId i2cQueueHandle;
 uint8_t i2cQueueBuffer[ 16 * sizeof( I2CHandlerMessage ) ];
 osStaticMessageQDef_t i2cQueueControlBlock;
-osMessageQId displayCommandQueueHandle;
-uint8_t displayCommandQueueBuffer[ 16 * sizeof( uint16_t ) ];
-osStaticMessageQDef_t displayCommandQueueControlBlock;
 osSemaphoreId delaySamplesDmaSemaphoreHandle;
 osSemaphoreId i2cCompletionSemaphoreHandle;
 osSemaphoreId i2cFailedRomSemaphoreHandle;
@@ -693,10 +690,6 @@ int main(void)
   osMessageQStaticDef(i2cQueue, 16, I2CHandlerMessage, i2cQueueBuffer, &i2cQueueControlBlock);
   i2cQueueHandle = osMessageCreate(osMessageQ(i2cQueue), NULL);
 
-  /* definition and creation of displayCommandQueue */
-  osMessageQStaticDef(displayCommandQueue, 16, uint16_t, displayCommandQueueBuffer, &displayCommandQueueControlBlock);
-  displayCommandQueueHandle = osMessageCreate(osMessageQ(displayCommandQueue), NULL);
-
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
   /* USER CODE END RTOS_QUEUES */
@@ -1021,7 +1014,7 @@ static void MX_I2C1_Init(void)
 
   /* USER CODE END I2C1_Init 1 */
   hi2c1.Instance = I2C1;
-  hi2c1.Init.Timing = 0x2000090E;
+  hi2c1.Init.Timing = 0x00201D2B;
   hi2c1.Init.OwnAddress1 = 0;
   hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
   hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
