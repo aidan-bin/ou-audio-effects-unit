@@ -11,7 +11,7 @@ void rom_task_support_init(RomTaskSupportConfig *config, RomTaskSupportOps *ops,
         void *failedSemaphoreHandle, uint32_t timeoutTicks, void *context),
     uint8_t *(*allocate_payload)(size_t size, void *context),
     void (*free_payload)(uint8_t *payload, void *context),
-    void (*set_write_enable)(bool enabled, void *context),
+    void (*set_write_disable)(bool disableWrites, void *context),
     void *context)
 {
     if (config == NULL || ops == NULL)
@@ -31,7 +31,7 @@ void rom_task_support_init(RomTaskSupportConfig *config, RomTaskSupportOps *ops,
     ops->queue_message_and_wait = queue_message_and_wait;
     ops->allocate_payload = allocate_payload;
     ops->free_payload = free_payload;
-    ops->set_write_enable = set_write_enable;
+    ops->set_write_disable = set_write_disable;
     ops->context = context;
 }
 
@@ -66,11 +66,11 @@ static void free_payload(const RomTaskSupportOps *ops, uint8_t *payload)
     }
 }
 
-static void set_write_enable(const RomTaskSupportOps *ops, bool enabled)
+static void set_write_disable(const RomTaskSupportOps *ops, bool disableWrites)
 {
-    if (ops != NULL && ops->set_write_enable != NULL)
+    if (ops != NULL && ops->set_write_disable != NULL)
     {
-        ops->set_write_enable(enabled, ops->context);
+        ops->set_write_disable(disableWrites, ops->context);
     }
 }
 
@@ -106,15 +106,15 @@ bool rom_task_bootstrap_effects(const RomTaskSupportConfig *config, const RomTas
     message.address = config->deviceAddress;
     message.items = (uint16_t)addressPayloadSizeBytes;
 
-    set_write_enable(ops, false);
+    set_write_disable(ops, false);
     if (!queue_message(config, ops, &message, message.pFailed, config->bootstrapTimeoutTicks))
     {
-        set_write_enable(ops, true);
+        set_write_disable(ops, true);
         free_payload(ops, message.payload);
         return false;
     }
 
-    set_write_enable(ops, true);
+    set_write_disable(ops, true);
 
     message.payload = allocate_payload(ops, payloadSizeBytes);
     if (message.payload == NULL)
@@ -179,14 +179,14 @@ bool rom_task_save_effects(const RomTaskSupportConfig *config, const RomTaskSupp
     message.address = config->deviceAddress;
     message.items = (uint16_t)payloadSizeBytes;
 
-    set_write_enable(ops, false);
+    set_write_disable(ops, false);
     if (!queue_message(config, ops, &message, message.pFailed, config->saveTimeoutTicks))
     {
-        set_write_enable(ops, true);
+        set_write_disable(ops, true);
         free_payload(ops, message.payload);
         return false;
     }
 
-    set_write_enable(ops, true);
+    set_write_disable(ops, true);
     return true;
 }

@@ -222,7 +222,7 @@ static void button_task_dispatch(uint16_t pin, void *context);
 
 static uint8_t *allocate_payload_adapter(size_t size, void *context);
 static void free_payload_adapter(uint8_t *payload, void *context);
-static void set_rom_write_enable_adapter(bool enabled, void *context);
+static void set_rom_write_disable_adapter(bool disableWrites, void *context);
 static void init_peripheral_dispatch(void);
 
 /* USER CODE END PFP */
@@ -564,11 +564,12 @@ static void free_payload_adapter(uint8_t *payload, void *context)
   }
 }
 
-static void set_rom_write_enable_adapter(bool enabled, void *context)
+static void set_rom_write_disable_adapter(bool disableWrites, void *context)
 {
   (void) context;
 
-  HAL_GPIO_WritePin(nNVM_WE_GPIO_Port, nNVM_WE_Pin, enabled ? GPIO_PIN_SET : GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(nNVM_WE_GPIO_Port, nNVM_WE_Pin,
+      disableWrites ? GPIO_PIN_SET : GPIO_PIN_RESET);
 }
 
 static void init_peripheral_dispatch(void)
@@ -759,7 +760,7 @@ int main(void)
       i2c_task_queue_message_and_wait,
       allocate_payload_adapter,
       free_payload_adapter,
-      set_rom_write_enable_adapter,
+      set_rom_write_disable_adapter,
       NULL);
   /* USER CODE END RTOS_THREADS */
 

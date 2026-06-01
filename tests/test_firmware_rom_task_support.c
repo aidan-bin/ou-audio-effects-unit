@@ -90,10 +90,10 @@ static void free_payload(uint8_t *payload, void *context)
     free(payload);
 }
 
-static void set_write_enable(bool enabled, void *context)
+static void set_write_disable(bool disableWrites, void *context)
 {
     RomTaskTestContext *ctx = (RomTaskTestContext *)context;
-    ctx->writeEnableState = enabled;
+    ctx->writeEnableState = disableWrites;
     ctx->setWriteEnableCalls++;
 }
 
@@ -103,7 +103,7 @@ static RomTaskSupportOps make_ops(RomTaskTestContext *ctx)
         .queue_message_and_wait = queue_message_and_wait,
         .allocate_payload = allocate_payload,
         .free_payload = free_payload,
-        .set_write_enable = set_write_enable,
+        .set_write_disable = set_write_disable,
         .context = ctx,
     };
     return ops;

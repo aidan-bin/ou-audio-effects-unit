@@ -26,7 +26,7 @@ typedef struct
         void *failedSemaphoreHandle, uint32_t timeoutTicks, void *context);
     uint8_t *(*allocate_payload)(size_t size, void *context);
     void (*free_payload)(uint8_t *payload, void *context);
-    void (*set_write_enable)(bool enabled, void *context);
+    void (*set_write_disable)(bool disableWrites, void *context);
     void *context;
 } RomTaskSupportOps;
 
@@ -38,7 +38,7 @@ void rom_task_support_init(RomTaskSupportConfig *config, RomTaskSupportOps *ops,
         void *failedSemaphoreHandle, uint32_t timeoutTicks, void *context),
     uint8_t *(*allocate_payload)(size_t size, void *context),
     void (*free_payload)(uint8_t *payload, void *context),
-    void (*set_write_enable)(bool enabled, void *context),
+    void (*set_write_disable)(bool disableWrites, void *context),
     void *context);
 
 bool rom_task_bootstrap_effects(const RomTaskSupportConfig *config, const RomTaskSupportOps *ops,
