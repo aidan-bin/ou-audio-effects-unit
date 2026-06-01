@@ -5,7 +5,7 @@
 #include <stdint.h>
 
 #include "effect_runtime.h"
-#include "effects_control_logic.h"
+#include "effects_model.h"
 
 typedef struct
 {

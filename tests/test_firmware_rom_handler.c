@@ -3,8 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "effects_control_logic.h"
-#include "effects_state_manager.h"
+#include "effects_model.h"
 #include "rom_handler.h"
 
 static int failures = 0;

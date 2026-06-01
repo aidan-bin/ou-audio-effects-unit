@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "effects_control_logic.h"
+#include "effects_model.h"
 
 typedef struct
 {

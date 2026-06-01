@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "effects_control_logic.h"
+#include "effects_model.h"
 
 static int failures = 0;
 

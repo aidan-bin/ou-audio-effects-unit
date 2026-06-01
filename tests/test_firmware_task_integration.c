@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "effects_model.h"
 #include "effects_task.h"
 #include "pot_task.h"
 #include "switch_task.h"

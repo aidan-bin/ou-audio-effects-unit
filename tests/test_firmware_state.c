@@ -2,7 +2,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#include "effects_state_manager.h"
+#include "effects_model.h"
 
 static int failures = 0;
 

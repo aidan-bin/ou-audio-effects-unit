@@ -5,8 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "effects_control_logic.h"
-#include "effects_state_manager.h"
+#include "effects_model.h"
 
 typedef struct
 {

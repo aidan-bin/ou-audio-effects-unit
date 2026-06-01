@@ -5,8 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "effects_control_logic.h"
-#include "effects_state_manager.h"
+#include "effects_model.h"
 
 size_t rom_handler_read_payload_size(void);
 size_t rom_handler_write_payload_size(void);

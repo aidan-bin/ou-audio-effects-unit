@@ -3,8 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "effects_control_logic.h"
-#include "effects_state_manager.h"
+#include "effects_model.h"
 #include "i2c_handler.h"
 #include "rom_handler.h"
 #include "rom_task_support.h"
