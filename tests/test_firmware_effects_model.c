@@ -3,10 +3,84 @@
 #include <string.h>
 
 #include "effects_model.h"
-
 #include "harness/expect.h"
 
 int failures = 0;
+
+/* ---- state tests ---- */
+
+static void test_effects_state_order_valid_default_order(void)
+{
+    EffectsState state = {
+        .ordered = {OVERDRIVE, ECHO, COMPRESSION},
+        .isEnabled = {true, false, true},
+        .activeEffectSelection = 1,
+    };
+
+    expect_true(effects_state_order_valid(&state), "order valid default");
+}
+
+static void test_effects_state_normalize_invalid_order_resets(void)
+{
+    EffectsState state = {
+        .ordered = {OVERDRIVE, OVERDRIVE, COMPRESSION},
+        .isEnabled = {true, true, true},
+        .activeEffectSelection = NUM_EFFECTS,
+    };
+
+    effects_state_normalize(&state);
+
+    expect_eq_u8(OVERDRIVE, state.ordered[0], "normalize order[0]");
+    expect_eq_u8(ECHO, state.ordered[1], "normalize order[1]");
+    expect_eq_u8(COMPRESSION, state.ordered[2], "normalize order[2]");
+    expect_eq_u8(0, state.activeEffectSelection, "normalize active selection");
+}
+
+static void test_effects_state_get_active_effect_invalid_state_fails(void)
+{
+    EffectsState state = {
+        .ordered = {OVERDRIVE, OVERDRIVE, COMPRESSION},
+        .isEnabled = {true, true, true},
+        .activeEffectSelection = 0,
+    };
+
+    Effect active = OVERDRIVE;
+    expect_false(effects_state_get_active_effect(&state, &active), "get active effect invalid order");
+}
+
+static void test_effects_state_get_active_effect_after_normalize(void)
+{
+    EffectsState state = {
+        .ordered = {OVERDRIVE, ECHO, COMPRESSION},
+        .isEnabled = {true, true, true},
+        .activeEffectSelection = 2,
+    };
+
+    Effect active = OVERDRIVE;
+    expect_true(effects_state_get_active_effect(&state, &active), "get active effect valid state");
+    expect_eq_u8(COMPRESSION, (uint8_t)active, "active effect selection");
+}
+
+static void test_map_adc_to_param_zero_adcmax_returns_min(void)
+{
+    expect_eq_size(17, map_adc_to_param(123, 17, 99, 0), "map adc zero max");
+}
+
+static void test_map_adc_to_param_swaps_inverted_bounds(void)
+{
+    size_t mapped_inverted = map_adc_to_param(255, 100, 20, 255);
+    size_t mapped_ordered = map_adc_to_param(255, 20, 100, 255);
+    expect_eq_size(mapped_ordered, mapped_inverted, "map adc swapped bounds");
+}
+
+static void test_map_adc_to_param_clamps_adc_input(void)
+{
+    size_t mapped_clamped = map_adc_to_param(500, 10, 110, 255);
+    size_t mapped_at_max = map_adc_to_param(255, 10, 110, 255);
+    expect_eq_size(mapped_at_max, mapped_clamped, "map adc clamp input");
+}
+
+/* ---- control logic tests ---- */
 
 static EffectsParams test_params_template(void)
 {
@@ -92,6 +166,14 @@ static void test_invalid_effect_or_index_rejected(void)
 
 int main(void)
 {
+    test_effects_state_order_valid_default_order();
+    test_effects_state_normalize_invalid_order_resets();
+    test_effects_state_get_active_effect_invalid_state_fails();
+    test_effects_state_get_active_effect_after_normalize();
+    test_map_adc_to_param_zero_adcmax_returns_min();
+    test_map_adc_to_param_swaps_inverted_bounds();
+    test_map_adc_to_param_clamps_adc_input();
+
     test_switch_mapping_uses_effect_order();
     test_overdrive_pot_updates_target_parameter();
     test_compression_unused_pots_are_noop();
@@ -99,10 +181,10 @@ int main(void)
 
     if (failures != 0)
     {
-        fprintf(stderr, "Firmware control logic tests failed: %d\n", failures);
+        fprintf(stderr, "effects model tests failed: %d\n", failures);
         return 1;
     }
 
-    puts("Firmware control logic tests passed");
+    puts("effects model tests passed");
     return 0;
 }

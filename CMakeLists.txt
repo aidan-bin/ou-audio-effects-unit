@@ -95,39 +95,22 @@ if(OU_BUILD_TESTS)
 
     add_test(NAME ou_dsp_tests COMMAND ou_dsp_tests)
 
-    add_executable(ou_firmware_state_tests
-        tests/test_firmware_state.c
+    add_executable(ou_firmware_effects_model_tests
+        tests/test_firmware_effects_model.c
     )
 
-    target_include_directories(ou_firmware_state_tests
+    target_include_directories(ou_firmware_effects_model_tests
         PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/firmware/stm32f303/app/include
     )
 
-    target_link_libraries(ou_firmware_state_tests PRIVATE ou_firmware_app)
+    target_link_libraries(ou_firmware_effects_model_tests PRIVATE ou_firmware_app)
 
     if(APPLE OR UNIX)
-        target_link_libraries(ou_firmware_state_tests PRIVATE m)
+        target_link_libraries(ou_firmware_effects_model_tests PRIVATE m)
     endif()
 
-    add_test(NAME ou_firmware_state_tests COMMAND ou_firmware_state_tests)
-
-    add_executable(ou_firmware_control_logic_tests
-        tests/test_firmware_control_logic.c
-    )
-
-    target_include_directories(ou_firmware_control_logic_tests
-        PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/firmware/stm32f303/app/include
-    )
-
-    target_link_libraries(ou_firmware_control_logic_tests PRIVATE ou_firmware_app)
-
-    if(APPLE OR UNIX)
-        target_link_libraries(ou_firmware_control_logic_tests PRIVATE m)
-    endif()
-
-    add_test(NAME ou_firmware_control_logic_tests COMMAND ou_firmware_control_logic_tests)
+    add_test(NAME ou_firmware_effects_model_tests COMMAND ou_firmware_effects_model_tests)
 
     add_executable(ou_firmware_effects_pipeline_tests
         tests/test_firmware_effects_pipeline.c
