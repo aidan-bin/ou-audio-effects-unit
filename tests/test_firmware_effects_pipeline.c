@@ -5,34 +5,9 @@
 #include "effects.h"
 #include "effects_pipeline.h"
 
-static int failures = 0;
+#include "harness/expect.h"
 
-static void expect_true(bool condition, const char *label)
-{
-    if (!condition)
-    {
-        fprintf(stderr, "FAIL: %s\n", label);
-        failures++;
-    }
-}
-
-static void expect_eq_u16(uint16_t expected, uint16_t actual, const char *label)
-{
-    if (expected != actual)
-    {
-        fprintf(stderr, "FAIL: %s expected=%u actual=%u\n", label, expected, actual);
-        failures++;
-    }
-}
-
-static void expect_eq_size(size_t expected, size_t actual, const char *label)
-{
-    if (expected != actual)
-    {
-        fprintf(stderr, "FAIL: %s expected=%zu actual=%zu\n", label, expected, actual);
-        failures++;
-    }
-}
+int failures = 0;
 
 static void test_pipeline_init_and_sync_params(void)
 {

@@ -5,7 +5,9 @@
 
 #include "button_task.h"
 
-static int failures = 0;
+#include "harness/expect.h"
+
+int failures = 0;
 
 typedef struct
 {
@@ -14,15 +16,6 @@ typedef struct
     uint32_t dispatchCalls;
     uint16_t lastDispatchedPin;
 } ButtonTaskTestState;
-
-static void expect_true(bool condition, const char *label)
-{
-    if (!condition)
-    {
-        fprintf(stderr, "FAIL: %s\n", label);
-        failures++;
-    }
-}
 
 static bool wait_for_button(uint16_t *pinOut, void *context)
 {
