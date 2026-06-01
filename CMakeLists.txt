@@ -19,8 +19,7 @@ set(OU_DSP_SOURCES
 
 set(OU_FIRMWARE_APP_SOURCES
     firmware/stm32f303/app/src/button_task.c
-    firmware/stm32f303/app/src/effects_state_manager.c
-    firmware/stm32f303/app/src/effects_control_logic.c
+    firmware/stm32f303/app/src/effects_model.c
     firmware/stm32f303/app/src/effects_pipeline.c
     firmware/stm32f303/app/src/effects_task.c
     firmware/stm32f303/app/src/i2c_handler.c
