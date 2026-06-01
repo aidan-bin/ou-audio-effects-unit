@@ -27,6 +27,7 @@ set(OU_FIRMWARE_APP_SOURCES
     firmware/stm32f303/app/src/pot_task.c
     firmware/stm32f303/app/src/rom_task_support.c
     firmware/stm32f303/app/src/rom_handler.c
+    firmware/stm32f303/app/src/switch_task.c
 )
 
 add_library(ou_dsp STATIC ${OU_DSP_SOURCES})
@@ -198,6 +199,24 @@ if(OU_BUILD_TESTS)
     endif()
 
     add_test(NAME ou_firmware_pot_task_tests COMMAND ou_firmware_pot_task_tests)
+
+    add_executable(ou_firmware_switch_task_tests
+        tests/test_firmware_switch_task.c
+    )
+
+    target_include_directories(ou_firmware_switch_task_tests
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/firmware/stm32f303/app/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/dsp/effects
+    )
+
+    target_link_libraries(ou_firmware_switch_task_tests PRIVATE ou_firmware_app)
+
+    if(APPLE OR UNIX)
+        target_link_libraries(ou_firmware_switch_task_tests PRIVATE m)
+    endif()
+
+    add_test(NAME ou_firmware_switch_task_tests COMMAND ou_firmware_switch_task_tests)
 
     add_executable(ou_firmware_rom_task_support_tests
         tests/test_firmware_rom_task_support.c

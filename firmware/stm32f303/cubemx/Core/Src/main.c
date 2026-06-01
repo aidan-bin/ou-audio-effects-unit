@@ -34,6 +34,7 @@
 #include "peripheral_dispatch.h"
 #include "pot_task.h"
 #include "rom_task_support.h"
+#include "switch_task.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -209,6 +210,11 @@ static bool pot_task_wait_for_sample(uint32_t timeoutTicks, uint32_t *valueOut, 
 static bool pot_task_read_active_effect(Effect *activeEffect, void *context);
 static void pot_task_apply_sample(Effect activeEffect, uint8_t potIndex, uint32_t adcValue,
   uint32_t adcMax, void *context);
+
+static bool switch_task_read_switch(uint8_t index, bool *enabledOut, void *context);
+static bool switch_task_read_state(EffectsState *stateOut, void *context);
+static bool switch_task_write_state(const EffectsState *state, void *context);
+static void switch_task_sleep_ms(uint32_t ms, void *context);
 
 static uint8_t *allocate_payload_adapter(size_t size, void *context);
 static void free_payload_adapter(uint8_t *payload, void *context);
@@ -435,6 +441,68 @@ static void pot_task_apply_sample(Effect activeEffect, uint8_t potIndex, uint32_
   (void)effects_params_apply_pot_sample((EffectsParams *)&effectsParams, activeEffect, potIndex,
       adcValue, adcMax);
   taskEXIT_CRITICAL();
+}
+
+static bool switch_task_read_switch(uint8_t index, bool *enabledOut, void *context)
+{
+  (void) context;
+
+  if (enabledOut == NULL)
+  {
+    return false;
+  }
+
+  uint16_t pin = 0;
+  GPIO_TypeDef *port = NULL;
+
+  switch (index)
+  {
+    case 0: port = SWITCH_A_GPIO_Port; pin = SWITCH_A_Pin; break;
+    case 1: port = SWITCH_B_GPIO_Port; pin = SWITCH_B_Pin; break;
+    case 2: port = SWITCH_C_GPIO_Port; pin = SWITCH_C_Pin; break;
+    default: return false;
+  }
+
+  *enabledOut = HAL_GPIO_ReadPin(port, pin) == GPIO_PIN_SET;
+  return true;
+}
+
+static bool switch_task_read_state(EffectsState *stateOut, void *context)
+{
+  (void) context;
+
+  if (stateOut == NULL)
+  {
+    return false;
+  }
+
+  taskENTER_CRITICAL();
+  *stateOut = effectsState;
+  taskEXIT_CRITICAL();
+
+  return true;
+}
+
+static bool switch_task_write_state(const EffectsState *state, void *context)
+{
+  (void) context;
+
+  if (state == NULL)
+  {
+    return false;
+  }
+
+  taskENTER_CRITICAL();
+  effectsState = *state;
+  taskEXIT_CRITICAL();
+
+  return true;
+}
+
+static void switch_task_sleep_ms(uint32_t ms, void *context)
+{
+  (void) context;
+  osDelay(ms);
 }
 
 static uint8_t *allocate_payload_adapter(size_t size, void *context)
@@ -1424,27 +1492,22 @@ void startEffectsTask(void const * argument)
 void startSwHandlerTask(void const * argument)
 {
   /* USER CODE BEGIN startSwHandlerTask */
-	uint16_t pollingFrequencyMs = 5;
+	SwitchTaskContext taskContext = {
+      .pollingFrequencyMs = 5,
+  };
+
+  SwitchTaskOps taskOps = {
+      .read_switch = switch_task_read_switch,
+      .read_state = switch_task_read_state,
+      .write_state = switch_task_write_state,
+      .sleep_ms = switch_task_sleep_ms,
+      .context = NULL,
+  };
 	
   /* Infinite loop */
   for(;;)
   {
-    bool switchAEnabled = HAL_GPIO_ReadPin(SWITCH_A_GPIO_Port, SWITCH_A_Pin) == GPIO_PIN_SET;
-    bool switchBEnabled = HAL_GPIO_ReadPin(SWITCH_B_GPIO_Port, SWITCH_B_Pin) == GPIO_PIN_SET;
-    bool switchCEnabled = HAL_GPIO_ReadPin(SWITCH_C_GPIO_Port, SWITCH_C_Pin) == GPIO_PIN_SET;
-    EffectsState latchedEffectsState;
-
-    taskENTER_CRITICAL();
-    latchedEffectsState = effectsState;
-    taskEXIT_CRITICAL();
-
-    effects_state_normalize(&latchedEffectsState);
-
-    taskENTER_CRITICAL();
-    effects_state_apply_switches((EffectsState *)&effectsState, switchAEnabled, switchBEnabled, switchCEnabled);
-    taskEXIT_CRITICAL();
-
-		osDelay(pollingFrequencyMs);
+    (void) switch_task_step(&taskContext, &taskOps);
   }
   /* USER CODE END startSwHandlerTask */
 }
