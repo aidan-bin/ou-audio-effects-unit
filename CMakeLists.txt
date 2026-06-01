@@ -84,23 +84,6 @@ if(OU_BUILD_TESTS)
             ${CMAKE_CURRENT_SOURCE_DIR}/tests
     )
 
-    add_library(ou_firmware_host_harness STATIC
-        tests/harness/host_harness.c
-        tests/harness/host_ops.c
-    )
-
-    target_include_directories(ou_firmware_host_harness
-        PUBLIC
-            ${CMAKE_CURRENT_SOURCE_DIR}/tests
-            ${CMAKE_CURRENT_SOURCE_DIR}/firmware/stm32f303/app/include
-    )
-
-    target_link_libraries(ou_firmware_host_harness
-        PUBLIC
-            ou_firmware_app
-            ou_firmware_mocks
-    )
-
     add_executable(ou_dsp_tests
         tests/test_dsp.c
     )
@@ -154,7 +137,6 @@ if(OU_BUILD_TESTS)
     target_include_directories(ou_firmware_effects_pipeline_tests
         PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/firmware/stm32f303/app/include
-            ${CMAKE_CURRENT_SOURCE_DIR}/dsp/effects
     )
 
     target_link_libraries(ou_firmware_effects_pipeline_tests PRIVATE ou_firmware_app)
@@ -172,7 +154,6 @@ if(OU_BUILD_TESTS)
     target_include_directories(ou_firmware_effects_task_tests
         PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/firmware/stm32f303/app/include
-            ${CMAKE_CURRENT_SOURCE_DIR}/dsp/effects
     )
 
     target_link_libraries(ou_firmware_effects_task_tests PRIVATE ou_firmware_app)
@@ -190,7 +171,6 @@ if(OU_BUILD_TESTS)
     target_include_directories(ou_firmware_pot_task_tests
         PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/firmware/stm32f303/app/include
-            ${CMAKE_CURRENT_SOURCE_DIR}/dsp/effects
     )
 
     target_link_libraries(ou_firmware_pot_task_tests PRIVATE ou_firmware_app)
@@ -208,7 +188,6 @@ if(OU_BUILD_TESTS)
     target_include_directories(ou_firmware_switch_task_tests
         PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/firmware/stm32f303/app/include
-            ${CMAKE_CURRENT_SOURCE_DIR}/dsp/effects
     )
 
     target_link_libraries(ou_firmware_switch_task_tests PRIVATE ou_firmware_app)
@@ -243,7 +222,6 @@ if(OU_BUILD_TESTS)
     target_include_directories(ou_firmware_task_integration_tests
         PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/firmware/stm32f303/app/include
-            ${CMAKE_CURRENT_SOURCE_DIR}/dsp/effects
     )
 
     target_link_libraries(ou_firmware_task_integration_tests PRIVATE ou_firmware_app)

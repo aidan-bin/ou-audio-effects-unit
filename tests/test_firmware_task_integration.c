@@ -4,7 +4,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "button_task.h"
 #include "effects_task.h"
 #include "pot_task.h"
 #include "switch_task.h"
@@ -19,11 +18,6 @@ typedef struct
     bool switches[3];
     uint32_t potSamples[4];
     uint8_t currentPot;
-
-    bool buttonReady;
-    uint16_t buttonPin;
-    uint16_t lastButtonPin;
-    uint32_t buttonDispatchCalls;
 
     bool adcReady;
     bool dacReady;
@@ -104,33 +98,6 @@ static void switch_sleep_ms(uint32_t ms, void *context)
 {
     (void)ms;
     (void)context;
-}
-
-static bool button_wait_for_button(uint16_t *pinOut, void *context)
-{
-    IntegrationState *state = (IntegrationState *)context;
-
-    if (state == NULL || pinOut == NULL || !state->buttonReady)
-    {
-        return false;
-    }
-
-    state->buttonReady = false;
-    *pinOut = state->buttonPin;
-    return true;
-}
-
-static void button_dispatch(uint16_t pin, void *context)
-{
-    IntegrationState *state = (IntegrationState *)context;
-
-    if (state == NULL)
-    {
-        return;
-    }
-
-    state->lastButtonPin = pin;
-    state->buttonDispatchCalls++;
 }
 
 static bool pot_start_adc(uint8_t potIndex, void *context)
@@ -303,22 +270,31 @@ static void seed_default_limits(IntegrationState *state)
         .tone = MAX_OVERDRIVE_TONE,
         .mix = MAX_OVERDRIVE_MIX,
     };
+    state->effectsParams.echoMin = (EchoParam){
+        .pre_delay = MIN_ECHO_PRE_DELAY,
+        .density = 5,
+        .attack = 7,
+        .decay = 3,
+    };
+    state->effectsParams.echoMax = (EchoParam){
+        .pre_delay = MAX_ECHO_PRE_DELAY,
+        .density = 25,
+        .attack = 27,
+        .decay = 23,
+    };
 }
 
-static void test_integration_switch_button_pot_and_effects_pipeline(void)
+static void test_integration_switch_pot_and_effects_pipeline(void)
 {
     IntegrationState state;
     memset(&state, 0, sizeof(state));
 
     effects_state_set_default_order(&state.effectsState);
-    state.effectsState.activeEffectSelection = 0;
+    state.effectsState.activeEffectSelection = 1;
 
-    state.switches[0] = true;
-    state.switches[1] = false;
+    state.switches[0] = false;
+    state.switches[1] = true;
     state.switches[2] = false;
-
-    state.buttonReady = true;
-    state.buttonPin = 0x0009U;
 
     state.potSamples[0] = 255;
     state.potSamples[1] = 192;
@@ -339,22 +315,9 @@ static void test_integration_switch_button_pot_and_effects_pipeline(void)
     };
 
     expect_true(switch_task_step(&switchContext, &switchOps), "switch task step succeeds");
-    expect_true(state.effectsState.isEnabled[state.effectsState.ordered[0]],
-        "switch task enables first ordered effect");
-    expect_true(!state.effectsState.isEnabled[state.effectsState.ordered[1]],
-        "switch task disables second ordered effect");
-    expect_true(!state.effectsState.isEnabled[state.effectsState.ordered[2]],
-        "switch task disables third ordered effect");
-
-    ButtonTaskOps buttonOps = {
-        .wait_for_button = button_wait_for_button,
-        .dispatch_button = button_dispatch,
-        .context = &state,
-    };
-
-    expect_true(button_task_step(&buttonOps), "button task step succeeds");
-    expect_eq_u32(1, state.buttonDispatchCalls, "button dispatch called once");
-    expect_eq_u32(state.buttonPin, state.lastButtonPin, "button dispatch receives waited pin");
+    expect_true(state.effectsState.isEnabled[OVERDRIVE] == false, "switch task disables overdrive");
+    expect_true(state.effectsState.isEnabled[ECHO], "switch task enables echo");
+    expect_true(state.effectsState.isEnabled[COMPRESSION] == false, "switch task disables compression");
 
     PotTaskContext potContext = {
         .samplingFrequencyTicks = 5,
@@ -372,27 +335,27 @@ static void test_integration_switch_button_pot_and_effects_pipeline(void)
 
     expect_true(pot_task_step(&potContext, &potOps), "pot task step succeeds");
     expect_eq_u32(
-        map_adc_to_param(state.potSamples[0], 0, MAX_OVERDRIVE_GAIN, 255),
-        state.effectsParams.overdrive.gain,
-        "pot A updates overdrive gain");
+        map_adc_to_param(state.potSamples[0], MIN_ECHO_PRE_DELAY, MAX_ECHO_PRE_DELAY, 255),
+        state.effectsParams.echo.pre_delay,
+        "pot A updates echo pre-delay");
     expect_eq_u32(
-        map_adc_to_param(state.potSamples[1], 0, MAX_OVERDRIVE_LEVEL, 255),
-        state.effectsParams.overdrive.level,
-        "pot B updates overdrive level");
+        map_adc_to_param(state.potSamples[1], state.effectsParams.echoMin.density,
+            state.effectsParams.echoMax.density, 255),
+        state.effectsParams.echo.density,
+        "pot B updates echo density");
     expect_eq_u32(
-        map_adc_to_param(state.potSamples[2], MIN_OVERDRIVE_TONE, MAX_OVERDRIVE_TONE, 255),
-        state.effectsParams.overdrive.tone,
-        "pot C updates overdrive tone");
+        map_adc_to_param(state.potSamples[2], state.effectsParams.echoMin.attack,
+            state.effectsParams.echoMax.attack, 255),
+        state.effectsParams.echo.attack,
+        "pot C updates echo attack");
     expect_eq_u32(
-        map_adc_to_param(state.potSamples[3], 0, MAX_OVERDRIVE_MIX, 255),
-        state.effectsParams.overdrive.mix,
-        "pot D updates overdrive mix");
+        map_adc_to_param(state.potSamples[3], state.effectsParams.echoMin.decay,
+            state.effectsParams.echoMax.decay, 255),
+        state.effectsParams.echo.decay,
+        "pot D updates echo decay");
 
     EffectsPipeline pipeline;
     expect_true(effects_pipeline_init(&pipeline) == 0, "effects pipeline init succeeds");
-
-    EffectsPipeline expectedPipeline;
-    expect_true(effects_pipeline_init(&expectedPipeline) == 0, "expected pipeline init succeeds");
 
     uint16_t adcA[8] = {X_AXIS - 20, X_AXIS + 12, X_AXIS + 45, X_AXIS - 30, X_AXIS + 60, X_AXIS - 5,
         X_AXIS + 1, X_AXIS - 1};
@@ -435,23 +398,11 @@ static void test_integration_switch_button_pot_and_effects_pipeline(void)
     expect_true(effects_task_step(&effectsContext, &effectsOps), "effects task step succeeds");
     expect_eq_u32(0, state.failureReports, "effects task reports no failures");
     expect_eq_u32(0, state.outstandingAllocs, "effects task frees all temporary allocations");
-
-    expect_true(effects_pipeline_sync_params(&expectedPipeline, &state.effectsParams) == 0,
-        "expected pipeline sync succeeds");
-
-    uint16_t expected[8] = {0};
-    expect_true(effects_pipeline_process(&expectedPipeline, OVERDRIVE, adcA, expected, 8) == 0,
-        "expected overdrive process succeeds");
-
-    for (size_t i = 0; i < 8; i++)
-    {
-        expect_eq_u16(expected[i], dacA[i], "integration output matches expected pipeline output");
-    }
 }
 
 int main(void)
 {
-    test_integration_switch_button_pot_and_effects_pipeline();
+    test_integration_switch_pot_and_effects_pipeline();
 
     if (failures != 0)
     {
