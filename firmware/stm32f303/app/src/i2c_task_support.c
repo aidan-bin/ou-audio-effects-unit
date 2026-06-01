@@ -38,6 +38,40 @@ static void give_semaphore_from_isr(osSemaphoreId semaphoreHandle)
     portYIELD_FROM_ISR(higherPriorityTaskWoken);
 }
 
+void i2c_task_support_init(I2CTaskSupportContext *supportContext, I2CHandlerConfig *handlerConfig,
+    I2CHandlerOps *handlerOps, I2C_HandleTypeDef *hi2c, osThreadId romHandlerTaskHandle,
+    osThreadId displayHandlerTaskHandle, osSemaphoreId i2cCompletionSemaphoreHandle,
+    osSemaphoreId i2cFailedRomSemaphoreHandle, osSemaphoreId i2cFailedDisplaySemaphoreHandle,
+    volatile bool *i2cTransferFailed)
+{
+    if (supportContext == NULL || handlerConfig == NULL || handlerOps == NULL)
+    {
+        return;
+    }
+
+    supportContext->hi2c = hi2c;
+    supportContext->romHandlerTaskHandle = romHandlerTaskHandle;
+    supportContext->displayHandlerTaskHandle = displayHandlerTaskHandle;
+    supportContext->i2cCompletionSemaphoreHandle = i2cCompletionSemaphoreHandle;
+    supportContext->i2cFailedRomSemaphoreHandle = i2cFailedRomSemaphoreHandle;
+    supportContext->i2cFailedDisplaySemaphoreHandle = i2cFailedDisplaySemaphoreHandle;
+    supportContext->i2cTransferFailed = i2cTransferFailed;
+
+    handlerConfig->trials = 5;
+    handlerConfig->blockingTimeoutMs = 100;
+    handlerConfig->tryAgainDelayMs = 100;
+    handlerConfig->dropBudgetMs = 5000;
+
+    handlerOps->is_source_valid = i2c_task_source_is_valid;
+    handlerOps->signal_source_completion = i2c_task_signal_source_completion;
+    handlerOps->is_device_ready = i2c_task_hal_is_device_ready;
+    handlerOps->start_receive = i2c_task_hal_start_receive;
+    handlerOps->start_transmit = i2c_task_hal_start_transmit;
+    handlerOps->wait_for_completion = i2c_task_wait_for_completion;
+    handlerOps->free_payload = i2c_task_free_payload;
+    handlerOps->delay_ms = i2c_task_delay_ms;
+}
+
 bool i2c_task_source_is_valid(void *sourceTask, void *context)
 {
     const I2CTaskSupportContext *ctx = (const I2CTaskSupportContext *)context;

@@ -198,8 +198,7 @@ static void peripheral_i2c_signal_completion_from_isr(void *i2cContext, bool tra
 static uint8_t *allocate_payload_adapter(size_t size, void *context);
 static void free_payload_adapter(uint8_t *payload, void *context);
 static void set_rom_write_enable_adapter(bool enabled, void *context);
-static void init_i2c_handler_interfaces(void);
-static void init_rom_task_support_interfaces(void);
+static void init_peripheral_dispatch(void);
 
 /* USER CODE END PFP */
 
@@ -320,7 +319,7 @@ static void set_rom_write_enable_adapter(bool enabled, void *context)
   HAL_GPIO_WritePin(nNVM_WE_GPIO_Port, nNVM_WE_Pin, enabled ? GPIO_PIN_SET : GPIO_PIN_RESET);
 }
 
-static void init_i2c_handler_interfaces(void)
+static void init_peripheral_dispatch(void)
 {
   peripheralDispatchContext.effectsTaskHandle = effectsTaskHandle;
   peripheralDispatchContext.potHandlerTaskHandle = potHandlerTaskHandle;
@@ -345,46 +344,6 @@ static void init_i2c_handler_interfaces(void)
   peripheralDispatchOps.adc_get_value = peripheral_adc_get_value;
   peripheralDispatchOps.i2c_signal_completion_from_isr = peripheral_i2c_signal_completion_from_isr;
   peripheralDispatchOps.context = NULL;
-
-  i2cTaskSupportContext.hi2c = &hi2c1;
-  i2cTaskSupportContext.romHandlerTaskHandle = romHandlerTaskHandle;
-  i2cTaskSupportContext.displayHandlerTaskHandle = displayHandlerTaskHandle;
-  i2cTaskSupportContext.i2cCompletionSemaphoreHandle = i2cCompletionSemaphoreHandle;
-  i2cTaskSupportContext.i2cFailedRomSemaphoreHandle = i2cFailedRomSemaphoreHandle;
-  i2cTaskSupportContext.i2cFailedDisplaySemaphoreHandle = i2cFailedDisplaySemaphoreHandle;
-  i2cTaskSupportContext.i2cTransferFailed = &i2cTransferFailed;
-
-  i2cHandlerConfig.trials = 5;
-  i2cHandlerConfig.blockingTimeoutMs = 100;
-  i2cHandlerConfig.tryAgainDelayMs = 100;
-  i2cHandlerConfig.dropBudgetMs = 5000;
-
-  i2cHandlerOps.is_source_valid = i2c_task_source_is_valid;
-  i2cHandlerOps.signal_source_completion = i2c_task_signal_source_completion;
-  i2cHandlerOps.is_device_ready = i2c_task_hal_is_device_ready;
-  i2cHandlerOps.start_receive = i2c_task_hal_start_receive;
-  i2cHandlerOps.start_transmit = i2c_task_hal_start_transmit;
-  i2cHandlerOps.wait_for_completion = i2c_task_wait_for_completion;
-  i2cHandlerOps.free_payload = i2c_task_free_payload;
-  i2cHandlerOps.delay_ms = i2c_task_delay_ms;
-}
-
-static void init_rom_task_support_interfaces(void)
-{
-  romTaskSupportConfig.sourceTask = romHandlerTaskHandle;
-  romTaskSupportConfig.i2cQueueHandle = i2cQueueHandle;
-  romTaskSupportConfig.i2cFailedRomSemaphoreHandle = i2cFailedRomSemaphoreHandle;
-  romTaskSupportConfig.deviceAddress = (ROM_I2C_ADDR << 1) & ~1U;
-  romTaskSupportConfig.readAddress = 0;
-  romTaskSupportConfig.writeAddress = 0;
-  romTaskSupportConfig.bootstrapTimeoutTicks = pdMS_TO_TICKS(100);
-  romTaskSupportConfig.saveTimeoutTicks = pdMS_TO_TICKS(5000);
-
-  romTaskSupportOps.queue_message_and_wait = i2c_task_queue_message_and_wait;
-  romTaskSupportOps.allocate_payload = allocate_payload_adapter;
-  romTaskSupportOps.free_payload = free_payload_adapter;
-  romTaskSupportOps.set_write_enable = set_rom_write_enable_adapter;
-  romTaskSupportOps.context = NULL;
 }
 
 /* USER CODE END 0 */
@@ -524,8 +483,32 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
-  init_i2c_handler_interfaces();
-  init_rom_task_support_interfaces();
+    i2c_task_support_init(&i2cTaskSupportContext, &i2cHandlerConfig, &i2cHandlerOps,
+      &hi2c1,
+      romHandlerTaskHandle,
+      displayHandlerTaskHandle,
+      i2cCompletionSemaphoreHandle,
+      i2cFailedRomSemaphoreHandle,
+      i2cFailedDisplaySemaphoreHandle,
+      &i2cTransferFailed);
+
+    init_peripheral_dispatch();
+
+    rom_task_support_init(&romTaskSupportConfig,
+      &romTaskSupportOps,
+      romHandlerTaskHandle,
+      i2cQueueHandle,
+      i2cFailedRomSemaphoreHandle,
+      (ROM_I2C_ADDR << 1) & ~1U,
+      0,
+      0,
+      pdMS_TO_TICKS(100),
+      pdMS_TO_TICKS(5000),
+      i2c_task_queue_message_and_wait,
+      allocate_payload_adapter,
+      free_payload_adapter,
+      set_rom_write_enable_adapter,
+      NULL);
   /* USER CODE END RTOS_THREADS */
 
   /* Start scheduler */

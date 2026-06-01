@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "i2c_handler.h"
 #include "cmsis_os.h"
 #include "main.h"
 
@@ -17,6 +18,12 @@ typedef struct
     osSemaphoreId i2cFailedDisplaySemaphoreHandle;
     volatile bool *i2cTransferFailed;
 } I2CTaskSupportContext;
+
+void i2c_task_support_init(I2CTaskSupportContext *supportContext, I2CHandlerConfig *handlerConfig,
+    I2CHandlerOps *handlerOps, I2C_HandleTypeDef *hi2c, osThreadId romHandlerTaskHandle,
+    osThreadId displayHandlerTaskHandle, osSemaphoreId i2cCompletionSemaphoreHandle,
+    osSemaphoreId i2cFailedRomSemaphoreHandle, osSemaphoreId i2cFailedDisplaySemaphoreHandle,
+    volatile bool *i2cTransferFailed);
 
 bool i2c_task_source_is_valid(void *sourceTask, void *context);
 void i2c_task_signal_source_completion(void *sourceTask, void *context);

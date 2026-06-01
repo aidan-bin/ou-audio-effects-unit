@@ -3,6 +3,38 @@
 #include "i2c_handler.h"
 #include "rom_handler.h"
 
+void rom_task_support_init(RomTaskSupportConfig *config, RomTaskSupportOps *ops,
+    void *sourceTask, void *i2cQueueHandle, void *i2cFailedRomSemaphoreHandle,
+    uint16_t deviceAddress, uint16_t readAddress, uint16_t writeAddress,
+    uint32_t bootstrapTimeoutTicks, uint32_t saveTimeoutTicks,
+    bool (*queue_message_and_wait)(void *queueHandle, void *message, bool *pFailed,
+        void *failedSemaphoreHandle, uint32_t timeoutTicks, void *context),
+    uint8_t *(*allocate_payload)(size_t size, void *context),
+    void (*free_payload)(uint8_t *payload, void *context),
+    void (*set_write_enable)(bool enabled, void *context),
+    void *context)
+{
+    if (config == NULL || ops == NULL)
+    {
+        return;
+    }
+
+    config->sourceTask = sourceTask;
+    config->i2cQueueHandle = i2cQueueHandle;
+    config->i2cFailedRomSemaphoreHandle = i2cFailedRomSemaphoreHandle;
+    config->deviceAddress = deviceAddress;
+    config->readAddress = readAddress;
+    config->writeAddress = writeAddress;
+    config->bootstrapTimeoutTicks = bootstrapTimeoutTicks;
+    config->saveTimeoutTicks = saveTimeoutTicks;
+
+    ops->queue_message_and_wait = queue_message_and_wait;
+    ops->allocate_payload = allocate_payload;
+    ops->free_payload = free_payload;
+    ops->set_write_enable = set_write_enable;
+    ops->context = context;
+}
+
 static bool queue_message(const RomTaskSupportConfig *config, const RomTaskSupportOps *ops,
     I2CHandlerMessage *message, bool *failed, uint32_t timeoutTicks)
 {
