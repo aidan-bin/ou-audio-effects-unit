@@ -2,9 +2,7 @@
 
 ![Board](hardware/STM32AudioEffects/STM32AudioEffectsUnit.jpg)
 
-Embedded STM32 audio effects project with fixed-point DSP in C, host-side effect demo tooling, and board design files.
-
-Includes overdrive/echo/compression DSP in C, STM32 firmware with FreeRTOS + DMA audio I/O, a Python host demo, and KiCad/LTspice hardware assets.
+STM32 audio effects project with fixed-point DSP in C, STM32 firmware, a Python demo UI, and hardware design files.
 
 ## Repository Layout
 
@@ -18,61 +16,55 @@ Includes overdrive/echo/compression DSP in C, STM32 firmware with FreeRTOS + DMA
 
 ## Quick Start: Host Demo
 
-From the repository root:
-
 ```sh
 ./scripts/run.sh demo
 ```
 
-The demo launcher builds the shared DSP library, creates/uses a local virtualenv at `.local/python-demo-venv`, installs Python demo dependencies from `host/python-demo/requirements.txt`, and starts the UI.
+Builds the DSP library, prepares a local demo virtualenv, installs demo deps, and starts the UI.
 
 ## Firmware Snapshot
 
 The STM32 firmware project is generated locally with CubeMX and is not checked into this repository.
 
 - FreeRTOS task-based control flow
-- ping-pong sample buffering
 - DMA-driven ADC/DAC audio transfer
-- merged effect parameter/state/control handling in the firmware app
-- I2C infrastructure for peripherals (EEPROM and display path)
+- ping-pong sample buffering
+- effect model/state/control and processing tasks
+- I2C path for peripherals (EEPROM/display)
 
 ## Tests
-
-Run from repository root:
 
 ```sh
 ./scripts/run.sh
 ```
 
-`run.sh` defaults to the `check` workflow, which runs dependency preflight before build+test.
+Default check flow (preflight + build + tests).
 
-Run full verification (format + lint + build + tests):
+Full gate (format + lint + build + tests):
 
 ```sh
 ./scripts/run.sh check-full
 ```
 
-`check-full` runs dependency preflight before the full gate.
-
-Or run tests only:
+Tests only:
 
 ```sh
 ./scripts/run.sh test
 ```
 
-Check formatting without modifying files:
+Format check only:
 
 ```sh
 ./scripts/run.sh format-check
 ```
 
-Clean generated artifacts:
+Clean artifacts:
 
 ```sh
 ./scripts/run.sh clean
 ```
 
-Check local tool dependencies:
+Dependency check:
 
 ```sh
 ./scripts/run.sh doctor
@@ -84,4 +76,4 @@ Board assets are under [hardware/STM32AudioEffects](hardware/STM32AudioEffects),
 
 ## Why Fixed-Point Here
 
-The DSP path is fixed-point by design: explicit numeric behavior, deterministic control over arithmetic, and portability to targets without strong floating-point support.
+Fixed-point is used for deterministic arithmetic and portability on constrained targets.

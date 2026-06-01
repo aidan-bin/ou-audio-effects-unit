@@ -9,7 +9,7 @@
 
 ## DSP Path
 
-Core effect interfaces are declared in [dsp/effects/effects.h](../dsp/effects/effects.h).
+Core interfaces are in [dsp/effects/effects.h](../dsp/effects/effects.h).
 
 Implemented effects:
 
@@ -17,17 +17,15 @@ Implemented effects:
 - echo
 - compression
 
-Numeric support and fixed-point helpers live in [dsp/math](../dsp/math).
-
-Signal convention in DSP code is unsigned 16-bit with midpoint as the x-axis.
+Fixed-point helpers live in [dsp/math](../dsp/math). Signal convention is unsigned 16-bit with midpoint-centered audio.
 
 ## Firmware Path
 
 The STM32 firmware is generated locally with CubeMX and is not tracked in Git.
 
-The runtime model is FreeRTOS task-based with DMA-backed ADC/DAC audio movement and ping-pong sample buffers.
+Runtime model: FreeRTOS tasks, DMA-backed ADC/DAC transfer, and ping-pong sample buffers.
 
-High-level subsystems in the firmware include:
+Main subsystems:
 
 - effect model/state/control logic
 - effect processing
@@ -42,7 +40,7 @@ Host-side firmware tests use op-vector style mocks for task boundaries. The test
 
 The host UI in [host/python-demo/main.py](../host/python-demo/main.py) calls the C effects library through [host/python-demo/effects.py](../host/python-demo/effects.py).
 
-The binding layer mirrors the C parameter structs and forwards sample buffers into:
+The binding mirrors C parameter structs and forwards sample buffers into:
 
 - buf_overdrive
 - buf_echo
