@@ -25,6 +25,7 @@
 /* USER CODE BEGIN Includes */
 #include <stdbool.h>
 #include <string.h>
+#include "button_task.h"
 #include "effects_control_logic.h"
 #include "effects_state_manager.h"
 #include "effects_pipeline.h"
@@ -215,6 +216,9 @@ static bool switch_task_read_switch(uint8_t index, bool *enabledOut, void *conte
 static bool switch_task_read_state(EffectsState *stateOut, void *context);
 static bool switch_task_write_state(const EffectsState *state, void *context);
 static void switch_task_sleep_ms(uint32_t ms, void *context);
+
+static bool button_task_wait_for_button(uint16_t *pinOut, void *context);
+static void button_task_dispatch(uint16_t pin, void *context);
 
 static uint8_t *allocate_payload_adapter(size_t size, void *context);
 static void free_payload_adapter(uint8_t *payload, void *context);
@@ -503,6 +507,44 @@ static void switch_task_sleep_ms(uint32_t ms, void *context)
 {
   (void) context;
   osDelay(ms);
+}
+
+static bool button_task_wait_for_button(uint16_t *pinOut, void *context)
+{
+  (void) context;
+
+  if (pinOut == NULL)
+  {
+    return false;
+  }
+
+  uint32_t notificationValue;
+  if (xTaskNotifyWait(0, 0xFFFFFFFFUL, &notificationValue, portMAX_DELAY) != pdTRUE)
+  {
+    return false;
+  }
+
+  *pinOut = (uint16_t)notificationValue;
+  return true;
+}
+
+static void button_task_dispatch(uint16_t pin, void *context)
+{
+  (void) context;
+
+  switch (pin)
+  {
+    case BTN_A_Pin:
+    {
+    } break;
+    case BTN_B_Pin:
+    {
+    } break;
+    case BTN_C_Pin:
+    {
+    } break;
+    default: break;
+  }
 }
 
 static uint8_t *allocate_payload_adapter(size_t size, void *context)
@@ -1405,79 +1447,31 @@ void startEffectsTask(void const * argument)
   /* Infinite loop */
   for(;;)
   {
-		uint16_t *currAdcBuf;
-		uint16_t *currDacBuf;
-		
-    uint16_t *echoInputBuf = NULL;
-		uint16_t *inputBuf;
-		uint16_t *outputBuf;
-		uint16_t *temp;
-    bool processFailed = false;
-		
-		/* To preserve effects for delayed samples (which are added for echo), they must be processed as well.
-				echoDelaySamplesBuf is used for processing the delayed samples. */
-    uint16_t *echoDelaySamplesBuf = NULL;
-		
-		/* Effects state and params must be latched before processing so they remain consistent for the whole buffer */
-		EffectsState latchedEffectsState;
-		EffectsParams latchedEffectsParams;
-		
-		/* DAC takes ticksToWait ticks to output a buffer before starting the next one.
-				If software does not finish the next buffer before that time, the DAC outputs invalid data,
-				so must give up and wait for next ADC buffer. */
-		const uint16_t samplingPeriodUs = 25;	// Sampling period in microseconds
-		TickType_t ticksToWait = pdMS_TO_TICKS(samplingPeriodUs * SAMPLE_BUF_LEN / 1000) - pdMS_TO_TICKS(2);	// Subtract some time to account for processing
-    uint32_t notificationValue;
-		
-		/* Wait for ADC buffer (and make sure it is an ADC buffer) */
-    if (xTaskNotifyWait(0, 0xFFFFFFFFUL, &notificationValue, portMAX_DELAY) != pdTRUE)
-    {
-      continue;
-    }
-    currAdcBuf = (uint16_t *) notificationValue;
-		
-		if (currAdcBuf != adcBufA && currAdcBuf != adcBufB)
-		{
-			continue;
-		}
-		
-		/* Add ADC samples to delaySamplesBuf (must shift current samples first, then insert at end) */
-    if (!peripheral_start_dma_transfer_and_wait(&hdma_memtomem_dma1_channel1,
-      (uint32_t) &delaySamplesBuf[SAMPLE_BUF_LEN],
-      (uint32_t) delaySamplesBuf,
-      NUM_DELAY_SAMPLES - SAMPLE_BUF_LEN,
-      delaySamplesDmaSemaphoreHandle,
-      ticksToWait,
-      &peripheralDispatchOps))
-		{
-			continue;
-		}
-		
-    if (HAL_DMA_Start(&hdma_memtomem_dma1_channel1, (uint32_t) currAdcBuf, (uint32_t) &delaySamplesBuf[NUM_DELAY_SAMPLES - SAMPLE_BUF_LEN], SAMPLE_BUF_LEN) != HAL_OK)
-    {
-      continue;
-    }
-		
-		/* Wait for DAC buffer (with timeout, and make sure it is a DAC buffer) */
-    if (xTaskNotifyWait(0, 0xFFFFFFFFUL, &notificationValue, ticksToWait) != pdTRUE)
-		{
-			continue;
-      (void) effects_task_step(&taskContext, &taskOps);
-		{
-			case BTN_A_Pin:
-			{
-			
-			} break;
-			case BTN_B_Pin:
-			{
-			
-			} break;
-			case BTN_C_Pin:
-			{
-			
-			} break;
-			default: break;
-		}
+    (void) effects_task_step(&taskContext, &taskOps);
+  }
+  /* USER CODE END 5 */
+}
+
+/* USER CODE BEGIN Header_startBtnHandlerTask */
+/**
+* @brief Function implementing the btnHandlerTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_startBtnHandlerTask */
+void startBtnHandlerTask(void const * argument)
+{
+  /* USER CODE BEGIN startBtnHandlerTask */
+  ButtonTaskOps taskOps = {
+      .wait_for_button = button_task_wait_for_button,
+      .dispatch_button = button_task_dispatch,
+      .context = NULL,
+  };
+
+  /* Infinite loop */
+  for(;;)
+  {
+    (void) button_task_step(&taskOps);
   }
   /* USER CODE END startBtnHandlerTask */
 }
