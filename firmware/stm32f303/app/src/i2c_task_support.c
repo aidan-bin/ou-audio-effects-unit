@@ -1,17 +1,29 @@
 #include "i2c_task_support.h"
+#include "peripheral_dispatch.h"
 
 #include "cmsis_os.h"
 
+static bool semaphore_take_adapter(void *semaphoreHandle, uint32_t timeoutTicks, void *context)
+{
+    (void)context;
+    return xSemaphoreTake((osSemaphoreId)semaphoreHandle, (TickType_t)timeoutTicks) == pdTRUE;
+}
+
 static void drain_semaphore(osSemaphoreId semaphoreHandle)
 {
-    if (semaphoreHandle == NULL)
-    {
-        return;
-    }
+    PeripheralDispatchOps ops = {
+        .semaphore_take = semaphore_take_adapter,
+        .task_notify_from_isr = NULL,
+        .semaphore_give_from_isr = NULL,
+        .dma_start_it = NULL,
+        .adc_config_channel = NULL,
+        .adc_start_it = NULL,
+        .adc_get_value = NULL,
+        .i2c_signal_completion_from_isr = NULL,
+        .context = NULL,
+    };
 
-    while (xSemaphoreTake(semaphoreHandle, 0) == pdTRUE)
-    {
-    }
+    peripheral_drain_semaphore(semaphoreHandle, &ops);
 }
 
 static void give_semaphore_from_isr(osSemaphoreId semaphoreHandle)

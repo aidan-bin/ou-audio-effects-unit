@@ -22,6 +22,7 @@ set(OU_FIRMWARE_APP_SOURCES
     firmware/stm32f303/app/src/effects_control_logic.c
     firmware/stm32f303/app/src/effects_pipeline.c
     firmware/stm32f303/app/src/i2c_handler.c
+    firmware/stm32f303/app/src/peripheral_dispatch.c
     firmware/stm32f303/app/src/rom_task_support.c
     firmware/stm32f303/app/src/rom_handler.c
 )
@@ -171,6 +172,23 @@ if(OU_BUILD_TESTS)
     endif()
 
     add_test(NAME ou_firmware_peripheral_mocks_tests COMMAND ou_firmware_peripheral_mocks_tests)
+
+    add_executable(ou_firmware_peripheral_dispatch_tests
+        tests/test_firmware_peripheral_dispatch.c
+    )
+
+    target_include_directories(ou_firmware_peripheral_dispatch_tests
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/firmware/stm32f303/app/include
+    )
+
+    target_link_libraries(ou_firmware_peripheral_dispatch_tests PRIVATE ou_firmware_app)
+
+    if(APPLE OR UNIX)
+        target_link_libraries(ou_firmware_peripheral_dispatch_tests PRIVATE m)
+    endif()
+
+    add_test(NAME ou_firmware_peripheral_dispatch_tests COMMAND ou_firmware_peripheral_dispatch_tests)
 
     add_executable(ou_firmware_i2c_handler_tests
         tests/test_firmware_i2c_handler.c
