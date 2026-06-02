@@ -1,11 +1,11 @@
 # Board Bring-Up
 
-First power-on and first audio-path validation for the STM32 target.
+First power-on and audio-path validation for the target.
 
 ## Prerequisites
 
 - A build/flash environment that can open the CubeMX project
-- Target board assembled from [hardware/STM32AudioEffects](../hardware/STM32AudioEffects)
+- Nucleo board or custom board assembled from [hardware/STM32AudioEffects](../hardware/STM32AudioEffects)
 - Audio source and audio output chain
 - Debug probe and USB connection for firmware flashing
 
@@ -22,14 +22,3 @@ First power-on and first audio-path validation for the STM32 target.
    - compression
 7. Confirm user input paths (switches, buttons, pots) influence state as expected.
 8. Confirm EEPROM path is functional if configured.
-
-## Known Current Limit
-
-Display/OLED support path exists in firmware, but display behavior should be treated as a separate validation item from core audio bring-up.
-
-## Failure Triage
-
-- No audio out: verify power rails, analog path, and DAC DMA activity.
-- Distorted passthrough: check input biasing and output filter network against [hardware/LTspice](../hardware/LTspice) assumptions.
-- Controls unresponsive: verify GPIO and task scheduling in the generated firmware source.
-- Peripheral issues: verify I2C addressing and queue flow in firmware I2C task path.

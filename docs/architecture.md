@@ -21,30 +21,23 @@ Fixed-point helpers live in [dsp/math](../dsp/math). Signal convention is unsign
 
 ## Firmware Path
 
-The STM32 firmware is generated locally with CubeMX and is not tracked in Git.
+Firmware runs as FreeRTOS tasks over a DMA ADC/DAC audio path with ping-pong buffers, enabling continuous fixed-rate processing.
 
-Runtime model: FreeRTOS tasks, DMA-backed ADC/DAC transfer, and ping-pong sample buffers.
+Project-specific logic lives in [firmware/stm32f303/app](../firmware/stm32f303/app), which extends the CubeMX-generated firmware through user sections and app code.
 
-Main subsystems:
+Subsystems include:
 
-- effect model/state/control logic
-- effect processing
-- button/switch/pot handlers
-- LED task
-- I2C queue-driven peripheral path
-- ROM/display support paths
+- effects model/pipeline and audio task
+- control tasks for pots, switches, and buttons
+- peripheral services for I2C dispatch and ROM support/handlers
 
-Host-side firmware tests use op-vector style mocks for task boundaries. The test runtime stays host-only; HAL and FreeRTOS symbol mocks are reserved for modules that link those APIs directly.
+Testing uses a host-mockable HAL/RTOS abstraction layer, with tests in [tests/firmware](../tests/firmware).
 
 ## Host Demo Path
 
 The host UI in [host/python-demo/main.py](../host/python-demo/main.py) calls the C effects library through [host/python-demo/effects.py](../host/python-demo/effects.py).
 
-The binding mirrors C parameter structs and forwards sample buffers into:
-
-- buf_overdrive
-- buf_echo
-- buf_compression
+The binding mirrors C parameter structs and forwards sample buffers into the effects library.
 
 ## Hardware Path
 

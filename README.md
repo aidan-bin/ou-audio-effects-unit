@@ -22,7 +22,7 @@ STM32 audio effects project with fixed-point DSP in C, STM32 firmware, a Python 
 
 Builds the DSP library, prepares a local demo virtualenv, installs demo deps, and starts the UI.
 
-## Firmware Snapshot
+## Firmware
 
 The STM32 firmware project is generated locally with CubeMX and is not checked into this repository.
 
@@ -70,10 +70,6 @@ Dependency check:
 ./scripts/run.sh doctor
 ```
 
-## Hardware Snapshot
+## Hardware
 
 Board assets are under [hardware/STM32AudioEffects](hardware/STM32AudioEffects), with analog simulation files under [hardware/LTspice](hardware/LTspice).
-
-## Why Fixed-Point Here
-
-Fixed-point is used for deterministic arithmetic and portability on constrained targets.
