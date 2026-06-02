@@ -3,12 +3,12 @@
 
 #define Q_ONE (1 << FIXED_POINT_Q)
 
-#define TANH_CLAMP_POINT ((int16_t)(3 * Q_ONE)) // Point where tanh gets clamped to 1.0 in QA
+// Clamp point where tanh saturates to +/-1.0 in QA.
+#define TANH_CLAMP_POINT ((int16_t)(3 * Q_ONE))
 
 int16_t q_tanh(int16_t x) {
-    // Note: x and return value are in QA
-    // Uses finite Lamber's series to 4 divisions (before simplification)
-
+    // x and return value are QA fixed-point values.
+    // Approximation from a truncated Lambert continued-fraction form.
     if (x < -TANH_CLAMP_POINT)
         return -Q_ONE;
 

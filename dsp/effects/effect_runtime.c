@@ -4,9 +4,9 @@
 
 static size_t clamp_range(size_t value, size_t min, size_t max);
 static size_t clamp_qn(size_t value);
-static OverdriveParam normalize_overdrive_params(const OverdriveParam* param);
-static EchoParam normalize_echo_params(const EchoParam* param);
-static CompressionParam normalize_compression_params(const CompressionParam* param);
+static OverdriveParam normalize_overdrive_params(const OverdriveParam *param);
+static EchoParam normalize_echo_params(const EchoParam *param);
+static CompressionParam normalize_compression_params(const CompressionParam *param);
 
 static OverdriveParam default_overdrive_params(void) {
     OverdriveParam param = {
@@ -40,7 +40,7 @@ static CompressionParam default_compression_params(void) {
     return param;
 }
 
-void effect_instance_init(EffectInstance* instance, EffectType type) {
+void effect_instance_init(EffectInstance *instance, EffectType type) {
     if (instance == NULL) {
         return;
     }
@@ -49,7 +49,7 @@ void effect_instance_init(EffectInstance* instance, EffectType type) {
     effect_instance_reset(instance);
 }
 
-void effect_instance_reset(EffectInstance* instance) {
+void effect_instance_reset(EffectInstance *instance) {
     if (instance == NULL) {
         return;
     }
@@ -70,7 +70,7 @@ void effect_instance_reset(EffectInstance* instance) {
     }
 }
 
-int effect_instance_set_overdrive_params(EffectInstance* instance, const OverdriveParam* param) {
+int effect_instance_set_overdrive_params(EffectInstance *instance, const OverdriveParam *param) {
     if (instance == NULL || param == NULL || instance->type != EFFECT_TYPE_OVERDRIVE) {
         return -1;
     }
@@ -79,7 +79,7 @@ int effect_instance_set_overdrive_params(EffectInstance* instance, const Overdri
     return 0;
 }
 
-int effect_instance_set_echo_params(EffectInstance* instance, const EchoParam* param) {
+int effect_instance_set_echo_params(EffectInstance *instance, const EchoParam *param) {
     if (instance == NULL || param == NULL || instance->type != EFFECT_TYPE_ECHO) {
         return -1;
     }
@@ -88,7 +88,8 @@ int effect_instance_set_echo_params(EffectInstance* instance, const EchoParam* p
     return 0;
 }
 
-int effect_instance_set_compression_params(EffectInstance* instance, const CompressionParam* param) {
+int effect_instance_set_compression_params(EffectInstance *instance,
+                                           const CompressionParam *param) {
     if (instance == NULL || param == NULL || instance->type != EFFECT_TYPE_COMPRESSION) {
         return -1;
     }
@@ -97,8 +98,8 @@ int effect_instance_set_compression_params(EffectInstance* instance, const Compr
     return 0;
 }
 
-int effect_instance_process(const EffectInstance* instance, const uint16_t* in_buf, uint16_t* out_buf,
-    size_t num_samples) {
+int effect_instance_process(const EffectInstance *instance, const uint16_t *in_buf,
+                            uint16_t *out_buf, size_t num_samples) {
     if (instance == NULL || in_buf == NULL || out_buf == NULL) {
         return -1;
     }
@@ -118,7 +119,7 @@ int effect_instance_process(const EffectInstance* instance, const uint16_t* in_b
     }
 }
 
-int effect_handle_init(EffectHandle* handle, EffectType type) {
+int effect_handle_init(EffectHandle *handle, EffectType type) {
     if (handle == NULL) {
         return -1;
     }
@@ -128,7 +129,7 @@ int effect_handle_init(EffectHandle* handle, EffectType type) {
     return 0;
 }
 
-int effect_handle_reset(EffectHandle* handle) {
+int effect_handle_reset(EffectHandle *handle) {
     if (handle == NULL || handle->initialized == 0) {
         return -1;
     }
@@ -137,7 +138,7 @@ int effect_handle_reset(EffectHandle* handle) {
     return 0;
 }
 
-int effect_handle_set_overdrive_params(EffectHandle* handle, const OverdriveParam* param) {
+int effect_handle_set_overdrive_params(EffectHandle *handle, const OverdriveParam *param) {
     if (handle == NULL || handle->initialized == 0) {
         return -1;
     }
@@ -145,7 +146,7 @@ int effect_handle_set_overdrive_params(EffectHandle* handle, const OverdrivePara
     return effect_instance_set_overdrive_params(&handle->instance, param);
 }
 
-int effect_handle_set_echo_params(EffectHandle* handle, const EchoParam* param) {
+int effect_handle_set_echo_params(EffectHandle *handle, const EchoParam *param) {
     if (handle == NULL || handle->initialized == 0) {
         return -1;
     }
@@ -153,7 +154,7 @@ int effect_handle_set_echo_params(EffectHandle* handle, const EchoParam* param) 
     return effect_instance_set_echo_params(&handle->instance, param);
 }
 
-int effect_handle_set_compression_params(EffectHandle* handle, const CompressionParam* param) {
+int effect_handle_set_compression_params(EffectHandle *handle, const CompressionParam *param) {
     if (handle == NULL || handle->initialized == 0) {
         return -1;
     }
@@ -161,7 +162,7 @@ int effect_handle_set_compression_params(EffectHandle* handle, const Compression
     return effect_instance_set_compression_params(&handle->instance, param);
 }
 
-int effect_handle_get_echo_delay_samples(const EffectHandle* handle, size_t* delay_samples) {
+int effect_handle_get_echo_delay_samples(const EffectHandle *handle, size_t *delay_samples) {
     if (handle == NULL || delay_samples == NULL || handle->initialized == 0 ||
         handle->instance.type != EFFECT_TYPE_ECHO) {
         return -1;
@@ -171,8 +172,8 @@ int effect_handle_get_echo_delay_samples(const EffectHandle* handle, size_t* del
     return 0;
 }
 
-int effect_handle_process(const EffectHandle* handle, const uint16_t* in_buf, uint16_t* out_buf,
-    size_t num_samples) {
+int effect_handle_process(const EffectHandle *handle, const uint16_t *in_buf, uint16_t *out_buf,
+                          size_t num_samples) {
     if (handle == NULL || handle->initialized == 0) {
         return -1;
     }
@@ -196,7 +197,7 @@ static size_t clamp_qn(size_t value) {
     return clamp_range(value, 0, (1U << FIXED_POINT_Q));
 }
 
-static OverdriveParam normalize_overdrive_params(const OverdriveParam* param) {
+static OverdriveParam normalize_overdrive_params(const OverdriveParam *param) {
     OverdriveParam out = *param;
 
     out.level = clamp_range(out.level, 0, MAX_OVERDRIVE_LEVEL);
@@ -207,7 +208,7 @@ static OverdriveParam normalize_overdrive_params(const OverdriveParam* param) {
     return out;
 }
 
-static EchoParam normalize_echo_params(const EchoParam* param) {
+static EchoParam normalize_echo_params(const EchoParam *param) {
     EchoParam out = *param;
 
     out.delay_samples = clamp_range(out.delay_samples, 0, MAX_ECHO_DELAY_SAMPLES);
@@ -224,7 +225,7 @@ static EchoParam normalize_echo_params(const EchoParam* param) {
     return out;
 }
 
-static CompressionParam normalize_compression_params(const CompressionParam* param) {
+static CompressionParam normalize_compression_params(const CompressionParam *param) {
     CompressionParam out = *param;
 
     out.threshold = clamp_range(out.threshold, 0, X_AXIS);

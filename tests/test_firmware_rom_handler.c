@@ -10,17 +10,16 @@
 
 int failures = 0;
 
-static void test_encode_address_big_endian(void)
-{
+static void test_encode_address_big_endian(void) {
     uint8_t payload[2] = {0};
 
-    expect_true(rom_handler_encode_address(0x1234, payload, sizeof(payload)), "encode address success");
+    expect_true(rom_handler_encode_address(0x1234, payload, sizeof(payload)),
+                "encode address success");
     expect_eq_u8(0x12, payload[0], "address upper byte");
     expect_eq_u8(0x34, payload[1], "address lower byte");
 }
 
-static void test_encode_write_and_decode_round_trip(void)
-{
+static void test_encode_write_and_decode_round_trip(void) {
     EffectsState state = {
         .ordered = {ECHO, COMPRESSION, OVERDRIVE},
         .isEnabled = {true, false, true},
@@ -36,16 +35,16 @@ static void test_encode_write_and_decode_round_trip(void)
     uint8_t payload[sizeof(uint16_t) + sizeof(EffectsState) + sizeof(EffectsParams)] = {0};
 
     expect_true(rom_handler_encode_write_payload(0x0040, &state, &params, payload, sizeof(payload)),
-        "encode write payload success");
+                "encode write payload success");
 
     EffectsState decodedState;
     EffectsParams decodedParams;
     memset(&decodedState, 0, sizeof(decodedState));
     memset(&decodedParams, 0, sizeof(decodedParams));
 
-    expect_true(rom_handler_decode_read_payload(
-                    &payload[2], sizeof(payload) - 2, &decodedState, &decodedParams),
-        "decode read payload success");
+    expect_true(rom_handler_decode_read_payload(&payload[2], sizeof(payload) - 2, &decodedState,
+                                                &decodedParams),
+                "decode read payload success");
 
     expect_true(decodedState.ordered[0] == ECHO, "decode ordered[0]");
     expect_true(decodedState.ordered[1] == COMPRESSION, "decode ordered[1]");
@@ -57,28 +56,26 @@ static void test_encode_write_and_decode_round_trip(void)
     expect_true(decodedParams.compression.threshold == 333, "decode compression threshold");
 }
 
-static void test_encode_fails_for_small_buffer(void)
-{
+static void test_encode_fails_for_small_buffer(void) {
     uint8_t smallAddressBuf[1] = {0};
     expect_true(!rom_handler_encode_address(0x1111, smallAddressBuf, sizeof(smallAddressBuf)),
-        "encode address rejects small buffer");
+                "encode address rejects small buffer");
 
     EffectsState state = {0};
     EffectsParams params = {0};
     uint8_t smallWriteBuf[4] = {0};
 
-    expect_true(!rom_handler_encode_write_payload(0, &state, &params, smallWriteBuf, sizeof(smallWriteBuf)),
+    expect_true(
+        !rom_handler_encode_write_payload(0, &state, &params, smallWriteBuf, sizeof(smallWriteBuf)),
         "encode write rejects small buffer");
 }
 
-int main(void)
-{
+int main(void) {
     test_encode_address_big_endian();
     test_encode_write_and_decode_round_trip();
     test_encode_fails_for_small_buffer();
 
-    if (failures != 0)
-    {
+    if (failures != 0) {
         fprintf(stderr, "Firmware rom handler tests failed: %d\n", failures);
         return 1;
     }

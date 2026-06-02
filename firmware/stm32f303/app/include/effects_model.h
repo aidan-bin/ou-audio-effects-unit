@@ -9,22 +9,19 @@
 
 #define NUM_EFFECTS 3
 
-typedef enum
-{
+typedef enum {
     OVERDRIVE,
     ECHO,
     COMPRESSION,
 } Effect;
 
-typedef struct
-{
+typedef struct {
     Effect ordered[NUM_EFFECTS];
     bool isEnabled[NUM_EFFECTS];
     uint8_t activeEffectSelection;
 } EffectsState;
 
-typedef struct
-{
+typedef struct {
     OverdriveParam overdrive;
     EchoParam echo;
     CompressionParam compression;
@@ -42,9 +39,9 @@ bool effects_state_get_active_effect(const EffectsState *state, Effect *activeEf
 size_t map_adc_to_param(uint32_t adcValue, size_t min, size_t max, uint32_t adcMax);
 
 void effects_state_apply_switches(EffectsState *state, bool switchAEnabled, bool switchBEnabled,
-    bool switchCEnabled);
+                                  bool switchCEnabled);
 
 bool effects_params_apply_pot_sample(EffectsParams *params, Effect activeEffect, uint8_t potIndex,
-    uint32_t adcValue, uint32_t adcMax);
+                                     uint32_t adcValue, uint32_t adcMax);
 
 #endif

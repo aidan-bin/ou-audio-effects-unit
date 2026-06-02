@@ -1,6 +1,3 @@
-# Bindings for effects.c
-#   Usage: Instantiate effect param objects, call <effect>(in_samples, <effect object>)
-
 import ctypes
 from pathlib import Path
 
@@ -26,7 +23,7 @@ def _load_effects_library():
 libeffects = _load_effects_library()
 
 X_AXIS = int(65535 / 2)
-fixed_point_q = 8
+FIXED_POINT_Q = 8
 
 EFFECT_TYPE_OVERDRIVE = 0
 EFFECT_TYPE_ECHO = 1
@@ -34,11 +31,12 @@ EFFECT_TYPE_COMPRESSION = 2
 
 
 class OverdriveParam(ctypes.Structure):
-    _fields_ = [("level", ctypes.c_size_t), # Saturation amplitude of wet signal
-                ("gain", ctypes.c_size_t),  # Output gain in QN, fraction of level (note: level is for consistency,
-                                            # keep gain at 1.0 and use level to control output)
-                ("tone", ctypes.c_size_t),  # Tone in QN (lower tone softens saturation effect)
-                ("mix", ctypes.c_size_t)]   # Wet/dry ratio in QN (0.0 = fully dry, 0.5 = equally wet/dry, 1.0 = fully wet)
+    _fields_ = [
+        ("level", ctypes.c_size_t),
+        ("gain", ctypes.c_size_t),
+        ("tone", ctypes.c_size_t),
+        ("mix", ctypes.c_size_t),
+    ]
 
     def __str__(self):
         return f"level = {self.level}\n" + \
@@ -48,14 +46,13 @@ class OverdriveParam(ctypes.Structure):
 
 
 class EchoParam(ctypes.Structure):
-    _fields_ = [("delay_samples", ctypes.c_size_t), # Number of samples of delay for last echo of an input sample
-                                                    # (determines max pre-delay and duration of echo)
-                ("pre_delay", ctypes.c_size_t),     # Number of samples before first echo
-                ("density", ctypes.c_size_t),       # Discrete, evenly-spaced echoes per sample in QN (after pre-delay,
-                                                    # before end of delay samples)
-                ("attack", ctypes.c_size_t),        # Gain on first echo (subsequent echoes have lower gain)
-                ("decay", ctypes.c_size_t)]         # Amount of gain reduction per subsequent echo in QN
-                                                    # (will saturate to 0 gain)
+    _fields_ = [
+        ("delay_samples", ctypes.c_size_t),
+        ("pre_delay", ctypes.c_size_t),
+        ("density", ctypes.c_size_t),
+        ("attack", ctypes.c_size_t),
+        ("decay", ctypes.c_size_t),
+    ]
 
     def __str__(self):
         return f"delay_samples = {self.delay_samples}\n" + \
@@ -66,9 +63,10 @@ class EchoParam(ctypes.Structure):
 
 
 class CompressionParam(ctypes.Structure):
-    _fields_ = [("threshold", ctypes.c_size_t), # Amplitude above which to apply gain reduction
-                ("ratio", ctypes.c_size_t)]     # Amount of gain reduction to apply in QN (0 for no compression,
-                                                # 1 for hard clipping)
+    _fields_ = [
+        ("threshold", ctypes.c_size_t),
+        ("ratio", ctypes.c_size_t),
+    ]
 
     def __str__(self):
         return f"threshold = {self.threshold}\n" + \

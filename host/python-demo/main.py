@@ -10,9 +10,9 @@ import sys
 from pathlib import Path
 
 
-class Ui(QtWidgets.QMainWindow):
+class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
-        super(Ui, self).__init__()
+        super(MainWindow, self).__init__()
         ui_path = Path(__file__).resolve().parent / "demo.ui"
         self.ui = uic.loadUi(str(ui_path), self)
 
@@ -46,7 +46,7 @@ class Ui(QtWidgets.QMainWindow):
         self.ui.openFilePushButton.clicked.connect(self.open_file_handler)
 
     def _scale_q(self, value):
-        return int(value * 2 ** effects.fixed_point_q)
+        return int(value * 2 ** effects.FIXED_POINT_Q)
 
     def _update_effect_params(self):
         self.overdrive_param.level = self.ui.overdriveLevelSpinBox.value()
@@ -172,7 +172,6 @@ class Ui(QtWidgets.QMainWindow):
 
         self._update_effect_params()
 
-        # Apply effects
         temp = self.input_signal.copy()
 
         if self.ui.overdriveEnabledCheckBox.isChecked():
@@ -218,7 +217,7 @@ class Ui(QtWidgets.QMainWindow):
 
 def main():
     app = QtWidgets.QApplication(sys.argv)
-    window = Ui()
+    window = MainWindow()
     window.show()
     app.exec()
 

@@ -11,8 +11,7 @@
 
 int failures = 0;
 
-typedef struct
-{
+typedef struct {
     uint32_t allocateCalls;
     uint32_t freeCalls;
     uint32_t queueCalls;
@@ -25,8 +24,8 @@ typedef struct
 } RomTaskTestContext;
 
 static bool queue_message_and_wait(void *queueHandle, void *message, bool *pFailed,
-    void *failedSemaphoreHandle, uint32_t timeoutTicks, void *context)
-{
+                                   void *failedSemaphoreHandle, uint32_t timeoutTicks,
+                                   void *context) {
     (void)queueHandle;
     (void)failedSemaphoreHandle;
     (void)timeoutTicks;
@@ -36,8 +35,7 @@ static bool queue_message_and_wait(void *queueHandle, void *message, bool *pFail
     ctx->queueCalls++;
     *pFailed = false;
 
-    if (!romMessage->rxTxBar)
-    {
+    if (!romMessage->rxTxBar) {
         ctx->savedPayloadSize = romMessage->items;
         memcpy(ctx->savedPayload, romMessage->payload, romMessage->items);
         ctx->freeCalls++;
@@ -49,29 +47,25 @@ static bool queue_message_and_wait(void *queueHandle, void *message, bool *pFail
     return true;
 }
 
-static uint8_t *allocate_payload(size_t size, void *context)
-{
+static uint8_t *allocate_payload(size_t size, void *context) {
     RomTaskTestContext *ctx = (RomTaskTestContext *)context;
     ctx->allocateCalls++;
     return malloc(size);
 }
 
-static void free_payload(uint8_t *payload, void *context)
-{
+static void free_payload(uint8_t *payload, void *context) {
     RomTaskTestContext *ctx = (RomTaskTestContext *)context;
     ctx->freeCalls++;
     free(payload);
 }
 
-static void set_write_disable(bool disableWrites, void *context)
-{
+static void set_write_disable(bool disableWrites, void *context) {
     RomTaskTestContext *ctx = (RomTaskTestContext *)context;
     ctx->writeEnableState = disableWrites;
     ctx->setWriteEnableCalls++;
 }
 
-static RomTaskSupportOps make_ops(RomTaskTestContext *ctx)
-{
+static RomTaskSupportOps make_ops(RomTaskTestContext *ctx) {
     RomTaskSupportOps ops = {
         .queue_message_and_wait = queue_message_and_wait,
         .allocate_payload = allocate_payload,
@@ -82,8 +76,7 @@ static RomTaskSupportOps make_ops(RomTaskTestContext *ctx)
     return ops;
 }
 
-static RomTaskSupportConfig make_config(void)
-{
+static RomTaskSupportConfig make_config(void) {
     RomTaskSupportConfig config = {
         .sourceTask = (void *)0x1234,
         .i2cQueueHandle = (void *)0x5678,
@@ -97,8 +90,7 @@ static RomTaskSupportConfig make_config(void)
     return config;
 }
 
-static void test_bootstrap_effects(void)
-{
+static void test_bootstrap_effects(void) {
     RomTaskTestContext ctx = {0};
     RomTaskSupportOps ops = make_ops(&ctx);
     RomTaskSupportConfig config = make_config();
@@ -120,7 +112,7 @@ static void test_bootstrap_effects(void)
     EffectsParams loadedParams = {0};
 
     expect_true(rom_task_bootstrap_effects(&config, &ops, &loadedState, &loadedParams),
-        "bootstrap succeeds");
+                "bootstrap succeeds");
     expect_eq_u32(2, ctx.allocateCalls, "bootstrap allocates twice");
     expect_eq_u32(2, ctx.freeCalls, "bootstrap frees twice");
     expect_eq_u32(2, ctx.queueCalls, "bootstrap queues twice");
@@ -131,8 +123,7 @@ static void test_bootstrap_effects(void)
     expect_true(loadedParams.overdrive.level == 111, "bootstrap params decoded");
 }
 
-static void test_save_effects(void)
-{
+static void test_save_effects(void) {
     RomTaskTestContext ctx = {0};
     RomTaskSupportOps ops = make_ops(&ctx);
     RomTaskSupportConfig config = make_config();
@@ -153,16 +144,14 @@ static void test_save_effects(void)
     expect_true(ctx.writeEnableState, "save leaves write enable high");
     expect_true(memcmp(&ctx.savedPayload[2], &state, sizeof(state)) == 0, "save encodes state");
     expect_true(memcmp(&ctx.savedPayload[2 + sizeof(state)], &params, sizeof(params)) == 0,
-        "save encodes params");
+                "save encodes params");
 }
 
-int main(void)
-{
+int main(void) {
     test_bootstrap_effects();
     test_save_effects();
 
-    if (failures != 0)
-    {
+    if (failures != 0) {
         fprintf(stderr, "Firmware rom task support tests failed: %d\n", failures);
         return 1;
     }

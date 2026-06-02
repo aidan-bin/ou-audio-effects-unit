@@ -3,19 +3,19 @@
 #include "i2c_handler.h"
 #include "rom_handler.h"
 
-void rom_task_support_init(RomTaskSupportConfig *config, RomTaskSupportOps *ops,
-    void *sourceTask, void *i2cQueueHandle, void *i2cFailedRomSemaphoreHandle,
-    uint16_t deviceAddress, uint16_t readAddress, uint16_t writeAddress,
-    uint32_t bootstrapTimeoutTicks, uint32_t saveTimeoutTicks,
-    bool (*queue_message_and_wait)(void *queueHandle, void *message, bool *pFailed,
-        void *failedSemaphoreHandle, uint32_t timeoutTicks, void *context),
-    uint8_t *(*allocate_payload)(size_t size, void *context),
-    void (*free_payload)(uint8_t *payload, void *context),
-    void (*set_write_disable)(bool disableWrites, void *context),
-    void *context)
-{
-    if (config == NULL || ops == NULL)
-    {
+void rom_task_support_init(RomTaskSupportConfig *config, RomTaskSupportOps *ops, void *sourceTask,
+                           void *i2cQueueHandle, void *i2cFailedRomSemaphoreHandle,
+                           uint16_t deviceAddress, uint16_t readAddress, uint16_t writeAddress,
+                           uint32_t bootstrapTimeoutTicks, uint32_t saveTimeoutTicks,
+                           bool (*queue_message_and_wait)(void *queueHandle, void *message,
+                                                          bool *pFailed,
+                                                          void *failedSemaphoreHandle,
+                                                          uint32_t timeoutTicks, void *context),
+                           uint8_t *(*allocate_payload)(size_t size, void *context),
+                           void (*free_payload)(uint8_t *payload, void *context),
+                           void (*set_write_disable)(bool disableWrites, void *context),
+                           void *context) {
+    if (config == NULL || ops == NULL) {
         return;
     }
 
@@ -36,49 +36,40 @@ void rom_task_support_init(RomTaskSupportConfig *config, RomTaskSupportOps *ops,
 }
 
 static bool queue_message(const RomTaskSupportConfig *config, const RomTaskSupportOps *ops,
-    I2CHandlerMessage *message, bool *failed, uint32_t timeoutTicks)
-{
+                          I2CHandlerMessage *message, bool *failed, uint32_t timeoutTicks) {
     if (config == NULL || ops == NULL || message == NULL || failed == NULL ||
-        ops->queue_message_and_wait == NULL)
-    {
+        ops->queue_message_and_wait == NULL) {
         return false;
     }
 
     return ops->queue_message_and_wait(config->i2cQueueHandle, message, failed,
-        config->i2cFailedRomSemaphoreHandle, timeoutTicks, ops->context);
+                                       config->i2cFailedRomSemaphoreHandle, timeoutTicks,
+                                       ops->context);
 }
 
-static uint8_t *allocate_payload(const RomTaskSupportOps *ops, size_t size)
-{
-    if (ops == NULL || ops->allocate_payload == NULL)
-    {
+static uint8_t *allocate_payload(const RomTaskSupportOps *ops, size_t size) {
+    if (ops == NULL || ops->allocate_payload == NULL) {
         return NULL;
     }
 
     return ops->allocate_payload(size, ops->context);
 }
 
-static void free_payload(const RomTaskSupportOps *ops, uint8_t *payload)
-{
-    if (ops != NULL && ops->free_payload != NULL)
-    {
+static void free_payload(const RomTaskSupportOps *ops, uint8_t *payload) {
+    if (ops != NULL && ops->free_payload != NULL) {
         ops->free_payload(payload, ops->context);
     }
 }
 
-static void set_write_disable(const RomTaskSupportOps *ops, bool disableWrites)
-{
-    if (ops != NULL && ops->set_write_disable != NULL)
-    {
+static void set_write_disable(const RomTaskSupportOps *ops, bool disableWrites) {
+    if (ops != NULL && ops->set_write_disable != NULL) {
         ops->set_write_disable(disableWrites, ops->context);
     }
 }
 
 bool rom_task_bootstrap_effects(const RomTaskSupportConfig *config, const RomTaskSupportOps *ops,
-    EffectsState *state, EffectsParams *params)
-{
-    if (config == NULL || ops == NULL || state == NULL || params == NULL)
-    {
+                                EffectsState *state, EffectsParams *params) {
+    if (config == NULL || ops == NULL || state == NULL || params == NULL) {
         return false;
     }
 
@@ -91,13 +82,12 @@ bool rom_task_bootstrap_effects(const RomTaskSupportConfig *config, const RomTas
     message.pFailed = &failed;
 
     message.payload = allocate_payload(ops, addressPayloadSizeBytes);
-    if (message.payload == NULL)
-    {
+    if (message.payload == NULL) {
         return false;
     }
 
-    if (!rom_handler_encode_address(config->readAddress, message.payload, addressPayloadSizeBytes))
-    {
+    if (!rom_handler_encode_address(config->readAddress, message.payload,
+                                    addressPayloadSizeBytes)) {
         free_payload(ops, message.payload);
         return false;
     }
@@ -107,8 +97,7 @@ bool rom_task_bootstrap_effects(const RomTaskSupportConfig *config, const RomTas
     message.items = (uint16_t)addressPayloadSizeBytes;
 
     set_write_disable(ops, false);
-    if (!queue_message(config, ops, &message, message.pFailed, config->bootstrapTimeoutTicks))
-    {
+    if (!queue_message(config, ops, &message, message.pFailed, config->bootstrapTimeoutTicks)) {
         set_write_disable(ops, true);
         free_payload(ops, message.payload);
         return false;
@@ -117,8 +106,7 @@ bool rom_task_bootstrap_effects(const RomTaskSupportConfig *config, const RomTas
     set_write_disable(ops, true);
 
     message.payload = allocate_payload(ops, payloadSizeBytes);
-    if (message.payload == NULL)
-    {
+    if (message.payload == NULL) {
         return false;
     }
 
@@ -126,8 +114,7 @@ bool rom_task_bootstrap_effects(const RomTaskSupportConfig *config, const RomTas
     message.address = config->deviceAddress | 1U;
     message.items = (uint16_t)payloadSizeBytes;
 
-    if (!queue_message(config, ops, &message, message.pFailed, config->bootstrapTimeoutTicks))
-    {
+    if (!queue_message(config, ops, &message, message.pFailed, config->bootstrapTimeoutTicks)) {
         free_payload(ops, message.payload);
         return false;
     }
@@ -135,8 +122,8 @@ bool rom_task_bootstrap_effects(const RomTaskSupportConfig *config, const RomTas
     EffectsState loadedState;
     EffectsParams loadedParams;
 
-    if (!rom_handler_decode_read_payload(message.payload, payloadSizeBytes, &loadedState, &loadedParams))
-    {
+    if (!rom_handler_decode_read_payload(message.payload, payloadSizeBytes, &loadedState,
+                                         &loadedParams)) {
         free_payload(ops, message.payload);
         return false;
     }
@@ -148,10 +135,8 @@ bool rom_task_bootstrap_effects(const RomTaskSupportConfig *config, const RomTas
 }
 
 bool rom_task_save_effects(const RomTaskSupportConfig *config, const RomTaskSupportOps *ops,
-    const EffectsState *state, const EffectsParams *params)
-{
-    if (config == NULL || ops == NULL || state == NULL || params == NULL)
-    {
+                           const EffectsState *state, const EffectsParams *params) {
+    if (config == NULL || ops == NULL || state == NULL || params == NULL) {
         return false;
     }
 
@@ -163,14 +148,12 @@ bool rom_task_save_effects(const RomTaskSupportConfig *config, const RomTaskSupp
     message.pFailed = &failed;
 
     message.payload = allocate_payload(ops, payloadSizeBytes);
-    if (message.payload == NULL)
-    {
+    if (message.payload == NULL) {
         return false;
     }
 
     if (!rom_handler_encode_write_payload(config->writeAddress, state, params, message.payload,
-            payloadSizeBytes))
-    {
+                                          payloadSizeBytes)) {
         free_payload(ops, message.payload);
         return false;
     }
@@ -180,8 +163,7 @@ bool rom_task_save_effects(const RomTaskSupportConfig *config, const RomTaskSupp
     message.items = (uint16_t)payloadSizeBytes;
 
     set_write_disable(ops, false);
-    if (!queue_message(config, ops, &message, message.pFailed, config->saveTimeoutTicks))
-    {
+    if (!queue_message(config, ops, &message, message.pFailed, config->saveTimeoutTicks)) {
         set_write_disable(ops, true);
         free_payload(ops, message.payload);
         return false;

@@ -9,14 +9,12 @@
 int failures = 0;
 static int g_i2cTxCallbackHits = 0;
 
-static void on_i2c_tx_complete(void *context)
-{
+static void on_i2c_tx_complete(void *context) {
     (void)context;
     g_i2cTxCallbackHits++;
 }
 
-static void test_hal_i2c_tx_records_payload(void)
-{
+static void test_hal_i2c_tx_records_payload(void) {
     hal_mock_reset();
 
     const uint8_t payload[] = {0xAA, 0xBB, 0xCC, 0xDD};
@@ -30,8 +28,7 @@ static void test_hal_i2c_tx_records_payload(void)
     expect_eq_u8(0xDD, g_halMockState.i2c.lastTxBytes[3], "i2c tx last byte");
 }
 
-static void test_hal_i2c_rx_copies_buffer(void)
-{
+static void test_hal_i2c_rx_copies_buffer(void) {
     hal_mock_reset();
 
     g_halMockState.i2c.nextRxBytes[0] = 0x11;
@@ -46,8 +43,7 @@ static void test_hal_i2c_rx_copies_buffer(void)
     expect_eq_u8(0x22, rx[1], "i2c rx byte1");
 }
 
-static void test_hal_i2c_auto_callback_on_success(void)
-{
+static void test_hal_i2c_auto_callback_on_success(void) {
     hal_mock_reset();
     g_i2cTxCallbackHits = 0;
 
@@ -67,42 +63,38 @@ static void test_hal_i2c_auto_callback_on_success(void)
     expect_eq_u32(1, (uint32_t)g_i2cTxCallbackHits, "i2c tx callback invoked once");
 }
 
-static void test_freertos_semaphore_give_take(void)
-{
+static void test_freertos_semaphore_give_take(void) {
     freertos_mock_reset();
 
     expect_eq_u32(FREERTOS_MOCK_TIMEOUT,
-        freertos_mock_semaphore_take(&g_freeRtosMockState.semaphore),
-        "semaphore empty times out");
+                  freertos_mock_semaphore_take(&g_freeRtosMockState.semaphore),
+                  "semaphore empty times out");
 
     freertos_mock_semaphore_give(&g_freeRtosMockState.semaphore);
 
-    expect_eq_u32(FREERTOS_MOCK_OK,
-        freertos_mock_semaphore_take(&g_freeRtosMockState.semaphore),
-        "semaphore give then take succeeds");
+    expect_eq_u32(FREERTOS_MOCK_OK, freertos_mock_semaphore_take(&g_freeRtosMockState.semaphore),
+                  "semaphore give then take succeeds");
     expect_eq_u32(1, g_freeRtosMockState.semaphore.giveCount, "semaphore give count");
     expect_eq_u32(2, g_freeRtosMockState.semaphore.takeCount, "semaphore take count");
 }
 
-static void test_freertos_notify_wait_round_trip(void)
-{
+static void test_freertos_notify_wait_round_trip(void) {
     freertos_mock_reset();
 
     uint32_t value = 0;
     expect_eq_u32(FREERTOS_MOCK_TIMEOUT,
-        freertos_mock_task_notify_wait(&g_freeRtosMockState.notify, &value),
-        "notify wait empty times out");
+                  freertos_mock_task_notify_wait(&g_freeRtosMockState.notify, &value),
+                  "notify wait empty times out");
 
     freertos_mock_task_notify(&g_freeRtosMockState.notify, 42);
 
     expect_eq_u32(FREERTOS_MOCK_OK,
-        freertos_mock_task_notify_wait(&g_freeRtosMockState.notify, &value),
-        "notify wait receives value");
+                  freertos_mock_task_notify_wait(&g_freeRtosMockState.notify, &value),
+                  "notify wait receives value");
     expect_eq_u32(42, value, "notify value");
 }
 
-static void test_freertos_queue_fifo(void)
-{
+static void test_freertos_queue_fifo(void) {
     freertos_mock_reset();
 
     FreeRtosMockQueue queue;
@@ -114,27 +106,22 @@ static void test_freertos_queue_fifo(void)
 
     expect_eq_u32(FREERTOS_MOCK_OK, freertos_mock_queue_send(&queue, &first), "queue send first");
     expect_eq_u32(FREERTOS_MOCK_OK, freertos_mock_queue_send(&queue, &second), "queue send second");
-    expect_eq_u32(FREERTOS_MOCK_TIMEOUT,
-        freertos_mock_queue_send(&queue, &second),
-        "queue full times out");
+    expect_eq_u32(FREERTOS_MOCK_TIMEOUT, freertos_mock_queue_send(&queue, &second),
+                  "queue full times out");
 
-    expect_eq_u32(FREERTOS_MOCK_OK,
-        freertos_mock_queue_receive(&queue, &out),
-        "queue receive first");
+    expect_eq_u32(FREERTOS_MOCK_OK, freertos_mock_queue_receive(&queue, &out),
+                  "queue receive first");
     expect_eq_u32(10, out, "queue first value");
 
-    expect_eq_u32(FREERTOS_MOCK_OK,
-        freertos_mock_queue_receive(&queue, &out),
-        "queue receive second");
+    expect_eq_u32(FREERTOS_MOCK_OK, freertos_mock_queue_receive(&queue, &out),
+                  "queue receive second");
     expect_eq_u32(20, out, "queue second value");
 
-    expect_eq_u32(FREERTOS_MOCK_TIMEOUT,
-        freertos_mock_queue_receive(&queue, &out),
-        "queue empty times out");
+    expect_eq_u32(FREERTOS_MOCK_TIMEOUT, freertos_mock_queue_receive(&queue, &out),
+                  "queue empty times out");
 }
 
-int main(void)
-{
+int main(void) {
     test_hal_i2c_tx_records_payload();
     test_hal_i2c_rx_copies_buffer();
     test_hal_i2c_auto_callback_on_success();
@@ -144,8 +131,7 @@ int main(void)
 
     expect_true(failures == 0, "all peripheral mock tests pass");
 
-    if (failures != 0)
-    {
+    if (failures != 0) {
         fprintf(stderr, "Peripheral mock tests failed: %d\n", failures);
         return 1;
     }

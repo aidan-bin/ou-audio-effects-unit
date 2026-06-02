@@ -7,8 +7,7 @@
 
 int failures = 0;
 
-typedef struct
-{
+typedef struct {
     uint32_t notifyCount;
     void *lastNotifiedTask;
     uint32_t lastNotifyValue;
@@ -36,20 +35,17 @@ typedef struct
     bool adcStartResult;
 } PeripheralDispatchTestState;
 
-static bool test_semaphore_take(void *semaphoreHandle, uint32_t timeoutTicks, void *context)
-{
+static bool test_semaphore_take(void *semaphoreHandle, uint32_t timeoutTicks, void *context) {
     (void)semaphoreHandle;
 
     PeripheralDispatchTestState *state = (PeripheralDispatchTestState *)context;
     state->semaphoreTakeCount++;
 
-    if (timeoutTicks > 0)
-    {
+    if (timeoutTicks > 0) {
         return true;
     }
 
-    if (state->semaphoreTakeSuccessesRemaining == 0)
-    {
+    if (state->semaphoreTakeSuccessesRemaining == 0) {
         return false;
     }
 
@@ -57,24 +53,21 @@ static bool test_semaphore_take(void *semaphoreHandle, uint32_t timeoutTicks, vo
     return true;
 }
 
-static void test_notify_task_from_isr(void *taskHandle, uint32_t value, void *context)
-{
+static void test_notify_task_from_isr(void *taskHandle, uint32_t value, void *context) {
     PeripheralDispatchTestState *state = (PeripheralDispatchTestState *)context;
     state->notifyCount++;
     state->lastNotifiedTask = taskHandle;
     state->lastNotifyValue = value;
 }
 
-static void test_give_semaphore_from_isr(void *semaphoreHandle, void *context)
-{
+static void test_give_semaphore_from_isr(void *semaphoreHandle, void *context) {
     PeripheralDispatchTestState *state = (PeripheralDispatchTestState *)context;
     state->giveCount++;
     state->lastGivenSemaphore = semaphoreHandle;
 }
 
 static bool test_dma_start_it(void *dmaHandle, uint32_t srcAddress, uint32_t dstAddress,
-    uint32_t dataLength, void *context)
-{
+                              uint32_t dataLength, void *context) {
     (void)dmaHandle;
     (void)srcAddress;
     (void)dstAddress;
@@ -85,8 +78,7 @@ static bool test_dma_start_it(void *dmaHandle, uint32_t srcAddress, uint32_t dst
     return state->dmaStartResult;
 }
 
-static bool test_adc_config_channel(void *adcHandle, void *config, void *context)
-{
+static bool test_adc_config_channel(void *adcHandle, void *config, void *context) {
     (void)adcHandle;
     (void)config;
 
@@ -95,8 +87,7 @@ static bool test_adc_config_channel(void *adcHandle, void *config, void *context
     return state->adcConfigResult;
 }
 
-static bool test_adc_start_it(void *adcHandle, void *context)
-{
+static bool test_adc_start_it(void *adcHandle, void *context) {
     (void)adcHandle;
 
     PeripheralDispatchTestState *state = (PeripheralDispatchTestState *)context;
@@ -104,8 +95,7 @@ static bool test_adc_start_it(void *adcHandle, void *context)
     return state->adcStartResult;
 }
 
-static uint32_t test_adc_get_value(void *adcHandle, void *context)
-{
+static uint32_t test_adc_get_value(void *adcHandle, void *context) {
     (void)adcHandle;
 
     PeripheralDispatchTestState *state = (PeripheralDispatchTestState *)context;
@@ -114,16 +104,14 @@ static uint32_t test_adc_get_value(void *adcHandle, void *context)
 }
 
 static void test_i2c_signal_completion_from_isr(void *i2cTaskSupportContext, bool transferFailed,
-    void *context)
-{
+                                                void *context) {
     PeripheralDispatchTestState *state = (PeripheralDispatchTestState *)context;
     state->i2cSignalCount++;
     state->lastI2CContext = i2cTaskSupportContext;
     state->lastI2CTransferFailed = transferFailed;
 }
 
-static PeripheralDispatchOps make_ops(PeripheralDispatchTestState *state)
-{
+static PeripheralDispatchOps make_ops(PeripheralDispatchTestState *state) {
     PeripheralDispatchOps ops = {
         .semaphore_take = test_semaphore_take,
         .task_notify_from_isr = test_notify_task_from_isr,
@@ -139,8 +127,7 @@ static PeripheralDispatchOps make_ops(PeripheralDispatchTestState *state)
     return ops;
 }
 
-static PeripheralDispatchContext make_context(void)
-{
+static PeripheralDispatchContext make_context(void) {
     PeripheralDispatchContext dispatch = {
         .effectsTaskHandle = (void *)0x1001,
         .potHandlerTaskHandle = (void *)0x1002,
@@ -160,8 +147,7 @@ static PeripheralDispatchContext make_context(void)
     return dispatch;
 }
 
-static void test_callbacks_dispatch_expected_notifications(void)
-{
+static void test_callbacks_dispatch_expected_notifications(void) {
     PeripheralDispatchTestState state = {0};
     state.nextAdcValue = 123U;
 
@@ -176,7 +162,8 @@ static void test_callbacks_dispatch_expected_notifications(void)
     peripheral_on_adc_half_complete(&dispatch, &ops, dispatch.effectsAdcHandle);
     expect_eq_u32(2, state.notifyCount, "adc half complete notifies effects task");
     expect_ptr(dispatch.effectsTaskHandle, state.lastNotifiedTask, "adc half task handle");
-    expect_eq_u32((uint32_t)(uintptr_t)dispatch.adcBufA, state.lastNotifyValue, "adc half buffer value");
+    expect_eq_u32((uint32_t)(uintptr_t)dispatch.adcBufA, state.lastNotifyValue,
+                  "adc half buffer value");
 
     peripheral_on_adc_complete(&dispatch, &ops, dispatch.potAdcHandle);
     expect_eq_u32(3, state.notifyCount, "pot adc complete notifies pot task");
@@ -186,15 +173,18 @@ static void test_callbacks_dispatch_expected_notifications(void)
 
     peripheral_on_adc_complete(&dispatch, &ops, dispatch.effectsAdcHandle);
     expect_eq_u32(4, state.notifyCount, "effects adc complete notifies effects task");
-    expect_eq_u32((uint32_t)(uintptr_t)dispatch.adcBufB, state.lastNotifyValue, "effects adc buffer value");
+    expect_eq_u32((uint32_t)(uintptr_t)dispatch.adcBufB, state.lastNotifyValue,
+                  "effects adc buffer value");
 
     peripheral_on_dac_half_complete(&dispatch, &ops, (void *)0xDEAD);
     expect_eq_u32(5, state.notifyCount, "dac half complete notifies effects task");
-    expect_eq_u32((uint32_t)(uintptr_t)dispatch.dacBufA, state.lastNotifyValue, "dac half buffer value");
+    expect_eq_u32((uint32_t)(uintptr_t)dispatch.dacBufA, state.lastNotifyValue,
+                  "dac half buffer value");
 
     peripheral_on_dac_complete(&dispatch, &ops, (void *)0xBEEF);
     expect_eq_u32(6, state.notifyCount, "dac complete notifies effects task");
-    expect_eq_u32((uint32_t)(uintptr_t)dispatch.dacBufB, state.lastNotifyValue, "dac complete buffer value");
+    expect_eq_u32((uint32_t)(uintptr_t)dispatch.dacBufB, state.lastNotifyValue,
+                  "dac complete buffer value");
 
     peripheral_on_i2c_tx_complete(&dispatch, &ops, dispatch.i2cHandle);
     expect_eq_u32(1, state.i2cSignalCount, "i2c tx signals completion");
@@ -215,11 +205,11 @@ static void test_callbacks_dispatch_expected_notifications(void)
 
     peripheral_on_dma_complete(&dispatch, &ops, dispatch.memToMemDmaHandle);
     expect_eq_u32(1, state.giveCount, "dma complete gives semaphore");
-    expect_ptr(dispatch.delaySamplesDmaSemaphoreHandle, state.lastGivenSemaphore, "dma semaphore handle");
+    expect_ptr(dispatch.delaySamplesDmaSemaphoreHandle, state.lastGivenSemaphore,
+               "dma semaphore handle");
 }
 
-static void test_callbacks_ignore_unrelated_handles(void)
-{
+static void test_callbacks_ignore_unrelated_handles(void) {
     PeripheralDispatchTestState state = {0};
     PeripheralDispatchOps ops = make_ops(&state);
     PeripheralDispatchContext dispatch = make_context();
@@ -237,8 +227,7 @@ static void test_callbacks_ignore_unrelated_handles(void)
     expect_eq_u32(0, state.giveCount, "unrelated dma handle ignored");
 }
 
-static void test_helper_functions(void)
-{
+static void test_helper_functions(void) {
     PeripheralDispatchTestState state = {0};
     state.semaphoreTakeSuccessesRemaining = 2;
     state.dmaStartResult = true;
@@ -251,7 +240,8 @@ static void test_helper_functions(void)
     expect_eq_u32(3, state.semaphoreTakeCount, "drain consumes until empty");
 
     state.semaphoreTakeSuccessesRemaining = 2;
-    bool dmaOk = peripheral_start_dma_transfer_and_wait((void *)0x2222, 1, 2, 3, (void *)0x3333, 4, &ops);
+    bool dmaOk =
+        peripheral_start_dma_transfer_and_wait((void *)0x2222, 1, 2, 3, (void *)0x3333, 4, &ops);
     expect_true(dmaOk, "dma helper succeeds");
     expect_eq_u32(1, state.dmaStartCount, "dma start called once");
 
@@ -261,14 +251,12 @@ static void test_helper_functions(void)
     expect_eq_u32(1, state.adcStartCount, "adc start called once");
 }
 
-int main(void)
-{
+int main(void) {
     test_callbacks_dispatch_expected_notifications();
     test_callbacks_ignore_unrelated_handles();
     test_helper_functions();
 
-    if (failures != 0)
-    {
+    if (failures != 0) {
         fprintf(stderr, "test_firmware_peripheral_dispatch: %d failure(s)\n", failures);
         return 1;
     }

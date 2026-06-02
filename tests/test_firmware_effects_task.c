@@ -10,8 +10,7 @@
 
 int failures = 0;
 
-typedef struct
-{
+typedef struct {
     uint16_t *adcBufferToReturn;
     uint16_t *dacBufferToReturn;
     bool waitForAdcSucceeds;
@@ -26,13 +25,11 @@ typedef struct
     uint32_t outstandingAllocs;
 } EffectsTaskTestOpsState;
 
-static bool wait_for_adc(uint32_t timeoutTicks, uint16_t **bufPtr, void *context)
-{
+static bool wait_for_adc(uint32_t timeoutTicks, uint16_t **bufPtr, void *context) {
     (void)timeoutTicks;
 
     EffectsTaskTestOpsState *state = (EffectsTaskTestOpsState *)context;
-    if (!state->waitForAdcSucceeds || bufPtr == NULL)
-    {
+    if (!state->waitForAdcSucceeds || bufPtr == NULL) {
         return false;
     }
 
@@ -40,13 +37,11 @@ static bool wait_for_adc(uint32_t timeoutTicks, uint16_t **bufPtr, void *context
     return true;
 }
 
-static bool wait_for_dac(uint32_t timeoutTicks, uint16_t **bufPtr, void *context)
-{
+static bool wait_for_dac(uint32_t timeoutTicks, uint16_t **bufPtr, void *context) {
     (void)timeoutTicks;
 
     EffectsTaskTestOpsState *state = (EffectsTaskTestOpsState *)context;
-    if (!state->waitForDacSucceeds || bufPtr == NULL)
-    {
+    if (!state->waitForDacSucceeds || bufPtr == NULL) {
         return false;
     }
 
@@ -54,13 +49,12 @@ static bool wait_for_dac(uint32_t timeoutTicks, uint16_t **bufPtr, void *context
     return true;
 }
 
-static bool dma_copy(const uint16_t *src, uint16_t *dst, size_t count, uint32_t timeoutTicks, void *context)
-{
+static bool dma_copy(const uint16_t *src, uint16_t *dst, size_t count, uint32_t timeoutTicks,
+                     void *context) {
     (void)timeoutTicks;
 
     EffectsTaskTestOpsState *state = (EffectsTaskTestOpsState *)context;
-    if (!state->dmaCopySucceeds)
-    {
+    if (!state->dmaCopySucceeds) {
         return false;
     }
 
@@ -68,35 +62,29 @@ static bool dma_copy(const uint16_t *src, uint16_t *dst, size_t count, uint32_t 
     return true;
 }
 
-static void *alloc_buf(size_t size, void *context)
-{
+static void *alloc_buf(size_t size, void *context) {
     EffectsTaskTestOpsState *state = (EffectsTaskTestOpsState *)context;
     void *ptr = malloc(size);
-    if (ptr != NULL)
-    {
+    if (ptr != NULL) {
         state->outstandingAllocs++;
     }
 
     return ptr;
 }
 
-static void free_buf(void *ptr, void *context)
-{
+static void free_buf(void *ptr, void *context) {
     EffectsTaskTestOpsState *state = (EffectsTaskTestOpsState *)context;
 
-    if (ptr != NULL)
-    {
+    if (ptr != NULL) {
         free(ptr);
         state->outstandingAllocs--;
     }
 }
 
-static bool read_latched_state(EffectsState *stateOut, EffectsParams *paramsOut, void *context)
-{
+static bool read_latched_state(EffectsState *stateOut, EffectsParams *paramsOut, void *context) {
     EffectsTaskTestOpsState *state = (EffectsTaskTestOpsState *)context;
 
-    if (stateOut == NULL || paramsOut == NULL)
-    {
+    if (stateOut == NULL || paramsOut == NULL) {
         return false;
     }
 
@@ -105,20 +93,17 @@ static bool read_latched_state(EffectsState *stateOut, EffectsParams *paramsOut,
     return true;
 }
 
-static void report_failure(void *context)
-{
+static void report_failure(void *context) {
     EffectsTaskTestOpsState *state = (EffectsTaskTestOpsState *)context;
     state->failureReports++;
 }
 
-static uint32_t ms_to_ticks(uint32_t ms, void *context)
-{
+static uint32_t ms_to_ticks(uint32_t ms, void *context) {
     (void)context;
     return ms;
 }
 
-static EffectsTaskOps make_ops(EffectsTaskTestOpsState *state)
-{
+static EffectsTaskOps make_ops(EffectsTaskTestOpsState *state) {
     EffectsTaskOps ops = {
         .wait_for_adc_buffer = wait_for_adc,
         .wait_for_dac_buffer = wait_for_dac,
@@ -134,16 +119,15 @@ static EffectsTaskOps make_ops(EffectsTaskTestOpsState *state)
     return ops;
 }
 
-static void test_effects_task_happy_path_matches_pipeline(void)
-{
+static void test_effects_task_happy_path_matches_pipeline(void) {
     EffectsPipeline pipeline;
     expect_true(effects_pipeline_init(&pipeline) == 0, "pipeline init succeeds");
 
     EffectsPipeline expectedPipeline;
     expect_true(effects_pipeline_init(&expectedPipeline) == 0, "expected pipeline init succeeds");
 
-    uint16_t adcA[8] = {X_AXIS - 20, X_AXIS + 12, X_AXIS + 45, X_AXIS - 30, X_AXIS + 60, X_AXIS - 5,
-        X_AXIS + 1, X_AXIS - 1};
+    uint16_t adcA[8] = {X_AXIS - 20, X_AXIS + 12, X_AXIS + 45, X_AXIS - 30,
+                        X_AXIS + 60, X_AXIS - 5,  X_AXIS + 1,  X_AXIS - 1};
     uint16_t adcB[8] = {0};
     uint16_t dacA[8] = {0};
     uint16_t dacB[8] = {0};
@@ -189,20 +173,19 @@ static void test_effects_task_happy_path_matches_pipeline(void)
 
     uint16_t expected[8] = {0};
     expect_true(effects_pipeline_sync_params(&expectedPipeline, &opsState.latchedParams) == 0,
-        "expected pipeline sync succeeds");
+                "expected pipeline sync succeeds");
     expect_true(effects_pipeline_process(&expectedPipeline, OVERDRIVE, adcA, expected, 8) == 0,
-        "expected overdrive process succeeds");
+                "expected overdrive process succeeds");
 
-    for (size_t i = 0; i < 8; i++)
-    {
+    for (size_t i = 0; i < 8; i++) {
         expect_eq_u16(expected[i], dacA[i], "effects output matches expected pipeline output");
     }
 }
 
-static void test_effects_task_rejects_stray_adc_notification(void)
-{
+static void test_effects_task_rejects_stray_adc_notification(void) {
     EffectsPipeline pipeline;
-    expect_true(effects_pipeline_init(&pipeline) == 0, "pipeline init for stray notification succeeds");
+    expect_true(effects_pipeline_init(&pipeline) == 0,
+                "pipeline init for stray notification succeeds");
 
     uint16_t adcA[4] = {0};
     uint16_t adcB[4] = {0};
@@ -243,13 +226,11 @@ static void test_effects_task_rejects_stray_adc_notification(void)
     expect_true(opsState.outstandingAllocs == 0, "no allocations leaked on stray notification");
 }
 
-int main(void)
-{
+int main(void) {
     test_effects_task_happy_path_matches_pipeline();
     test_effects_task_rejects_stray_adc_notification();
 
-    if (failures != 0)
-    {
+    if (failures != 0) {
         fprintf(stderr, "test_firmware_effects_task: %d failure(s)\n", failures);
         return 1;
     }
