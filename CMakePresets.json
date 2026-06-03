@@ -1,0 +1,33 @@
+{
+    "version": 6,
+    "configurePresets": [
+        {
+            "name": "release",
+            "displayName": "Release",
+            "generator": "Unix Makefiles",
+            "binaryDir": "${sourceDir}/build",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "OU_BUILD_SHARED_LIB": "ON",
+                "OU_BUILD_TESTS": "ON"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "release",
+            "configurePreset": "release",
+            "jobs": 0
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "release",
+            "configurePreset": "release",
+            "output": {
+                "outputOnFailure": true
+            }
+        }
+    ]
+}
