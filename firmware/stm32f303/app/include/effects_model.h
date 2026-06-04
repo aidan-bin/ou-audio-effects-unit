@@ -9,19 +9,22 @@
 
 #define NUM_EFFECTS 3
 
-typedef enum {
+typedef enum
+{
     OVERDRIVE,
     ECHO,
     COMPRESSION,
 } Effect;
 
-typedef struct {
+typedef struct
+{
     Effect ordered[NUM_EFFECTS];
     bool isEnabled[NUM_EFFECTS];
     uint8_t activeEffectSelection;
 } EffectsState;
 
-typedef struct {
+typedef struct
+{
     OverdriveParam overdrive;
     EchoParam echo;
     CompressionParam compression;

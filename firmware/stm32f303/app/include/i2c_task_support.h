@@ -8,7 +8,8 @@
 #include "cmsis_os.h"
 #include "main.h"
 
-typedef struct {
+typedef struct
+{
     I2C_HandleTypeDef *hi2c;
     osThreadId romHandlerTaskHandle;
     osThreadId displayHandlerTaskHandle;

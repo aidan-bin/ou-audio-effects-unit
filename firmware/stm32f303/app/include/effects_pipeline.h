@@ -7,7 +7,8 @@
 #include "effect_runtime.h"
 #include "effects_model.h"
 
-typedef struct {
+typedef struct
+{
     EffectHandle overdrive;
     EffectHandle echo;
     EffectHandle compression;

@@ -1,8 +1,10 @@
 #include "switch_task.h"
 
-bool switch_task_step(const SwitchTaskContext *taskContext, const SwitchTaskOps *ops) {
+bool switch_task_step(const SwitchTaskContext *taskContext, const SwitchTaskOps *ops)
+{
     if (taskContext == NULL || ops == NULL || ops->read_switch == NULL || ops->read_state == NULL ||
-        ops->write_state == NULL || ops->sleep_ms == NULL) {
+        ops->write_state == NULL || ops->sleep_ms == NULL)
+    {
         return false;
     }
 
@@ -12,12 +14,14 @@ bool switch_task_step(const SwitchTaskContext *taskContext, const SwitchTaskOps 
 
     if (!ops->read_switch(0, &switchAEnabled, ops->context) ||
         !ops->read_switch(1, &switchBEnabled, ops->context) ||
-        !ops->read_switch(2, &switchCEnabled, ops->context)) {
+        !ops->read_switch(2, &switchCEnabled, ops->context))
+    {
         return false;
     }
 
     EffectsState latchedEffectsState;
-    if (!ops->read_state(&latchedEffectsState, ops->context)) {
+    if (!ops->read_state(&latchedEffectsState, ops->context))
+    {
         return false;
     }
 
@@ -25,7 +29,8 @@ bool switch_task_step(const SwitchTaskContext *taskContext, const SwitchTaskOps 
     effects_state_apply_switches(&latchedEffectsState, switchAEnabled, switchBEnabled,
                                  switchCEnabled);
 
-    if (!ops->write_state(&latchedEffectsState, ops->context)) {
+    if (!ops->write_state(&latchedEffectsState, ops->context))
+    {
         return false;
     }
 

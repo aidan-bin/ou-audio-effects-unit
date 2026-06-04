@@ -4,7 +4,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-typedef struct {
+typedef struct
+{
     bool (*wait_for_button)(uint16_t *pinOut, void *context);
     void (*dispatch_button)(uint16_t pin, void *context);
     void *context;

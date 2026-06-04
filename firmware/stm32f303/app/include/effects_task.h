@@ -7,7 +7,8 @@
 
 #include "effects_pipeline.h"
 
-typedef struct {
+typedef struct
+{
     EffectsPipeline *pipeline;
     volatile EffectsState *effectsState;
     volatile EffectsParams *effectsParams;
@@ -25,7 +26,8 @@ typedef struct {
     uint32_t processingSlackMs;
 } EffectsTaskContext;
 
-typedef struct {
+typedef struct
+{
     bool (*wait_for_adc_buffer)(uint32_t timeoutTicks, uint16_t **bufPtr, void *context);
     bool (*wait_for_dac_buffer)(uint32_t timeoutTicks, uint16_t **bufPtr, void *context);
 

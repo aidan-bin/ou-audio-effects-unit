@@ -6,7 +6,8 @@
 // Clamp point where tanh saturates to +/-1.0 in QA.
 #define TANH_CLAMP_POINT ((int16_t)(3 * Q_ONE))
 
-int16_t q_tanh(int16_t x) {
+int16_t q_tanh(int16_t x)
+{
     // x and return value are QA fixed-point values.
     // Approximation from a truncated Lambert continued-fraction form.
     if (x < -TANH_CLAMP_POINT)

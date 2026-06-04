@@ -4,7 +4,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-typedef struct {
+typedef struct
+{
     void *sourceTask;
     bool rxTxBar;
     uint16_t address;
@@ -13,21 +14,24 @@ typedef struct {
     bool *pFailed;
 } I2CHandlerMessage;
 
-typedef enum {
+typedef enum
+{
     I2C_HANDLER_RESULT_SUCCESS = 0,
     I2C_HANDLER_RESULT_INVALID_MESSAGE = 1,
     I2C_HANDLER_RESULT_DEVICE_NOT_READY = 2,
     I2C_HANDLER_RESULT_TRANSFER_FAILED = 3,
 } I2CHandlerResult;
 
-typedef struct {
+typedef struct
+{
     uint32_t trials;
     uint32_t blockingTimeoutMs;
     uint32_t tryAgainDelayMs;
     uint32_t dropBudgetMs;
 } I2CHandlerConfig;
 
-typedef struct {
+typedef struct
+{
     bool (*is_source_valid)(void *sourceTask, void *context);
     void (*signal_source_completion)(void *sourceTask, void *context);
 

@@ -7,7 +7,8 @@
 
 #include "effects_model.h"
 
-typedef struct {
+typedef struct
+{
     void *sourceTask;
     void *i2cQueueHandle;
     void *i2cFailedRomSemaphoreHandle;
@@ -18,7 +19,8 @@ typedef struct {
     uint32_t saveTimeoutTicks;
 } RomTaskSupportConfig;
 
-typedef struct {
+typedef struct
+{
     bool (*queue_message_and_wait)(void *queueHandle, void *message, bool *pFailed,
                                    void *failedSemaphoreHandle, uint32_t timeoutTicks,
                                    void *context);

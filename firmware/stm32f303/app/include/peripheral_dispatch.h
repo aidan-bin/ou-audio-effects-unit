@@ -4,7 +4,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-typedef struct {
+typedef struct
+{
     void *effectsTaskHandle;
     void *potHandlerTaskHandle;
     void *btnHandlerTaskHandle;
@@ -23,7 +24,8 @@ typedef struct {
     void *dacBufB;
 } PeripheralDispatchContext;
 
-typedef struct {
+typedef struct
+{
     bool (*semaphore_take)(void *semaphoreHandle, uint32_t timeoutTicks, void *context);
     void (*task_notify_from_isr)(void *taskHandle, uint32_t value, void *context);
     void (*semaphore_give_from_isr)(void *semaphoreHandle, void *context);

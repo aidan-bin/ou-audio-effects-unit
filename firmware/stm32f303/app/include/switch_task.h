@@ -6,11 +6,13 @@
 
 #include "effects_model.h"
 
-typedef struct {
+typedef struct
+{
     uint32_t pollingFrequencyMs;
 } SwitchTaskContext;
 
-typedef struct {
+typedef struct
+{
     bool (*read_switch)(uint8_t index, bool *enabledOut, void *context);
     bool (*read_state)(EffectsState *stateOut, void *context);
     bool (*write_state)(const EffectsState *state, void *context);

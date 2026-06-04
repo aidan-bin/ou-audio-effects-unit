@@ -16,13 +16,15 @@ static size_t clamp_min(size_t num, size_t min);
  * - Uses tanh on the input.
  */
 void buf_overdrive(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples,
-                   const OverdriveParam *param) {
+                   const OverdriveParam *param)
+{
     size_t level = clamp_range(param->level, 0, MAX_OVERDRIVE_LEVEL);
     size_t gain = clamp_qn(param->gain);
     size_t tone = clamp_range(param->tone, MIN_OVERDRIVE_TONE, MAX_OVERDRIVE_TONE);
     size_t mix = clamp_qn(param->mix);
 
-    for (size_t n = 0; n < num_samples; n++) {
+    for (size_t n = 0; n < num_samples; n++)
+    {
         int32_t input = (int32_t)in_buf[n] - X_AXIS;
         int32_t output;
 
@@ -45,19 +47,22 @@ void buf_overdrive(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples
  *   samples (those to which to add echo).
  */
 void buf_echo(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples,
-              const EchoParam *param) {
+              const EchoParam *param)
+{
     size_t delay_samples = param->delay_samples;
     size_t pre_delay = clamp_min(param->pre_delay, MIN_ECHO_PRE_DELAY);
     size_t density = clamp_qn(param->density);
     size_t attack = clamp_qn(param->attack);
     size_t decay = clamp_qn(param->decay);
 
-    if (delay_samples == 0) {
+    if (delay_samples == 0)
+    {
         memcpy(out_buf, in_buf, num_samples * sizeof(uint16_t));
         return;
     }
 
-    if (num_samples == 0) {
+    if (num_samples == 0)
+    {
         return;
     }
 
@@ -65,22 +70,27 @@ void buf_echo(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples,
 
     memcpy(out_buf, in_buf_curr, num_samples * sizeof(uint16_t));
 
-    if (density == 0 || pre_delay > delay_samples) {
+    if (density == 0 || pre_delay > delay_samples)
+    {
         return;
     }
 
     size_t echo_spacing = (1U << FIXED_POINT_Q) / density;
-    if (echo_spacing == 0) {
+    if (echo_spacing == 0)
+    {
         echo_spacing = 1;
     }
 
-    for (size_t n = 0; n < delay_samples + num_samples - 1; n++) {
+    for (size_t n = 0; n < delay_samples + num_samples - 1; n++)
+    {
         int32_t dry_input = (int32_t)in_buf[n] - X_AXIS;
 
         size_t curr_echo_gain = attack;
 
-        for (size_t delay = pre_delay; delay <= delay_samples; delay += echo_spacing) {
-            if (n + delay >= delay_samples && n + delay < delay_samples + num_samples) {
+        for (size_t delay = pre_delay; delay <= delay_samples; delay += echo_spacing)
+        {
+            if (n + delay >= delay_samples && n + delay < delay_samples + num_samples)
+            {
                 const size_t out_idx = n + delay - delay_samples;
                 int32_t wet = ((int32_t)curr_echo_gain * dry_input) >> FIXED_POINT_Q;
                 int32_t mixed = (int32_t)out_buf[out_idx] + wet;
@@ -98,20 +108,25 @@ void buf_echo(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples,
  * - Ratio is in QN.
  */
 void buf_compression(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples,
-                     const CompressionParam *param) {
+                     const CompressionParam *param)
+{
     int32_t threshold = (int32_t)clamp_range(param->threshold, 0, X_AXIS);
     int32_t ratio = (int32_t)clamp_qn(param->ratio);
 
     ratio = (1 << FIXED_POINT_Q) - ratio;
 
-    for (size_t n = 0; n < num_samples; n++) {
+    for (size_t n = 0; n < num_samples; n++)
+    {
         int32_t sample = (int32_t)in_buf[n] - X_AXIS;
 
-        if (sample > threshold) {
+        if (sample > threshold)
+        {
             uint32_t excess = (uint32_t)(sample - threshold);
 
             sample = (int32_t)((excess * (uint32_t)ratio >> FIXED_POINT_Q) + (uint32_t)threshold);
-        } else if (sample < -threshold) {
+        }
+        else if (sample < -threshold)
+        {
             uint32_t excess = (uint32_t)(-threshold - sample);
 
             sample = -threshold - (int32_t)((excess * (uint32_t)ratio) >> FIXED_POINT_Q);
@@ -121,7 +136,8 @@ void buf_compression(const uint16_t *in_buf, uint16_t *out_buf, size_t num_sampl
     }
 }
 
-static int32_t saturate_amplitude(int32_t num, size_t max) {
+static int32_t saturate_amplitude(int32_t num, size_t max)
+{
     if (num > (int32_t)max)
         return (int32_t)max;
     else if (num < (int32_t)-max)
@@ -130,43 +146,53 @@ static int32_t saturate_amplitude(int32_t num, size_t max) {
         return num;
 }
 
-static int32_t saturate_min(int32_t num, int32_t min) {
+static int32_t saturate_min(int32_t num, int32_t min)
+{
     if (num < min)
         return min;
     else
         return num;
 }
 
-static uint16_t saturate_u16(int32_t num) {
-    if (num < 0) {
+static uint16_t saturate_u16(int32_t num)
+{
+    if (num < 0)
+    {
         return 0;
     }
 
-    if (num > (int32_t)UINT16_MAX) {
+    if (num > (int32_t)UINT16_MAX)
+    {
         return UINT16_MAX;
     }
 
     return (uint16_t)num;
 }
 
-static size_t clamp_qn(size_t num) {
+static size_t clamp_qn(size_t num)
+{
     return clamp_range(num, 0, (1U << FIXED_POINT_Q));
 }
 
-static size_t clamp_range(size_t num, size_t min, size_t max) {
-    if (num < min) {
+static size_t clamp_range(size_t num, size_t min, size_t max)
+{
+    if (num < min)
+    {
         return min;
     }
 
-    if (num > max) {
+    if (num > max)
+    {
         return max;
     }
 
     return num;
 }
 
-static size_t clamp_min(size_t num, size_t min) {
-    if (num < min) {
+static size_t clamp_min(size_t num, size_t min)
+{
+    if (num < min)
+    {
         return min;
     }
 
