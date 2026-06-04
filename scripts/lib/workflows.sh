@@ -126,7 +126,8 @@ run_format_check() {
 
 run_lint() {
 	local clang_tidy_bin
-	local extra_args=()
+	local host_extra_args=()
+	local cubemx_extra_args=()
 	local root_compile_db_dir="build"
 	local cubemx_compile_db_dir=""
 
@@ -140,7 +141,7 @@ run_lint() {
 		local sdk_path
 
 		sdk_path="$(xcrun --sdk macosx --show-sdk-path)"
-		extra_args+=("--extra-arg-before=-isysroot${sdk_path}")
+		host_extra_args+=("--extra-arg-before=-isysroot${sdk_path}")
 	fi
 
 	compile_commands_contains_file() {
@@ -179,6 +180,40 @@ run_lint() {
 		return 1
 	}
 
+	configure_cubemx_tidy_extra_args() {
+		local compile_db_file="$1"
+		local arm_gcc_bin=""
+		local include_dir
+
+		arm_gcc_bin="$(grep -m1 -o '/[^ ]*arm-none-eabi-gcc' "$compile_db_file" || true)"
+		if [[ -z "$arm_gcc_bin" ]] && command -v arm-none-eabi-gcc >/dev/null 2>&1; then
+			arm_gcc_bin="$(command -v arm-none-eabi-gcc)"
+		fi
+
+		if [[ -z "$arm_gcc_bin" || ! -x "$arm_gcc_bin" ]]; then
+			echo "arm-none-eabi-gcc not found; cannot resolve CubeMX system include paths for clang-tidy."
+			return 1
+		fi
+
+		for include_dir in \
+			"$($arm_gcc_bin -print-file-name=include)" \
+			"$($arm_gcc_bin -print-file-name=include-fixed)" \
+			"$($arm_gcc_bin -print-file-name=../../../../arm-none-eabi/include)"; do
+			if [[ "$include_dir" != /* ]]; then
+				include_dir="$(cd "$(dirname "$arm_gcc_bin")" && cd "$include_dir" >/dev/null 2>&1 && pwd || true)"
+			fi
+
+			if [[ -d "$include_dir" ]]; then
+				cubemx_extra_args+=("--extra-arg-before=-isystem$include_dir")
+			fi
+		done
+
+		if [[ "${#cubemx_extra_args[@]}" -eq 0 ]]; then
+			echo "No valid ARM GCC include directories found for CubeMX lint."
+			return 1
+		fi
+	}
+
 	run_tidy() {
 		local file="$1"
 		local header_filter="$2"
@@ -186,8 +221,17 @@ run_lint() {
 		local compile_db_file="$compile_db_dir/compile_commands.json"
 		local line_filter="${4:-}"
 		local missing_entry_mode="${5:-skip}"
-		local tidy_args=(-quiet -p "$compile_db_dir" "-header-filter=$header_filter" "${extra_args[@]}")
+		local checks_override="${6:-}"
+		local tidy_args=(-quiet -p "$compile_db_dir" "-header-filter=$header_filter")
 		[[ ! -f "$file" ]] && return 0
+
+		if [[ "$compile_db_dir" == "$root_compile_db_dir" ]]; then
+			tidy_args+=("${host_extra_args[@]}")
+		fi
+
+		if [[ -n "$cubemx_compile_db_dir" && "$compile_db_dir" == "$cubemx_compile_db_dir" ]]; then
+			tidy_args+=("${cubemx_extra_args[@]}")
+		fi
 
 		if [[ ! -f "$compile_db_file" ]]; then
 			echo "Missing compile database for lint at $compile_db_file"
@@ -208,6 +252,10 @@ run_lint() {
 			tidy_args+=("-line-filter=$line_filter")
 		fi
 
+		if [[ -n "$checks_override" ]]; then
+			tidy_args+=("--checks=$checks_override")
+		fi
+
 		"$clang_tidy_bin" "${tidy_args[@]}" "$file" 2>&1 | \
 			sed -E '/^[0-9]+ warnings generated\.$/d'
 	}
@@ -223,6 +271,11 @@ run_lint() {
 	if ! cubemx_compile_db_dir="$(resolve_cubemx_compile_db_dir)"; then
 		echo "Missing CubeMX compile database (expected under firmware/stm32f303/cubemx/build or via CUBEMX_LINT_BUILD_DIR)."
 		echo "Configure or regenerate the CubeMX build tree to enable USER CODE lint gating."
+		return 1
+	fi
+
+	if ! configure_cubemx_tidy_extra_args "$cubemx_compile_db_dir/compile_commands.json"; then
+		echo "Failed to configure CubeMX clang-tidy include paths from ARM GCC toolchain."
 		return 1
 	fi
 

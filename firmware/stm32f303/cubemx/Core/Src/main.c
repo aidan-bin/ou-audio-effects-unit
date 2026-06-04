@@ -26,8 +26,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include "button_task.h"
-#include "effects_control_logic.h"
-#include "effects_state_manager.h"
+#include "effects_model.h"
 #include "effects_pipeline.h"
 #include "effects_task.h"
 #include "i2c_handler.h"
@@ -126,40 +125,40 @@ osSemaphoreId i2cFailedDisplaySemaphoreHandle;
 /* USER CODE BEGIN PV */
 
 /* Structure to keep track of the effects group configuration state */
-static volatile EffectsState effectsState;
+static volatile EffectsState effects_state;
 
 /* Structure to manage individual effects' configurations (including min/max values) */
-static volatile EffectsParams effectsParams;
+static volatile EffectsParams effects_params;
 
 /* Set by I2C ISR callbacks and consumed by i2c handler task. */
-static volatile bool i2cTransferFailed = true;
+static volatile bool i2c_transfer_failed = true;
 
-static I2CTaskSupportContext i2cTaskSupportContext;
-static I2CHandlerConfig i2cHandlerConfig;
-static I2CHandlerOps i2cHandlerOps;
-static PeripheralDispatchContext peripheralDispatchContext;
-static PeripheralDispatchOps peripheralDispatchOps;
-static RomTaskSupportConfig romTaskSupportConfig;
-static RomTaskSupportOps romTaskSupportOps;
+static I2CTaskSupportContext i2c_task_support_context;
+static I2CHandlerConfig i2c_handler_config;
+static I2CHandlerOps i2c_handler_ops;
+static PeripheralDispatchContext peripheral_dispatch_context;
+static PeripheralDispatchOps peripheral_dispatch_ops;
+static RomTaskSupportConfig rom_task_support_config;
+static RomTaskSupportOps rom_task_support_ops;
 
 /* DMA buffer for ADC samples (note: samples are in order of decreasing age) */
-static volatile uint16_t adcBuf[ADC_BUF_LEN] = {0};
+static volatile uint16_t adc_buf[ADC_BUF_LEN] = {0};
 
 /* Pointers to each half of ADC/DMA buffer for ping-pong buffering
                 (note: DMA sees one buffer, alternating between the two) */
-static volatile uint16_t *const adcBufA = adcBuf;
-static volatile uint16_t *const adcBufB = &adcBuf[SAMPLE_BUF_LEN];
+static volatile uint16_t *const adc_buf_a = adc_buf;
+static volatile uint16_t *const adc_buf_b = &adc_buf[SAMPLE_BUF_LEN];
 
 /* Extra buffer for carrying over enough past samples for echo.
                 Note: This is constantly filled with last NUM_DELAY_SAMPLES samples, regardless of echo configuration */
-static volatile uint16_t delaySamplesBuf[NUM_DELAY_SAMPLES] = {0};
+static volatile uint16_t delay_samples_buf[NUM_DELAY_SAMPLES] = {0};
 
 /* Buffer for filter outputs (note: samples are in order of decreasing age) */
-static volatile uint16_t dacBuf[DAC_BUF_LEN] = {0};
+static volatile uint16_t dac_buf[DAC_BUF_LEN] = {0};
 
 /* Pointers to each half of the output buffer, either buffer may be used at a time */
-static volatile uint16_t *const dacBufA = dacBuf;
-static volatile uint16_t *const dacBufB = &dacBuf[DAC_BUF_LEN / 2];
+static volatile uint16_t *const dac_buf_a = dac_buf;
+static volatile uint16_t *const dac_buf_b = &dac_buf[DAC_BUF_LEN / 2];
 
 /* USER CODE END PV */
 
@@ -186,40 +185,42 @@ void startRomHandlerTask(void const * argument);
 void startDisplayHandlerTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
-static bool peripheral_semaphore_take(void *semaphoreHandle, uint32_t timeoutTicks, void *context);
-static void peripheral_task_notify_from_isr(void *taskHandle, uint32_t value, void *context);
-static void peripheral_semaphore_give_from_isr(void *semaphoreHandle, void *context);
-static bool peripheral_dma_start_it(void *dmaHandle, uint32_t srcAddress, uint32_t dstAddress,
-                                    uint32_t dataLength, void *context);
-static bool peripheral_adc_config_channel(void *adcHandle, void *config, void *context);
-static bool peripheral_adc_start_it(void *adcHandle, void *context);
-static uint32_t peripheral_adc_get_value(void *adcHandle, void *context);
-static void peripheral_i2c_signal_completion_from_isr(void *i2cContext, bool transferFailed, void *context);
+static bool peripheral_semaphore_take(void *semaphore_handle, uint32_t timeout_ticks, void *context);
+static void peripheral_task_notify_from_isr(void *task_handle, uint32_t value, void *context);
+static void peripheral_semaphore_give_from_isr(void *semaphore_handle, void *context);
+static bool peripheral_dma_start_it(void *dma_handle, uint32_t src_address, uint32_t dst_address,
+                                    uint32_t data_length, void *context);
+static bool peripheral_adc_config_channel(void *adc_handle, void *config, void *context);
+static bool peripheral_adc_start_it(void *adc_handle, void *context);
+static uint32_t peripheral_adc_get_value(void *adc_handle, void *context);
+static void peripheral_i2c_signal_completion_from_isr(void *i2c_context, bool transfer_failed, void *context);
 
-static bool effects_task_wait_for_adc_buffer(uint32_t timeoutTicks, uint16_t **bufPtr, void *context);
-static bool effects_task_wait_for_dac_buffer(uint32_t timeoutTicks, uint16_t **bufPtr, void *context);
-static bool effects_task_dma_copy(const uint16_t *src, uint16_t *dst, size_t count, uint32_t timeoutTicks,
+static bool effects_task_wait_for_adc_buffer(uint32_t timeout_ticks, uint16_t **buf_ptr, void *context);
+static bool effects_task_wait_for_dac_buffer(uint32_t timeout_ticks, uint16_t **buf_ptr, void *context);
+static bool effects_task_dma_copy(const uint16_t *src, uint16_t *dst, size_t count, uint32_t timeout_ticks,
                                   void *context);
 static bool effects_task_read_latched_state(EffectsState *state, EffectsParams *params, void *context);
 static uint32_t effects_task_ms_to_ticks(uint32_t ms, void *context);
 
-static bool pot_task_start_adc(uint8_t potIndex, void *context);
-static bool pot_task_wait_for_sample(uint32_t timeoutTicks, uint32_t *valueOut, void *context);
-static bool pot_task_read_active_effect(Effect *activeEffect, void *context);
-static void pot_task_apply_sample(Effect activeEffect, uint8_t potIndex, uint32_t adcValue,
-                                  uint32_t adcMax, void *context);
+static bool pot_task_start_adc(uint8_t pot_index, void *context);
+static bool pot_task_wait_for_sample(uint32_t timeout_ticks, uint32_t *value_out, void *context);
+static bool pot_task_read_active_effect(Effect *active_effect, void *context);
+static void pot_task_apply_sample(Effect active_effect, uint8_t pot_index, uint32_t adc_value,
+                                  uint32_t adc_max, void *context);
 
-static bool switch_task_read_switch(uint8_t index, bool *enabledOut, void *context);
-static bool switch_task_read_state(EffectsState *stateOut, void *context);
+static bool switch_task_read_switch(uint8_t index, bool *enabled_out, void *context);
+static bool switch_task_read_state(EffectsState *state_out, void *context);
 static bool switch_task_write_state(const EffectsState *state, void *context);
 static void switch_task_sleep_ms(uint32_t ms, void *context);
 
-static bool button_task_wait_for_button(uint16_t *pinOut, void *context);
+static bool button_task_wait_for_button(uint16_t *pin_out, void *context);
 static void button_task_dispatch(uint16_t pin, void *context);
 
 static uint8_t *allocate_payload_adapter(size_t size, void *context);
 static void free_payload_adapter(uint8_t *payload, void *context);
-static void set_rom_write_disable_adapter(bool disableWrites, void *context);
+static void *effects_task_alloc_adapter(size_t size, void *context);
+static void effects_task_free_adapter(void *ptr, void *context);
+static void set_rom_write_disable_adapter(bool disable_writes, void *context);
 static void init_peripheral_dispatch(void);
 
 /* USER CODE END PFP */
@@ -227,121 +228,122 @@ static void init_peripheral_dispatch(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-static bool peripheral_semaphore_take(void *semaphoreHandle, uint32_t timeoutTicks, void *context)
+static bool peripheral_semaphore_take(void *semaphore_handle, uint32_t timeout_ticks, void *context)
 {
     (void)context;
-    return xSemaphoreTake((osSemaphoreId)semaphoreHandle, (TickType_t)timeoutTicks) == pdTRUE;
+    return xSemaphoreTake((osSemaphoreId)semaphore_handle, (TickType_t)timeout_ticks) == pdTRUE;
 }
 
-static void peripheral_task_notify_from_isr(void *taskHandle, uint32_t value, void *context)
+static void peripheral_task_notify_from_isr(void *task_handle, uint32_t value, void *context)
 {
     (void)context;
 
-    if (taskHandle == NULL)
+    if (task_handle == NULL)
     {
         return;
     }
 
-    BaseType_t higherPriorityTaskWoken = pdFALSE;
-    xTaskNotifyFromISR((osThreadId)taskHandle, value, eSetValueWithOverwrite, &higherPriorityTaskWoken);
-    portYIELD_FROM_ISR(higherPriorityTaskWoken);
+    BaseType_t higher_priority_task_woken = pdFALSE;
+    xTaskNotifyFromISR((osThreadId)task_handle, value, eSetValueWithOverwrite, &higher_priority_task_woken);
+    portYIELD_FROM_ISR(higher_priority_task_woken);
 }
 
-static void peripheral_semaphore_give_from_isr(void *semaphoreHandle, void *context)
+static void peripheral_semaphore_give_from_isr(void *semaphore_handle, void *context)
 {
     (void)context;
 
-    if (semaphoreHandle == NULL)
+    if (semaphore_handle == NULL)
     {
         return;
     }
 
-    BaseType_t higherPriorityTaskWoken = pdFALSE;
-    xSemaphoreGiveFromISR((osSemaphoreId)semaphoreHandle, &higherPriorityTaskWoken);
-    portYIELD_FROM_ISR(higherPriorityTaskWoken);
+    BaseType_t higher_priority_task_woken = pdFALSE;
+    xSemaphoreGiveFromISR((osSemaphoreId)semaphore_handle, &higher_priority_task_woken);
+    portYIELD_FROM_ISR(higher_priority_task_woken);
 }
 
-static bool peripheral_dma_start_it(void *dmaHandle, uint32_t srcAddress, uint32_t dstAddress,
-                                    uint32_t dataLength, void *context)
+static bool peripheral_dma_start_it(void *dma_handle, uint32_t src_address, uint32_t dst_address,
+                                    uint32_t data_length, void *context)
 {
     (void)context;
 
-    if (dmaHandle == NULL)
+    if (dma_handle == NULL)
     {
         return false;
     }
 
-    return HAL_DMA_Start_IT((DMA_HandleTypeDef *)dmaHandle, srcAddress, dstAddress, dataLength) == HAL_OK;
+    return HAL_DMA_Start_IT((DMA_HandleTypeDef *)dma_handle, src_address, dst_address, data_length) == HAL_OK;
 }
 
-static bool peripheral_adc_config_channel(void *adcHandle, void *config, void *context)
+static bool peripheral_adc_config_channel(void *adc_handle, void *config, void *context)
 {
     (void)context;
 
-    if (adcHandle == NULL || config == NULL)
+    if (adc_handle == NULL || config == NULL)
     {
         return false;
     }
 
-    return HAL_ADC_ConfigChannel((ADC_HandleTypeDef *)adcHandle,
+    return HAL_ADC_ConfigChannel((ADC_HandleTypeDef *)adc_handle,
                                  (ADC_ChannelConfTypeDef *)config) == HAL_OK;
 }
 
-static bool peripheral_adc_start_it(void *adcHandle, void *context)
+static bool peripheral_adc_start_it(void *adc_handle, void *context)
 {
     (void)context;
 
-    if (adcHandle == NULL)
+    if (adc_handle == NULL)
     {
         return false;
     }
 
-    return HAL_ADC_Start_IT((ADC_HandleTypeDef *)adcHandle) == HAL_OK;
+    return HAL_ADC_Start_IT((ADC_HandleTypeDef *)adc_handle) == HAL_OK;
 }
 
-static uint32_t peripheral_adc_get_value(void *adcHandle, void *context)
+static uint32_t peripheral_adc_get_value(void *adc_handle, void *context)
 {
     (void)context;
 
-    if (adcHandle == NULL)
+    if (adc_handle == NULL)
     {
         return 0;
     }
 
-    return HAL_ADC_GetValue((ADC_HandleTypeDef *)adcHandle);
+    return HAL_ADC_GetValue((ADC_HandleTypeDef *)adc_handle);
 }
 
-static void peripheral_i2c_signal_completion_from_isr(void *i2cContext, bool transferFailed, void *context)
+static void peripheral_i2c_signal_completion_from_isr(void *i2c_context, bool transfer_failed, void *context)
 {
     (void)context;
-    i2c_task_signal_completion_from_isr((const I2CTaskSupportContext *)i2cContext, transferFailed);
+    i2c_task_signal_completion_from_isr((const I2CTaskSupportContext *)i2c_context, transfer_failed);
 }
 
-static bool effects_task_wait_for_adc_buffer(uint32_t timeoutTicks, uint16_t **bufPtr, void *context)
+static bool effects_task_wait_for_adc_buffer(uint32_t timeout_ticks, uint16_t **buf_ptr, void *context)
 {
     (void)context;
 
-    if (bufPtr == NULL)
+    if (buf_ptr == NULL)
     {
         return false;
     }
 
-    uint32_t notificationValue;
-    if (xTaskNotifyWait(0, 0xFFFFFFFFUL, &notificationValue, (TickType_t)timeoutTicks) != pdTRUE)
+    uint32_t notification_value;
+    if (xTaskNotifyWait(0, 0xFFFFFFFFUL, &notification_value, (TickType_t)timeout_ticks) != pdTRUE)
     {
         return false;
     }
 
-    *bufPtr = (uint16_t *)notificationValue;
+    // NOLINTNEXTLINE(performance-no-int-to-ptr): task notification carries an address-sized payload.
+    *buf_ptr = (uint16_t *)(uintptr_t)notification_value;
     return true;
 }
 
-static bool effects_task_wait_for_dac_buffer(uint32_t timeoutTicks, uint16_t **bufPtr, void *context)
+static bool effects_task_wait_for_dac_buffer(uint32_t timeout_ticks, uint16_t **buf_ptr, void *context)
 {
-    return effects_task_wait_for_adc_buffer(timeoutTicks, bufPtr, context);
+    return effects_task_wait_for_adc_buffer(timeout_ticks, buf_ptr, context);
 }
 
-static bool effects_task_dma_copy(const uint16_t *src, uint16_t *dst, size_t count, uint32_t timeoutTicks,
+static bool effects_task_dma_copy(const uint16_t *src, uint16_t *dst, size_t count, uint32_t timeout_ticks,
                                   void *context)
 {
     (void)context;
@@ -351,8 +353,8 @@ static bool effects_task_dma_copy(const uint16_t *src, uint16_t *dst, size_t cou
                                                   (uint32_t)dst,
                                                   count,
                                                   delaySamplesDmaSemaphoreHandle,
-                                                  timeoutTicks,
-                                                  &peripheralDispatchOps);
+                                                  timeout_ticks,
+                                                  &peripheral_dispatch_ops);
 }
 
 static bool effects_task_read_latched_state(EffectsState *state, EffectsParams *params, void *context)
@@ -365,8 +367,8 @@ static bool effects_task_read_latched_state(EffectsState *state, EffectsParams *
     }
 
     taskENTER_CRITICAL();
-    *state = effectsState;
-    *params = effectsParams;
+    *state = effects_state;
+    *params = effects_params;
     taskEXIT_CRITICAL();
     return true;
 }
@@ -377,87 +379,87 @@ static uint32_t effects_task_ms_to_ticks(uint32_t ms, void *context)
     return pdMS_TO_TICKS(ms);
 }
 
-static bool pot_task_start_adc(uint8_t potIndex, void *context)
+static bool pot_task_start_adc(uint8_t pot_index, void *context)
 {
     (void)context;
 
-    ADC_ChannelConfTypeDef sConfig;
-    sConfig.Channel = ADC_CHANNEL_1;
-    sConfig.Rank = ADC_REGULAR_RANK_1;
-    sConfig.SingleDiff = ADC_SINGLE_ENDED;
-    sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
-    sConfig.OffsetNumber = ADC_OFFSET_NONE;
-    sConfig.Offset = 0;
+    ADC_ChannelConfTypeDef s_config;
+    s_config.Channel = ADC_CHANNEL_1;
+    s_config.Rank = ADC_REGULAR_RANK_1;
+    s_config.SingleDiff = ADC_SINGLE_ENDED;
+    s_config.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
+    s_config.OffsetNumber = ADC_OFFSET_NONE;
+    s_config.Offset = 0;
 
-    switch (potIndex)
+    switch (pot_index)
     {
     case 0:
-        sConfig.Channel = ADC_CHANNEL_1;
+        s_config.Channel = ADC_CHANNEL_1;
         break;
     case 1:
-        sConfig.Channel = ADC_CHANNEL_2;
+        s_config.Channel = ADC_CHANNEL_2;
         break;
     case 2:
-        sConfig.Channel = ADC_CHANNEL_4;
+        s_config.Channel = ADC_CHANNEL_4;
         break;
     case 3:
-        sConfig.Channel = ADC_CHANNEL_6;
+        s_config.Channel = ADC_CHANNEL_6;
         break;
     default:
         return false;
     }
 
-    return peripheral_start_adc_conversion_it(&hadc1, &sConfig, &peripheralDispatchOps);
+    return peripheral_start_adc_conversion_it(&hadc1, &s_config, &peripheral_dispatch_ops);
 }
 
-static bool pot_task_wait_for_sample(uint32_t timeoutTicks, uint32_t *valueOut, void *context)
+static bool pot_task_wait_for_sample(uint32_t timeout_ticks, uint32_t *value_out, void *context)
 {
     (void)context;
 
-    if (valueOut == NULL)
+    if (value_out == NULL)
     {
         return false;
     }
 
-    return xTaskNotifyWait(0, 0xFFFFFFFFUL, valueOut, (TickType_t)timeoutTicks) == pdTRUE;
+    return xTaskNotifyWait(0, 0xFFFFFFFFUL, value_out, (TickType_t)timeout_ticks) == pdTRUE;
 }
 
-static bool pot_task_read_active_effect(Effect *activeEffect, void *context)
+static bool pot_task_read_active_effect(Effect *active_effect, void *context)
 {
     (void)context;
 
-    if (activeEffect == NULL)
+    if (active_effect == NULL)
     {
         return false;
     }
 
-    EffectsState latchedEffectsState;
+    EffectsState latched_effects_state;
 
     taskENTER_CRITICAL();
-    latchedEffectsState = effectsState;
+    latched_effects_state = effects_state;
     taskEXIT_CRITICAL();
 
-    effects_state_normalize(&latchedEffectsState);
+    effects_state_normalize(&latched_effects_state);
 
-    return effects_state_get_active_effect(&latchedEffectsState, activeEffect);
+    return effects_state_get_active_effect(&latched_effects_state, active_effect);
 }
 
-static void pot_task_apply_sample(Effect activeEffect, uint8_t potIndex, uint32_t adcValue,
-                                  uint32_t adcMax, void *context)
+static void pot_task_apply_sample(Effect active_effect, uint8_t pot_index, uint32_t adc_value,
+                                  uint32_t adc_max, void *context)
 {
     (void)context;
 
     taskENTER_CRITICAL();
-    (void)effects_params_apply_pot_sample((EffectsParams *)&effectsParams, activeEffect, potIndex,
-                                          adcValue, adcMax);
+    (void)effects_params_apply_pot_sample((EffectsParams *)&effects_params, active_effect, pot_index,
+                                          adc_value, adc_max);
     taskEXIT_CRITICAL();
 }
 
-static bool switch_task_read_switch(uint8_t index, bool *enabledOut, void *context)
+static bool switch_task_read_switch(uint8_t index, bool *enabled_out, void *context)
 {
     (void)context;
 
-    if (enabledOut == NULL)
+    if (enabled_out == NULL)
     {
         return false;
     }
@@ -468,14 +470,17 @@ static bool switch_task_read_switch(uint8_t index, bool *enabledOut, void *conte
     switch (index)
     {
     case 0:
+        // NOLINTNEXTLINE(performance-no-int-to-ptr): STM32 HAL port macros expand to pointer casts.
         port = SWITCH_A_GPIO_Port;
         pin = SWITCH_A_Pin;
         break;
     case 1:
+        // NOLINTNEXTLINE(performance-no-int-to-ptr): STM32 HAL port macros expand to pointer casts.
         port = SWITCH_B_GPIO_Port;
         pin = SWITCH_B_Pin;
         break;
     case 2:
+        // NOLINTNEXTLINE(performance-no-int-to-ptr): STM32 HAL port macros expand to pointer casts.
         port = SWITCH_C_GPIO_Port;
         pin = SWITCH_C_Pin;
         break;
@@ -483,21 +488,21 @@ static bool switch_task_read_switch(uint8_t index, bool *enabledOut, void *conte
         return false;
     }
 
-    *enabledOut = HAL_GPIO_ReadPin(port, pin) == GPIO_PIN_SET;
+    *enabled_out = HAL_GPIO_ReadPin(port, pin) == GPIO_PIN_SET;
     return true;
 }
 
-static bool switch_task_read_state(EffectsState *stateOut, void *context)
+static bool switch_task_read_state(EffectsState *state_out, void *context)
 {
     (void)context;
 
-    if (stateOut == NULL)
+    if (state_out == NULL)
     {
         return false;
     }
 
     taskENTER_CRITICAL();
-    *stateOut = effectsState;
+    *state_out = effects_state;
     taskEXIT_CRITICAL();
 
     return true;
@@ -513,7 +518,7 @@ static bool switch_task_write_state(const EffectsState *state, void *context)
     }
 
     taskENTER_CRITICAL();
-    effectsState = *state;
+    effects_state = *state;
     taskEXIT_CRITICAL();
 
     return true;
@@ -525,46 +530,29 @@ static void switch_task_sleep_ms(uint32_t ms, void *context)
     osDelay(ms);
 }
 
-static bool button_task_wait_for_button(uint16_t *pinOut, void *context)
+static bool button_task_wait_for_button(uint16_t *pin_out, void *context)
 {
     (void)context;
 
-    if (pinOut == NULL)
+    if (pin_out == NULL)
     {
         return false;
     }
 
-    uint32_t notificationValue;
-    if (xTaskNotifyWait(0, 0xFFFFFFFFUL, &notificationValue, portMAX_DELAY) != pdTRUE)
+    uint32_t notification_value;
+    if (xTaskNotifyWait(0, 0xFFFFFFFFUL, &notification_value, portMAX_DELAY) != pdTRUE)
     {
         return false;
     }
 
-    *pinOut = (uint16_t)notificationValue;
+    *pin_out = (uint16_t)notification_value;
     return true;
 }
 
 static void button_task_dispatch(uint16_t pin, void *context)
 {
     (void)context;
-
-    switch (pin)
-    {
-    case BTN_A_Pin:
-    {
-    }
-    break;
-    case BTN_B_Pin:
-    {
-    }
-    break;
-    case BTN_C_Pin:
-    {
-    }
-    break;
-    default:
-        break;
-    }
+    (void)pin;
 }
 
 static uint8_t *allocate_payload_adapter(size_t size, void *context)
@@ -584,39 +572,50 @@ static void free_payload_adapter(uint8_t *payload, void *context)
     }
 }
 
-static void set_rom_write_disable_adapter(bool disableWrites, void *context)
+static void *effects_task_alloc_adapter(size_t size, void *context)
+{
+    return allocate_payload_adapter(size, context);
+}
+
+static void effects_task_free_adapter(void *ptr, void *context)
+{
+    free_payload_adapter((uint8_t *)ptr, context);
+}
+
+static void set_rom_write_disable_adapter(bool disable_writes, void *context)
 {
     (void)context;
 
+    // NOLINTNEXTLINE(performance-no-int-to-ptr): STM32 HAL port macros expand to pointer casts.
     HAL_GPIO_WritePin(nNVM_WE_GPIO_Port, nNVM_WE_Pin,
-                      disableWrites ? GPIO_PIN_SET : GPIO_PIN_RESET);
+                      disable_writes ? GPIO_PIN_SET : GPIO_PIN_RESET);
 }
 
 static void init_peripheral_dispatch(void)
 {
-    peripheralDispatchContext.effectsTaskHandle = effectsTaskHandle;
-    peripheralDispatchContext.potHandlerTaskHandle = potHandlerTaskHandle;
-    peripheralDispatchContext.btnHandlerTaskHandle = btnHandlerTaskHandle;
-    peripheralDispatchContext.effectsAdcHandle = &hadc3;
-    peripheralDispatchContext.potAdcHandle = &hadc1;
-    peripheralDispatchContext.i2cHandle = &hi2c1;
-    peripheralDispatchContext.memToMemDmaHandle = &hdma_memtomem_dma1_channel1;
-    peripheralDispatchContext.i2cTaskSupportContext = &i2cTaskSupportContext;
-    peripheralDispatchContext.delaySamplesDmaSemaphoreHandle = delaySamplesDmaSemaphoreHandle;
-    peripheralDispatchContext.adcBufA = (void *)adcBufA;
-    peripheralDispatchContext.adcBufB = (void *)adcBufB;
-    peripheralDispatchContext.dacBufA = (void *)dacBufA;
-    peripheralDispatchContext.dacBufB = (void *)dacBufB;
+    peripheral_dispatch_context.effectsTaskHandle = effectsTaskHandle;
+    peripheral_dispatch_context.potHandlerTaskHandle = potHandlerTaskHandle;
+    peripheral_dispatch_context.btnHandlerTaskHandle = btnHandlerTaskHandle;
+    peripheral_dispatch_context.effectsAdcHandle = &hadc3;
+    peripheral_dispatch_context.potAdcHandle = &hadc1;
+    peripheral_dispatch_context.i2cHandle = &hi2c1;
+    peripheral_dispatch_context.memToMemDmaHandle = &hdma_memtomem_dma1_channel1;
+    peripheral_dispatch_context.i2cTaskSupportContext = &i2c_task_support_context;
+    peripheral_dispatch_context.delaySamplesDmaSemaphoreHandle = delaySamplesDmaSemaphoreHandle;
+    peripheral_dispatch_context.adcBufA = (void *)adc_buf_a;
+    peripheral_dispatch_context.adcBufB = (void *)adc_buf_b;
+    peripheral_dispatch_context.dacBufA = (void *)dac_buf_a;
+    peripheral_dispatch_context.dacBufB = (void *)dac_buf_b;
 
-    peripheralDispatchOps.semaphore_take = peripheral_semaphore_take;
-    peripheralDispatchOps.task_notify_from_isr = peripheral_task_notify_from_isr;
-    peripheralDispatchOps.semaphore_give_from_isr = peripheral_semaphore_give_from_isr;
-    peripheralDispatchOps.dma_start_it = peripheral_dma_start_it;
-    peripheralDispatchOps.adc_config_channel = peripheral_adc_config_channel;
-    peripheralDispatchOps.adc_start_it = peripheral_adc_start_it;
-    peripheralDispatchOps.adc_get_value = peripheral_adc_get_value;
-    peripheralDispatchOps.i2c_signal_completion_from_isr = peripheral_i2c_signal_completion_from_isr;
-    peripheralDispatchOps.context = NULL;
+    peripheral_dispatch_ops.semaphore_take = peripheral_semaphore_take;
+    peripheral_dispatch_ops.task_notify_from_isr = peripheral_task_notify_from_isr;
+    peripheral_dispatch_ops.semaphore_give_from_isr = peripheral_semaphore_give_from_isr;
+    peripheral_dispatch_ops.dma_start_it = peripheral_dma_start_it;
+    peripheral_dispatch_ops.adc_config_channel = peripheral_adc_config_channel;
+    peripheral_dispatch_ops.adc_start_it = peripheral_adc_start_it;
+    peripheral_dispatch_ops.adc_get_value = peripheral_adc_get_value;
+    peripheral_dispatch_ops.i2c_signal_completion_from_isr = peripheral_i2c_signal_completion_from_isr;
+    peripheral_dispatch_ops.context = NULL;
 }
 
 /* USER CODE END 0 */
@@ -687,7 +686,7 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
   /* add semaphores, ... */
-  PeripheralDispatchOps drainOps = {
+  PeripheralDispatchOps drain_ops = {
       .semaphore_take = peripheral_semaphore_take,
       .task_notify_from_isr = NULL,
       .semaphore_give_from_isr = NULL,
@@ -698,10 +697,10 @@ int main(void)
       .i2c_signal_completion_from_isr = NULL,
       .context = NULL,
   };
-  peripheral_drain_semaphore(delaySamplesDmaSemaphoreHandle, &drainOps);
-  peripheral_drain_semaphore(i2cCompletionSemaphoreHandle, &drainOps);
-  peripheral_drain_semaphore(i2cFailedRomSemaphoreHandle, &drainOps);
-  peripheral_drain_semaphore(i2cFailedDisplaySemaphoreHandle, &drainOps);
+  peripheral_drain_semaphore(delaySamplesDmaSemaphoreHandle, &drain_ops);
+  peripheral_drain_semaphore(i2cCompletionSemaphoreHandle, &drain_ops);
+  peripheral_drain_semaphore(i2cFailedRomSemaphoreHandle, &drain_ops);
+  peripheral_drain_semaphore(i2cFailedDisplaySemaphoreHandle, &drain_ops);
   /* USER CODE END RTOS_SEMAPHORES */
 
   /* USER CODE BEGIN RTOS_TIMERS */
@@ -752,19 +751,19 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
-  i2c_task_support_init(&i2cTaskSupportContext, &i2cHandlerConfig, &i2cHandlerOps,
+  i2c_task_support_init(&i2c_task_support_context, &i2c_handler_config, &i2c_handler_ops,
                         &hi2c1,
                         romHandlerTaskHandle,
                         displayHandlerTaskHandle,
                         i2cCompletionSemaphoreHandle,
                         i2cFailedRomSemaphoreHandle,
                         i2cFailedDisplaySemaphoreHandle,
-                        &i2cTransferFailed);
+                        &i2c_transfer_failed);
 
   init_peripheral_dispatch();
 
-  rom_task_support_init(&romTaskSupportConfig,
-                        &romTaskSupportOps,
+  rom_task_support_init(&rom_task_support_config,
+                        &rom_task_support_ops,
                         romHandlerTaskHandle,
                         i2cQueueHandle,
                         i2cFailedRomSemaphoreHandle,
@@ -1356,54 +1355,54 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+void HAL_GPIO_EXTI_Callback(uint16_t gpio_pin)
 {
-    peripheral_on_gpio_exti(&peripheralDispatchContext, &peripheralDispatchOps, GPIO_Pin);
+    peripheral_on_gpio_exti(&peripheral_dispatch_context, &peripheral_dispatch_ops, gpio_pin);
 }
 
 void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef *hadc)
 {
-    peripheral_on_adc_half_complete(&peripheralDispatchContext, &peripheralDispatchOps, hadc);
+    peripheral_on_adc_half_complete(&peripheral_dispatch_context, &peripheral_dispatch_ops, hadc);
 }
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 {
-    peripheral_on_adc_complete(&peripheralDispatchContext, &peripheralDispatchOps, hadc);
+    peripheral_on_adc_complete(&peripheral_dispatch_context, &peripheral_dispatch_ops, hadc);
 }
 
 void HAL_DAC_ConvHalfCpltCallbackCh1(DAC_HandleTypeDef *hdac)
 {
-    peripheral_on_dac_half_complete(&peripheralDispatchContext, &peripheralDispatchOps, hdac);
+    peripheral_on_dac_half_complete(&peripheral_dispatch_context, &peripheral_dispatch_ops, hdac);
 }
 
 void HAL_DAC_ConvCpltCallbackCh1(DAC_HandleTypeDef *hdac)
 {
-    peripheral_on_dac_complete(&peripheralDispatchContext, &peripheralDispatchOps, hdac);
+    peripheral_on_dac_complete(&peripheral_dispatch_context, &peripheral_dispatch_ops, hdac);
 }
 
 void HAL_I2C_MasterTxCpltCallback(I2C_HandleTypeDef *hi2c)
 {
-    peripheral_on_i2c_tx_complete(&peripheralDispatchContext, &peripheralDispatchOps, hi2c);
+    peripheral_on_i2c_tx_complete(&peripheral_dispatch_context, &peripheral_dispatch_ops, hi2c);
 }
 
 void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *hi2c)
 {
-    peripheral_on_i2c_rx_complete(&peripheralDispatchContext, &peripheralDispatchOps, hi2c);
+    peripheral_on_i2c_rx_complete(&peripheral_dispatch_context, &peripheral_dispatch_ops, hi2c);
 }
 
 void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c)
 {
-    peripheral_on_i2c_error(&peripheralDispatchContext, &peripheralDispatchOps, hi2c);
+    peripheral_on_i2c_error(&peripheral_dispatch_context, &peripheral_dispatch_ops, hi2c);
 }
 
 void HAL_I2C_AbortCpltCallback(I2C_HandleTypeDef *hi2c)
 {
-    peripheral_on_i2c_abort_complete(&peripheralDispatchContext, &peripheralDispatchOps, hi2c);
+    peripheral_on_i2c_abort_complete(&peripheral_dispatch_context, &peripheral_dispatch_ops, hi2c);
 }
 
-void HAL_DMA_CpltCallback(DMA_HandleTypeDef *hdma)
+void hal_dma_cplt_callback(DMA_HandleTypeDef *hdma)
 {
-    peripheral_on_dma_complete(&peripheralDispatchContext, &peripheralDispatchOps, hdma);
+    peripheral_on_dma_complete(&peripheral_dispatch_context, &peripheral_dispatch_ops, hdma);
 }
 /* USER CODE END 4 */
 
@@ -1417,34 +1416,34 @@ void HAL_DMA_CpltCallback(DMA_HandleTypeDef *hdma)
 void startEffectsTask(void const * argument)
 {
   /* USER CODE BEGIN 5 */
-  EffectsPipeline effectsPipeline;
-  if (effects_pipeline_init(&effectsPipeline) != 0)
+  EffectsPipeline effects_pipeline;
+  if (effects_pipeline_init(&effects_pipeline) != 0)
   {
       vTaskDelete(NULL);
       return;
   }
 
-  EffectsTaskContext taskContext = {
-      .pipeline = &effectsPipeline,
-      .effectsState = &effectsState,
-      .effectsParams = &effectsParams,
-      .adcBufA = (uint16_t *)adcBufA,
-      .adcBufB = (uint16_t *)adcBufB,
-      .dacBufA = (uint16_t *)dacBufA,
-      .dacBufB = (uint16_t *)dacBufB,
-      .delaySamplesBuf = (uint16_t *)delaySamplesBuf,
+  EffectsTaskContext task_context = {
+      .pipeline = &effects_pipeline,
+      .effectsState = &effects_state,
+      .effectsParams = &effects_params,
+      .adcBufA = (uint16_t *)adc_buf_a,
+      .adcBufB = (uint16_t *)adc_buf_b,
+      .dacBufA = (uint16_t *)dac_buf_a,
+      .dacBufB = (uint16_t *)dac_buf_b,
+      .delaySamplesBuf = (uint16_t *)delay_samples_buf,
       .sampleBufLen = SAMPLE_BUF_LEN,
       .delaySamplesLen = NUM_DELAY_SAMPLES,
       .samplingPeriodUs = 25,
       .processingSlackMs = 2,
   };
 
-  EffectsTaskOps taskOps = {
+  EffectsTaskOps task_ops = {
       .wait_for_adc_buffer = effects_task_wait_for_adc_buffer,
       .wait_for_dac_buffer = effects_task_wait_for_dac_buffer,
       .dma_copy = effects_task_dma_copy,
-      .alloc = allocate_payload_adapter,
-      .free = free_payload_adapter,
+      .alloc = effects_task_alloc_adapter,
+      .free = effects_task_free_adapter,
       .read_latched_state = effects_task_read_latched_state,
       .report_failure = NULL,
       .ms_to_ticks = effects_task_ms_to_ticks,
@@ -1453,8 +1452,8 @@ void startEffectsTask(void const * argument)
 
   /* Start ADC and DAC. Note: ADC expects buffers to be ready to be filled,
                   DAC expects buffers to be ready to be read from. Software must ensure this. */
-  if (HAL_ADC_Start_DMA(&hadc3, (uint32_t *)adcBuf, ADC_BUF_LEN) != HAL_OK ||
-      HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t *)dacBuf, DAC_BUF_LEN, DAC_ALIGN_12B_R) != HAL_OK ||
+  if (HAL_ADC_Start_DMA(&hadc3, (uint32_t *)adc_buf, ADC_BUF_LEN) != HAL_OK ||
+      HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t *)dac_buf, DAC_BUF_LEN, DAC_ALIGN_12B_R) != HAL_OK ||
       HAL_TIM_OC_Start(&htim2, TIM_CHANNEL_1) != HAL_OK)
   {
       vTaskDelete(NULL);
@@ -1464,7 +1463,7 @@ void startEffectsTask(void const * argument)
   /* Infinite loop */
   for (;;)
   {
-      (void)effects_task_step(&taskContext, &taskOps);
+      (void)effects_task_step(&task_context, &task_ops);
   }
   /* USER CODE END 5 */
 }
@@ -1479,7 +1478,7 @@ void startEffectsTask(void const * argument)
 void startBtnHandlerTask(void const * argument)
 {
   /* USER CODE BEGIN startBtnHandlerTask */
-  ButtonTaskOps taskOps = {
+  ButtonTaskOps task_ops = {
       .wait_for_button = button_task_wait_for_button,
       .dispatch_button = button_task_dispatch,
       .context = NULL,
@@ -1488,7 +1487,7 @@ void startBtnHandlerTask(void const * argument)
   /* Infinite loop */
   for (;;)
   {
-      (void)button_task_step(&taskOps);
+      (void)button_task_step(&task_ops);
   }
   /* USER CODE END startBtnHandlerTask */
 }
@@ -1503,11 +1502,11 @@ void startBtnHandlerTask(void const * argument)
 void startSwHandlerTask(void const * argument)
 {
   /* USER CODE BEGIN startSwHandlerTask */
-  SwitchTaskContext taskContext = {
+  SwitchTaskContext task_context = {
       .pollingFrequencyMs = 5,
   };
 
-  SwitchTaskOps taskOps = {
+  SwitchTaskOps task_ops = {
       .read_switch = switch_task_read_switch,
       .read_state = switch_task_read_state,
       .write_state = switch_task_write_state,
@@ -1518,7 +1517,7 @@ void startSwHandlerTask(void const * argument)
   /* Infinite loop */
   for (;;)
   {
-      (void)switch_task_step(&taskContext, &taskOps);
+      (void)switch_task_step(&task_context, &task_ops);
   }
   /* USER CODE END startSwHandlerTask */
 }
@@ -1533,14 +1532,14 @@ void startSwHandlerTask(void const * argument)
 void startPotHandlerTask(void const * argument)
 {
   /* USER CODE BEGIN startPotHandlerTask */
-  PotTaskContext taskContext = {
+  PotTaskContext task_context = {
       .samplingFrequencyTicks = pdMS_TO_TICKS(5),
       .timeoutSlackTicks = pdMS_TO_TICKS(1),
       .adcMax = UINT8_MAX,
       .potCount = 4,
   };
 
-  PotTaskOps taskOps = {
+  PotTaskOps task_ops = {
       .start_adc = pot_task_start_adc,
       .wait_for_sample = pot_task_wait_for_sample,
       .read_active_effect = pot_task_read_active_effect,
@@ -1551,7 +1550,7 @@ void startPotHandlerTask(void const * argument)
   /* Infinite loop */
   for (;;)
   {
-      (void)pot_task_step(&taskContext, &taskOps);
+      (void)pot_task_step(&task_context, &task_ops);
   }
   /* USER CODE END startPotHandlerTask */
 }
@@ -1566,14 +1565,15 @@ void startPotHandlerTask(void const * argument)
 void startLedTask(void const * argument)
 {
   /* USER CODE BEGIN startLedTask */
-  const uint16_t blinkFrequencyMs = 500;
+  const uint16_t blink_frequency_ms = 500;
 
   /* Infinite loop */
   for (;;)
   {
+      // NOLINTNEXTLINE(performance-no-int-to-ptr): STM32 HAL port macros expand to pointer casts.
       HAL_GPIO_TogglePin(LED_STATUS_GPIO_Port, LED_STATUS_Pin);
 
-      osDelay(blinkFrequencyMs);
+      osDelay(blink_frequency_ms);
   }
   /* USER CODE END startLedTask */
 }
@@ -1600,9 +1600,9 @@ void startI2cHandlerTask(void const * argument)
 
       (void)i2c_handler_process_message(
           &message,
-          &i2cHandlerConfig,
-          &i2cHandlerOps,
-          &i2cTaskSupportContext);
+          &i2c_handler_config,
+          &i2c_handler_ops,
+          &i2c_task_support_context);
   }
   /* USER CODE END startI2cHandlerTask */
 }
@@ -1617,28 +1617,28 @@ void startI2cHandlerTask(void const * argument)
 void startRomHandlerTask(void const * argument)
 {
   /* USER CODE BEGIN startRomHandlerTask */
-  const uint16_t updateFrequencyMs = 5000;
-  const uint16_t bootstrapRetryDelayMs = 10;
+  const uint16_t update_frequency_ms = 5000;
+  const uint16_t bootstrap_retry_delay_ms = 10;
 
   while (true)
   {
-      EffectsState loadedState;
-      EffectsParams loadedParams;
+      EffectsState loaded_state;
+      EffectsParams loaded_params;
 
       if (rom_task_bootstrap_effects(
-              &romTaskSupportConfig,
-              &romTaskSupportOps,
-              &loadedState,
-              &loadedParams))
+              &rom_task_support_config,
+              &rom_task_support_ops,
+              &loaded_state,
+              &loaded_params))
       {
           taskENTER_CRITICAL();
-          effectsState = loadedState;
-          effectsParams = loadedParams;
+          effects_state = loaded_state;
+          effects_params = loaded_params;
           taskEXIT_CRITICAL();
           break;
       }
 
-      osDelay(bootstrapRetryDelayMs);
+      osDelay(bootstrap_retry_delay_ms);
   }
 
   /* Infinite loop */
@@ -1646,21 +1646,21 @@ void startRomHandlerTask(void const * argument)
   {
       /* Copy effectsState and effectsParams TO ROM every x seconds */
       taskENTER_CRITICAL(); // Effects configs are accessed by other tasks and this is not atomic
-      EffectsState latchedEffectsState = effectsState;
-      EffectsParams latchedEffectsParams = effectsParams;
+      EffectsState latched_effects_state = effects_state;
+      EffectsParams latched_effects_params = effects_params;
       taskEXIT_CRITICAL();
-      effects_state_normalize(&latchedEffectsState);
+      effects_state_normalize(&latched_effects_state);
 
       if (!rom_task_save_effects(
-              &romTaskSupportConfig,
-              &romTaskSupportOps,
-              &latchedEffectsState,
-              &latchedEffectsParams))
+              &rom_task_support_config,
+              &rom_task_support_ops,
+              &latched_effects_state,
+              &latched_effects_params))
       {
           continue;
       }
 
-      osDelay(updateFrequencyMs);
+      osDelay(update_frequency_ms);
   }
   /* USER CODE END startRomHandlerTask */
 }

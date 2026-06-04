@@ -62,9 +62,9 @@ void effects_state_normalize(EffectsState *state)
     }
 }
 
-bool effects_state_get_active_effect(const EffectsState *state, Effect *activeEffect)
+bool effects_state_get_active_effect(const EffectsState *state, Effect *active_effect)
 {
-    if (state == NULL || activeEffect == NULL)
+    if (state == NULL || active_effect == NULL)
     {
         return false;
     }
@@ -79,13 +79,13 @@ bool effects_state_get_active_effect(const EffectsState *state, Effect *activeEf
         return false;
     }
 
-    *activeEffect = state->ordered[state->activeEffectSelection];
-    return effect_is_valid(*activeEffect);
+    *active_effect = state->ordered[state->activeEffectSelection];
+    return effect_is_valid(*active_effect);
 }
 
-size_t map_adc_to_param(uint32_t adcValue, size_t min, size_t max, uint32_t adcMax)
+size_t map_adc_to_param(uint32_t adc_value, size_t min, size_t max, uint32_t adc_max)
 {
-    if (adcMax == 0)
+    if (adc_max == 0)
     {
         return min;
     }
@@ -97,96 +97,96 @@ size_t map_adc_to_param(uint32_t adcValue, size_t min, size_t max, uint32_t adcM
         max = temp;
     }
 
-    if (adcValue > adcMax)
+    if (adc_value > adc_max)
     {
-        adcValue = adcMax;
+        adc_value = adc_max;
     }
 
     uint64_t range = (uint64_t)(max - min);
-    uint64_t scaled = (range * adcValue + adcMax / 2U) / adcMax;
+    uint64_t scaled = (range * adc_value + adc_max / 2U) / adc_max;
     return (size_t)(min + (size_t)scaled);
 }
 
-void effects_state_apply_switches(EffectsState *state, bool switchAEnabled, bool switchBEnabled,
-                                  bool switchCEnabled)
+void effects_state_apply_switches(EffectsState *state, bool switch_a_enabled, bool switch_b_enabled,
+                                  bool switch_c_enabled)
 {
     if (state == NULL)
     {
         return;
     }
 
-    state->isEnabled[state->ordered[0]] = switchAEnabled;
-    state->isEnabled[state->ordered[1]] = switchBEnabled;
-    state->isEnabled[state->ordered[2]] = switchCEnabled;
+    state->isEnabled[state->ordered[0]] = switch_a_enabled;
+    state->isEnabled[state->ordered[1]] = switch_b_enabled;
+    state->isEnabled[state->ordered[2]] = switch_c_enabled;
 }
 
-bool effects_params_apply_pot_sample(EffectsParams *params, Effect activeEffect, uint8_t potIndex,
-                                     uint32_t adcValue, uint32_t adcMax)
+bool effects_params_apply_pot_sample(EffectsParams *params, Effect active_effect, uint8_t pot_index,
+                                     uint32_t adc_value, uint32_t adc_max)
 {
     if (params == NULL)
     {
         return false;
     }
 
-    switch (activeEffect)
+    switch (active_effect)
     {
     case OVERDRIVE:
-        switch (potIndex)
+        switch (pot_index)
         {
         case 0:
-            params->overdrive.gain = map_adc_to_param(adcValue, params->overdriveMin.gain,
-                                                      params->overdriveMax.gain, adcMax);
+            params->overdrive.gain = map_adc_to_param(adc_value, params->overdriveMin.gain,
+                                                      params->overdriveMax.gain, adc_max);
             return true;
         case 1:
-            params->overdrive.level = map_adc_to_param(adcValue, params->overdriveMin.level,
-                                                       params->overdriveMax.level, adcMax);
+            params->overdrive.level = map_adc_to_param(adc_value, params->overdriveMin.level,
+                                                       params->overdriveMax.level, adc_max);
             return true;
         case 2:
-            params->overdrive.tone = map_adc_to_param(adcValue, params->overdriveMin.tone,
-                                                      params->overdriveMax.tone, adcMax);
+            params->overdrive.tone = map_adc_to_param(adc_value, params->overdriveMin.tone,
+                                                      params->overdriveMax.tone, adc_max);
             return true;
         case 3:
-            params->overdrive.mix = map_adc_to_param(adcValue, params->overdriveMin.mix,
-                                                     params->overdriveMax.mix, adcMax);
+            params->overdrive.mix = map_adc_to_param(adc_value, params->overdriveMin.mix,
+                                                     params->overdriveMax.mix, adc_max);
             return true;
         default:
             return false;
         }
 
     case ECHO:
-        switch (potIndex)
+        switch (pot_index)
         {
         case 0:
-            params->echo.pre_delay = map_adc_to_param(adcValue, params->echoMin.pre_delay,
-                                                      params->echoMax.pre_delay, adcMax);
+            params->echo.pre_delay = map_adc_to_param(adc_value, params->echoMin.pre_delay,
+                                                      params->echoMax.pre_delay, adc_max);
             return true;
         case 1:
-            params->echo.density = map_adc_to_param(adcValue, params->echoMin.density,
-                                                    params->echoMax.density, adcMax);
+            params->echo.density = map_adc_to_param(adc_value, params->echoMin.density,
+                                                    params->echoMax.density, adc_max);
             return true;
         case 2:
             params->echo.attack =
-                map_adc_to_param(adcValue, params->echoMin.attack, params->echoMax.attack, adcMax);
+                map_adc_to_param(adc_value, params->echoMin.attack, params->echoMax.attack, adc_max);
             return true;
         case 3:
             params->echo.decay =
-                map_adc_to_param(adcValue, params->echoMin.decay, params->echoMax.decay, adcMax);
+                map_adc_to_param(adc_value, params->echoMin.decay, params->echoMax.decay, adc_max);
             return true;
         default:
             return false;
         }
 
     case COMPRESSION:
-        switch (potIndex)
+        switch (pot_index)
         {
         case 0:
             params->compression.threshold =
-                map_adc_to_param(adcValue, params->compressionMin.threshold,
-                                 params->compressionMax.threshold, adcMax);
+                map_adc_to_param(adc_value, params->compressionMin.threshold,
+                                 params->compressionMax.threshold, adc_max);
             return true;
         case 1:
-            params->compression.ratio = map_adc_to_param(adcValue, params->compressionMin.ratio,
-                                                         params->compressionMax.ratio, adcMax);
+            params->compression.ratio = map_adc_to_param(adc_value, params->compressionMin.ratio,
+                                                         params->compressionMax.ratio, adc_max);
             return true;
         case 2:
         case 3:

@@ -80,7 +80,7 @@ I2CHandlerResult i2c_handler_process_message(const I2CHandlerMessage *message,
         return I2C_HANDLER_RESULT_INVALID_MESSAGE;
     }
 
-    uint32_t remainingBudgetMs = config->dropBudgetMs;
+    uint32_t remaining_budget_ms = config->dropBudgetMs;
     bool ready = false;
 
     while (!ready)
@@ -93,7 +93,7 @@ I2CHandlerResult i2c_handler_process_message(const I2CHandlerMessage *message,
             break;
         }
 
-        if (config->tryAgainDelayMs == 0 || remainingBudgetMs <= config->tryAgainDelayMs)
+        if (config->tryAgainDelayMs == 0 || remaining_budget_ms <= config->tryAgainDelayMs)
         {
             return finish_message(message, true, I2C_HANDLER_RESULT_DEVICE_NOT_READY, ops, context);
         }
@@ -103,31 +103,31 @@ I2CHandlerResult i2c_handler_process_message(const I2CHandlerMessage *message,
             ops->delay_ms(config->tryAgainDelayMs, context);
         }
 
-        remainingBudgetMs -= config->tryAgainDelayMs;
+        remaining_budget_ms -= config->tryAgainDelayMs;
     }
 
-    bool transferStarted = false;
+    bool transfer_started = false;
 
     if (message->rxTxBar)
     {
-        transferStarted =
+        transfer_started =
             ops->start_receive(message->address, message->payload, message->items, context);
     }
     else
     {
-        transferStarted =
+        transfer_started =
             ops->start_transmit(message->address, message->payload, message->items, context);
     }
 
-    if (!transferStarted)
+    if (!transfer_started)
     {
         return finish_message(message, true, I2C_HANDLER_RESULT_TRANSFER_FAILED, ops, context);
     }
 
-    bool transferFailed = true;
-    bool transferCompleted = ops->wait_for_completion(remainingBudgetMs, &transferFailed, context);
+    bool transfer_failed = true;
+    bool transfer_completed = ops->wait_for_completion(remaining_budget_ms, &transfer_failed, context);
 
-    if (!transferCompleted || transferFailed)
+    if (!transfer_completed || transfer_failed)
     {
         return finish_message(message, true, I2C_HANDLER_RESULT_TRANSFER_FAILED, ops, context);
     }

@@ -14,9 +14,9 @@ size_t rom_handler_write_payload_size(void)
     return ROM_HANDLER_ADDRESS_BYTES + rom_handler_read_payload_size();
 }
 
-bool rom_handler_encode_address(uint16_t address, uint8_t *payload, size_t payloadSize)
+bool rom_handler_encode_address(uint16_t address, uint8_t *payload, size_t payload_size)
 {
-    if (payload == NULL || payloadSize < ROM_HANDLER_ADDRESS_BYTES)
+    if (payload == NULL || payload_size < ROM_HANDLER_ADDRESS_BYTES)
     {
         return false;
     }
@@ -26,21 +26,21 @@ bool rom_handler_encode_address(uint16_t address, uint8_t *payload, size_t paylo
     return true;
 }
 
-bool rom_handler_encode_write_payload(uint16_t writeAddress, const EffectsState *state,
+bool rom_handler_encode_write_payload(uint16_t write_address, const EffectsState *state,
                                       const EffectsParams *params, uint8_t *payload,
-                                      size_t payloadSize)
+                                      size_t payload_size)
 {
     if (state == NULL || params == NULL || payload == NULL)
     {
         return false;
     }
 
-    if (payloadSize < rom_handler_write_payload_size())
+    if (payload_size < rom_handler_write_payload_size())
     {
         return false;
     }
 
-    if (!rom_handler_encode_address(writeAddress, payload, payloadSize))
+    if (!rom_handler_encode_address(write_address, payload, payload_size))
     {
         return false;
     }
@@ -50,7 +50,7 @@ bool rom_handler_encode_write_payload(uint16_t writeAddress, const EffectsState 
     return true;
 }
 
-bool rom_handler_decode_read_payload(const uint8_t *payload, size_t payloadSize,
+bool rom_handler_decode_read_payload(const uint8_t *payload, size_t payload_size,
                                      EffectsState *state, EffectsParams *params)
 {
     if (payload == NULL || state == NULL || params == NULL)
@@ -58,7 +58,7 @@ bool rom_handler_decode_read_payload(const uint8_t *payload, size_t payloadSize,
         return false;
     }
 
-    if (payloadSize < rom_handler_read_payload_size())
+    if (payload_size < rom_handler_read_payload_size())
     {
         return false;
     }

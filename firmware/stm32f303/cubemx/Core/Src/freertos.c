@@ -56,14 +56,16 @@
 void vApplicationGetIdleTaskMemory( StaticTask_t **ppxIdleTaskTCBBuffer, StackType_t **ppxIdleTaskStackBuffer, uint32_t *pulIdleTaskStackSize );
 
 /* USER CODE BEGIN GET_IDLE_TASK_MEMORY */
-static StaticTask_t xIdleTaskTCBBuffer;
-static StackType_t xIdleStack[configMINIMAL_STACK_SIZE];
+static StaticTask_t x_idle_task_tcb_buffer;
+static StackType_t x_idle_stack[configMINIMAL_STACK_SIZE];
 
-void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer, StackType_t **ppxIdleTaskStackBuffer, uint32_t *pulIdleTaskStackSize)
+void vApplicationGetIdleTaskMemory(StaticTask_t **ppx_idle_task_tcb_buffer,
+                                   StackType_t **ppx_idle_task_stack_buffer,
+                                   uint32_t *pul_idle_task_stack_size)
 {
-    *ppxIdleTaskTCBBuffer = &xIdleTaskTCBBuffer;
-    *ppxIdleTaskStackBuffer = &xIdleStack[0];
-    *pulIdleTaskStackSize = configMINIMAL_STACK_SIZE;
+    *ppx_idle_task_tcb_buffer = &x_idle_task_tcb_buffer;
+    *ppx_idle_task_stack_buffer = &x_idle_stack[0];
+    *pul_idle_task_stack_size = configMINIMAL_STACK_SIZE;
     /* place for user code */
 }
 /* USER CODE END GET_IDLE_TASK_MEMORY */

@@ -50,8 +50,8 @@ int effects_pipeline_sync_params(EffectsPipeline *pipeline, const EffectsParams 
     return 0;
 }
 
-int effects_pipeline_process(const EffectsPipeline *pipeline, Effect effect, const uint16_t *inBuf,
-                             uint16_t *outBuf, size_t numSamples)
+int effects_pipeline_process(const EffectsPipeline *pipeline, Effect effect, const uint16_t *in_buf,
+                             uint16_t *out_buf, size_t num_samples)
 {
     if (pipeline == NULL)
     {
@@ -61,22 +61,22 @@ int effects_pipeline_process(const EffectsPipeline *pipeline, Effect effect, con
     switch (effect)
     {
     case OVERDRIVE:
-        return effect_handle_process(&pipeline->overdrive, inBuf, outBuf, numSamples);
+        return effect_handle_process(&pipeline->overdrive, in_buf, out_buf, num_samples);
     case ECHO:
-        return effect_handle_process(&pipeline->echo, inBuf, outBuf, numSamples);
+        return effect_handle_process(&pipeline->echo, in_buf, out_buf, num_samples);
     case COMPRESSION:
-        return effect_handle_process(&pipeline->compression, inBuf, outBuf, numSamples);
+        return effect_handle_process(&pipeline->compression, in_buf, out_buf, num_samples);
     default:
         return -1;
     }
 }
 
-int effects_pipeline_get_echo_delay_samples(const EffectsPipeline *pipeline, size_t *delaySamples)
+int effects_pipeline_get_echo_delay_samples(const EffectsPipeline *pipeline, size_t *delay_samples)
 {
     if (pipeline == NULL)
     {
         return -1;
     }
 
-    return effect_handle_get_echo_delay_samples(&pipeline->echo, delaySamples);
+    return effect_handle_get_echo_delay_samples(&pipeline->echo, delay_samples);
 }
