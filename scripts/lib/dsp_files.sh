@@ -13,31 +13,11 @@ DSP_LINT_FILES=(
 )
 
 APP_HEADER_FILES=(
-    firmware/stm32f303/app/include/button_task.h
-    firmware/stm32f303/app/include/effects_model.h
-    firmware/stm32f303/app/include/effects_pipeline.h
-    firmware/stm32f303/app/include/effects_task.h
-    firmware/stm32f303/app/include/i2c_handler.h
-    firmware/stm32f303/app/include/i2c_task_support.h
-    firmware/stm32f303/app/include/peripheral_dispatch.h
-    firmware/stm32f303/app/include/pot_task.h
-    firmware/stm32f303/app/include/rom_handler.h
-    firmware/stm32f303/app/include/rom_task_support.h
-    firmware/stm32f303/app/include/switch_task.h
+    $(git -C "$REPO_ROOT" ls-files 'firmware/stm32f303/app/include/*.h')
 )
 
 APP_SOURCE_FILES=(
-    firmware/stm32f303/app/src/button_task.c
-    firmware/stm32f303/app/src/effects_model.c
-    firmware/stm32f303/app/src/effects_pipeline.c
-    firmware/stm32f303/app/src/effects_task.c
-    firmware/stm32f303/app/src/i2c_handler.c
-    firmware/stm32f303/app/src/i2c_task_support.c
-    firmware/stm32f303/app/src/peripheral_dispatch.c
-    firmware/stm32f303/app/src/pot_task.c
-    firmware/stm32f303/app/src/rom_handler.c
-    firmware/stm32f303/app/src/rom_task_support.c
-    firmware/stm32f303/app/src/switch_task.c
+    $(git -C "$REPO_ROOT" ls-files 'firmware/stm32f303/app/src/*.c')
 )
 
 APP_FORMAT_FILES=(
@@ -46,16 +26,7 @@ APP_FORMAT_FILES=(
 )
 
 APP_LINT_FILES=(
-    firmware/stm32f303/app/src/button_task.c
-    firmware/stm32f303/app/src/effects_model.c
-    firmware/stm32f303/app/src/effects_pipeline.c
-    firmware/stm32f303/app/src/effects_task.c
-    firmware/stm32f303/app/src/i2c_handler.c
-    firmware/stm32f303/app/src/peripheral_dispatch.c
-    firmware/stm32f303/app/src/pot_task.c
-    firmware/stm32f303/app/src/rom_task_support.c
-    firmware/stm32f303/app/src/rom_handler.c
-    firmware/stm32f303/app/src/switch_task.c
+    "${APP_SOURCE_FILES[@]}"
 )
 
 CUBEMX_USER_CODE_FILES=(

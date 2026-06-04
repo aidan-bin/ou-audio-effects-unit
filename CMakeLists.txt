@@ -18,6 +18,8 @@ set(OU_FIRMWARE_APP_STANDARD_TESTS
     effects_model
     effects_pipeline
     effects_task
+    cli_core
+    cli_service_adapter
     pot_task
     switch_task
     button_task
@@ -60,6 +62,9 @@ set(OU_DSP_SOURCES
 
 set(OU_FIRMWARE_APP_SOURCES
     firmware/stm32f303/app/src/button_task.c
+    firmware/stm32f303/app/src/cli_core.c
+    firmware/stm32f303/app/src/cli_parse.c
+    firmware/stm32f303/app/src/cli_service_adapter.c
     firmware/stm32f303/app/src/effects_model.c
     firmware/stm32f303/app/src/effects_pipeline.c
     firmware/stm32f303/app/src/effects_task.c

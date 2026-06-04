@@ -26,6 +26,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include "button_task.h"
+#include "cli_service_adapter.h"
 #include "effects_model.h"
 #include "effects_pipeline.h"
 #include "effects_task.h"
@@ -140,6 +141,7 @@ static PeripheralDispatchContext peripheral_dispatch_context;
 static PeripheralDispatchOps peripheral_dispatch_ops;
 static RomTaskSupportConfig rom_task_support_config;
 static RomTaskSupportOps rom_task_support_ops;
+static CliServiceAdapterContext cli_service_adapter_context;
 
 /* DMA buffer for ADC samples (note: samples are in order of decreasing age) */
 static volatile uint16_t adc_buf[ADC_BUF_LEN] = {0};
@@ -221,6 +223,9 @@ static void free_payload_adapter(uint8_t *payload, void *context);
 static void *effects_task_alloc_adapter(size_t size, void *context);
 static void effects_task_free_adapter(void *ptr, void *context);
 static void set_rom_write_disable_adapter(bool disable_writes, void *context);
+static void cli_service_lock(void *context);
+static void cli_service_unlock(void *context);
+static void init_cli_service_adapter(void);
 static void init_peripheral_dispatch(void);
 
 /* USER CODE END PFP */
@@ -447,11 +452,18 @@ static bool pot_task_read_active_effect(Effect *active_effect, void *context)
 static void pot_task_apply_sample(Effect active_effect, uint8_t pot_index, uint32_t adc_value,
                                   uint32_t adc_max, void *context)
 {
-    (void)context;
+    (void)adc_max;
+
+    CliServiceAdapterContext *adapter_context = (CliServiceAdapterContext *)context;
+    if (adapter_context != NULL)
+    {
+        (void)cli_service_adapter_apply_pot_sample(adapter_context, active_effect, pot_index, adc_value);
+        return;
+    }
 
     taskENTER_CRITICAL();
     (void)effects_params_apply_pot_sample((EffectsParams *)&effects_params, active_effect, pot_index,
-                                          adc_value, adc_max);
+                                          adc_value, UINT8_MAX);
     taskEXIT_CRITICAL();
 }
 
@@ -510,11 +522,21 @@ static bool switch_task_read_state(EffectsState *state_out, void *context)
 
 static bool switch_task_write_state(const EffectsState *state, void *context)
 {
-    (void)context;
-
     if (state == NULL)
     {
         return false;
+    }
+
+    CliServiceAdapterContext *adapter_context = (CliServiceAdapterContext *)context;
+    if (adapter_context != NULL)
+    {
+        const bool switch_a_enabled = state->isEnabled[state->ordered[0]];
+        const bool switch_b_enabled = state->isEnabled[state->ordered[1]];
+        const bool switch_c_enabled = state->isEnabled[state->ordered[2]];
+        return cli_service_adapter_apply_switches(adapter_context,
+                                                  switch_a_enabled,
+                                                  switch_b_enabled,
+                                                  switch_c_enabled);
     }
 
     taskENTER_CRITICAL();
@@ -589,6 +611,39 @@ static void set_rom_write_disable_adapter(bool disable_writes, void *context)
     // NOLINTNEXTLINE(performance-no-int-to-ptr): STM32 HAL port macros expand to pointer casts.
     HAL_GPIO_WritePin(nNVM_WE_GPIO_Port, nNVM_WE_Pin,
                       disable_writes ? GPIO_PIN_SET : GPIO_PIN_RESET);
+}
+
+static void cli_service_lock(void *context)
+{
+    (void)context;
+    taskENTER_CRITICAL();
+}
+
+static void cli_service_unlock(void *context)
+{
+    (void)context;
+    taskEXIT_CRITICAL();
+}
+
+static void init_cli_service_adapter(void)
+{
+    CliServiceAdapterOps ops = {
+        .lock = cli_service_lock,
+        .unlock = cli_service_unlock,
+        .rom_save_state = NULL,
+        .rom_load_state = NULL,
+        .rom_read_raw = NULL,
+        .rom_write_raw = NULL,
+        .log_set_level = NULL,
+        .log_set_enabled = NULL,
+        .context = NULL,
+    };
+
+    cli_service_adapter_init(&cli_service_adapter_context,
+                             (EffectsState *)&effects_state,
+                             (EffectsParams *)&effects_params,
+                             &ops,
+                             UINT8_MAX);
 }
 
 static void init_peripheral_dispatch(void)
@@ -761,6 +816,8 @@ int main(void)
                         &i2c_transfer_failed);
 
   init_peripheral_dispatch();
+
+  init_cli_service_adapter();
 
   rom_task_support_init(&rom_task_support_config,
                         &rom_task_support_ops,
@@ -1511,7 +1568,7 @@ void startSwHandlerTask(void const * argument)
       .read_state = switch_task_read_state,
       .write_state = switch_task_write_state,
       .sleep_ms = switch_task_sleep_ms,
-      .context = NULL,
+      .context = &cli_service_adapter_context,
   };
 
   /* Infinite loop */
@@ -1544,7 +1601,7 @@ void startPotHandlerTask(void const * argument)
       .wait_for_sample = pot_task_wait_for_sample,
       .read_active_effect = pot_task_read_active_effect,
       .apply_pot_sample = pot_task_apply_sample,
-      .context = NULL,
+      .context = &cli_service_adapter_context,
   };
 
   /* Infinite loop */
