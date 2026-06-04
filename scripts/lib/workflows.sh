@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
 
+USER_CODE_REGIONS_PY="$SCRIPT_DIR/lib/user_code_regions.py"
+
+run_user_code_regions() {
+	python3 "$USER_CODE_REGIONS_PY" "$@"
+}
+
+user_code_clang_format_args() { run_user_code_regions clang-format-args "$1"; }
+user_code_clang_tidy_line_filter() { run_user_code_regions clang-tidy-line-filter "$1"; }
+
 run_build() {
 	rm -f host/python-demo/libeffects.dll host/python-demo/libeffects.so host/python-demo/libeffects.dylib
 	ensure_release_build_tree
@@ -73,34 +82,53 @@ run_doctor() {
 
 ensure_clang_tool() {
 	local tool="$1"
-	local tool_bin
-
-	tool_bin="$(find_versioned_tool "$tool" || true)"
+	local tool_bin="$(find_versioned_tool "$tool" || true)"
 	if [[ -z "$tool_bin" ]]; then
 		echo "$tool not found (tried $(tool_candidates_string "$tool"))"
 		exit 1
 	fi
-
 	echo "$tool_bin"
+}
+
+run_clang_format_scope() {
+	local clang_format_bin="$1"
+	shift
+
+	"$clang_format_bin" "$@" "${DSP_FORMAT_FILES[@]}" "${APP_FORMAT_FILES[@]}"
+
+	for file in "${CUBEMX_USER_CODE_FILES[@]}"; do
+		local line_args=()
+		local line_arg
+		[[ ! -f "$file" ]] && continue
+
+		while IFS= read -r line_arg; do
+			[[ -n "$line_arg" ]] && line_args+=("$line_arg")
+		done < <(user_code_clang_format_args "$file")
+		[[ "${#line_args[@]}" -eq 0 ]] && continue
+
+		"$clang_format_bin" "$@" "${line_args[@]}" "$file"
+	done
 }
 
 run_format() {
 	local clang_format_bin
 
 	clang_format_bin="$(ensure_clang_tool clang-format)"
-	"$clang_format_bin" -i "${DSP_FORMAT_FILES[@]}"
+	run_clang_format_scope "$clang_format_bin" -i
 }
 
 run_format_check() {
 	local clang_format_bin
 
 	clang_format_bin="$(ensure_clang_tool clang-format)"
-	"$clang_format_bin" --dry-run --Werror "${DSP_FORMAT_FILES[@]}"
+	run_clang_format_scope "$clang_format_bin" --dry-run --Werror
 }
 
 run_lint() {
 	local clang_tidy_bin
 	local extra_args=()
+	local root_compile_db_dir="build"
+	local cubemx_compile_db_dir=""
 
 	clang_tidy_bin="$(ensure_clang_tool clang-tidy)"
 
@@ -115,13 +143,103 @@ run_lint() {
 		extra_args+=("--extra-arg-before=-isysroot${sdk_path}")
 	fi
 
+	compile_commands_contains_file() {
+		local compile_db_file="$1"
+		local file="$2"
+		local absolute_file="$file"
+		[[ "$absolute_file" != /* ]] && absolute_file="$REPO_ROOT/$absolute_file"
+
+		grep -Fq "$absolute_file" "$compile_db_file" || grep -Fq "$file" "$compile_db_file"
+	}
+
+	resolve_cubemx_compile_db_dir() {
+		local candidate
+
+		if [[ -n "${CUBEMX_LINT_BUILD_DIR:-}" ]]; then
+			candidate="$CUBEMX_LINT_BUILD_DIR"
+			if [[ -f "$candidate/compile_commands.json" ]]; then
+				echo "$candidate"
+				return 0
+			fi
+
+			echo "Configured CUBEMX_LINT_BUILD_DIR has no compile_commands.json: $candidate"
+			return 1
+		fi
+
+		for candidate in \
+			firmware/stm32f303/cubemx/build/Debug \
+			firmware/stm32f303/cubemx/build/Release \
+			firmware/stm32f303/cubemx/build; do
+			if [[ -f "$candidate/compile_commands.json" ]]; then
+				echo "$candidate"
+				return 0
+			fi
+		done
+
+		return 1
+	}
+
 	run_tidy() {
-		"$clang_tidy_bin" -quiet -p build -header-filter='^dsp/' "${extra_args[@]}" "$1" 2>&1 | \
+		local file="$1"
+		local header_filter="$2"
+		local compile_db_dir="$3"
+		local compile_db_file="$compile_db_dir/compile_commands.json"
+		local line_filter="${4:-}"
+		local missing_entry_mode="${5:-skip}"
+		local tidy_args=(-quiet -p "$compile_db_dir" "-header-filter=$header_filter" "${extra_args[@]}")
+		[[ ! -f "$file" ]] && return 0
+
+		if [[ ! -f "$compile_db_file" ]]; then
+			echo "Missing compile database for lint at $compile_db_file"
+			return 1
+		fi
+
+		if ! compile_commands_contains_file "$compile_db_file" "$file"; then
+			if [[ "$missing_entry_mode" == "fail" ]]; then
+				echo "Lint requires compile_commands entry for $file in $compile_db_file"
+				return 1
+			fi
+
+			echo "Skipping lint for $file (no compile_commands entry in $compile_db_file)."
+			return 0
+		fi
+
+		if [[ -n "$line_filter" ]]; then
+			tidy_args+=("-line-filter=$line_filter")
+		fi
+
+		"$clang_tidy_bin" "${tidy_args[@]}" "$file" 2>&1 | \
 			sed -E '/^[0-9]+ warnings generated\.$/d'
 	}
 
-	run_tidy dsp/effects/effects.c
-	run_tidy dsp/math/fast_math.c
+	for file in "${DSP_LINT_FILES[@]}"; do
+		run_tidy "$file" '^dsp/' "$root_compile_db_dir"
+	done
+
+	for file in "${APP_LINT_FILES[@]}"; do
+		run_tidy "$file" '^(dsp|firmware/stm32f303/app)/' "$root_compile_db_dir"
+	done
+
+	if ! cubemx_compile_db_dir="$(resolve_cubemx_compile_db_dir)"; then
+		echo "Missing CubeMX compile database (expected under firmware/stm32f303/cubemx/build or via CUBEMX_LINT_BUILD_DIR)."
+		echo "Configure or regenerate the CubeMX build tree to enable USER CODE lint gating."
+		return 1
+	fi
+
+	for file in "${CUBEMX_USER_CODE_FILES[@]}"; do
+		local line_filter
+		local line_filter_file
+		[[ ! -f "$file" ]] && continue
+
+		line_filter_file="$file"
+		[[ "$line_filter_file" != /* ]] && line_filter_file="$REPO_ROOT/$line_filter_file"
+
+		line_filter="$(user_code_clang_tidy_line_filter "$line_filter_file")"
+		[[ -z "$line_filter" ]] && continue
+
+		run_tidy "$file" '^(dsp|firmware/stm32f303/app|firmware/stm32f303/cubemx)/' \
+			"$cubemx_compile_db_dir" "$line_filter" fail
+	done
 }
 
 run_check() {

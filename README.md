@@ -58,6 +58,8 @@ Format check only:
 ./scripts/run.sh format-check
 ```
 
+Formatting/linting will skip CubeMX-generated code regions.
+
 Clean artifacts:
 
 ```sh
