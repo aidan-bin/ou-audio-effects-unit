@@ -9,17 +9,20 @@
 
 int failures = 0;
 
-typedef struct {
+typedef struct
+{
     bool waitSucceeds;
     uint16_t pinToReturn;
     uint32_t dispatchCalls;
     uint16_t lastDispatchedPin;
 } ButtonTaskTestState;
 
-static bool wait_for_button(uint16_t *pinOut, void *context) {
+static bool wait_for_button(uint16_t *pinOut, void *context)
+{
     ButtonTaskTestState *state = (ButtonTaskTestState *)context;
 
-    if (!state->waitSucceeds || pinOut == NULL) {
+    if (!state->waitSucceeds || pinOut == NULL)
+    {
         return false;
     }
 
@@ -27,16 +30,19 @@ static bool wait_for_button(uint16_t *pinOut, void *context) {
     return true;
 }
 
-static void dispatch_button(uint16_t pin, void *context) {
+static void dispatch_button(uint16_t pin, void *context)
+{
     ButtonTaskTestState *state = (ButtonTaskTestState *)context;
     state->dispatchCalls++;
     state->lastDispatchedPin = pin;
 }
 
-static void test_dispatch_each_button_pin(void) {
+static void test_dispatch_each_button_pin(void)
+{
     const uint16_t pins[] = {1U, 2U, 3U};
 
-    for (size_t i = 0; i < sizeof(pins) / sizeof(pins[0]); i++) {
+    for (size_t i = 0; i < sizeof(pins) / sizeof(pins[0]); i++)
+    {
         ButtonTaskTestState state = {
             .waitSucceeds = true,
             .pinToReturn = pins[i],
@@ -57,7 +63,8 @@ static void test_dispatch_each_button_pin(void) {
     }
 }
 
-static void test_wait_failure_skips_dispatch(void) {
+static void test_wait_failure_skips_dispatch(void)
+{
     ButtonTaskTestState state = {
         .waitSucceeds = false,
         .pinToReturn = 7,
@@ -74,11 +81,13 @@ static void test_wait_failure_skips_dispatch(void) {
     expect_true(state.dispatchCalls == 0, "dispatch not called when wait fails");
 }
 
-int main(void) {
+int main(void)
+{
     test_dispatch_each_button_pin();
     test_wait_failure_skips_dispatch();
 
-    if (failures != 0) {
+    if (failures != 0)
+    {
         fprintf(stderr, "test_firmware_button_task: %d failure(s)\n", failures);
         return 1;
     }

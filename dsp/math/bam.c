@@ -13,18 +13,22 @@
 
 #include "bam.h"
 
-float bam_to_float_deg(bam_t angle) {
+float bam_to_float_deg(bam_t angle)
+{
     return (float)angle * 180.0f / (float)(1U << (BAM_N - 1));
 }
 
-float ubam_to_float_deg(ubam_t angle) {
+float ubam_to_float_deg(ubam_t angle)
+{
     return (float)angle * 180 / UBAM_180_DEG;
 }
 
-bam_t float_deg_to_bam(float angle) {
+bam_t float_deg_to_bam(float angle)
+{
     return (bam_t)(angle * (float)(1U << (BAM_N - 1)) / 180.0f);
 }
 
-ubam_t float_deg_to_ubam(float angle) {
-    return angle * UBAM_180_DEG / 180;
+ubam_t float_deg_to_ubam(float angle)
+{
+    return (ubam_t)(angle * (float)UBAM_180_DEG / 180.0f);
 }

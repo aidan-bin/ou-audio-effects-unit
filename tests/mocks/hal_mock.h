@@ -7,14 +7,16 @@
 
 #define HAL_MOCK_CAPTURE_BYTES 64
 
-typedef enum {
+typedef enum
+{
     HAL_MOCK_STATUS_OK = 0,
     HAL_MOCK_STATUS_ERROR = 1,
     HAL_MOCK_STATUS_BUSY = 2,
     HAL_MOCK_STATUS_TIMEOUT = 3,
 } HalMockStatus;
 
-typedef enum {
+typedef enum
+{
     HAL_MOCK_GPIO_RESET = 0,
     HAL_MOCK_GPIO_SET = 1,
 } HalMockGpioState;
@@ -23,20 +25,23 @@ typedef void (*HalMockI2CTxCompleteCallback)(void *context);
 typedef void (*HalMockI2CRxCompleteCallback)(void *context);
 typedef void (*HalMockI2CErrorCallback)(void *context);
 
-typedef struct {
+typedef struct
+{
     HalMockI2CTxCompleteCallback txComplete;
     HalMockI2CRxCompleteCallback rxComplete;
     HalMockI2CErrorCallback error;
     void *context;
 } HalMockI2CCallbacks;
 
-typedef struct {
+typedef struct
+{
     uint32_t readCount;
     uint16_t lastPin;
     HalMockGpioState nextState;
 } HalMockGpioReadState;
 
-typedef struct {
+typedef struct
+{
     uint32_t isReadyCount;
     uint32_t txCount;
     uint32_t rxCount;
@@ -64,7 +69,8 @@ typedef struct {
     HalMockI2CCallbacks callbacks;
 } HalMockI2CState;
 
-typedef struct {
+typedef struct
+{
     uint32_t startDmaCount;
     uint32_t stopDmaCount;
     size_t lastStartLength;
@@ -73,7 +79,8 @@ typedef struct {
     HalMockStatus nextStopStatus;
 } HalMockAdcState;
 
-typedef struct {
+typedef struct
+{
     uint32_t startDmaCount;
     uint32_t stopDmaCount;
     uint32_t setValueCount;
@@ -87,7 +94,8 @@ typedef struct {
     HalMockStatus nextSetValueStatus;
 } HalMockDacState;
 
-typedef struct {
+typedef struct
+{
     HalMockGpioReadState gpio;
     HalMockI2CState i2c;
     HalMockAdcState adc;

@@ -6,24 +6,28 @@
 
 #include "effects.h"
 
-typedef enum {
+typedef enum
+{
     EFFECT_TYPE_OVERDRIVE = 0,
     EFFECT_TYPE_ECHO = 1,
     EFFECT_TYPE_COMPRESSION = 2,
 } EffectType;
 
-typedef union {
+typedef union
+{
     OverdriveParam overdrive;
     EchoParam echo;
     CompressionParam compression;
 } EffectParams;
 
-typedef struct {
+typedef struct
+{
     EffectType type;
     EffectParams params;
 } EffectInstance;
 
-typedef struct {
+typedef struct
+{
     EffectInstance instance;
     int initialized;
 } EffectHandle;

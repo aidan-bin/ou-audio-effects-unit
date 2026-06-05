@@ -52,6 +52,14 @@ Tests only:
 ./scripts/run.sh test
 ```
 
+Build-only commands:
+
+```sh
+./scripts/run.sh build-tests
+./scripts/run.sh build-firmware
+./scripts/run.sh build-demo
+```
+
 Format check only:
 
 ```sh

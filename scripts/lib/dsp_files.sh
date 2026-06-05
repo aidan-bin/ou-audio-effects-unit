@@ -1,41 +1,106 @@
 #!/usr/bin/env bash
 
-DSP_FORMAT_FILES=(
-    dsp/effects/effects.c
-    dsp/effects/effects.h
-    dsp/math/fast_math.c
-    dsp/math/fast_math.h
-)
+DSP_FORMAT_FILES=()
+APP_FORMAT_FILES=()
+DSP_LINT_FILES=()
+APP_LINT_FILES=()
+CUBEMX_USER_CODE_FILES=()
 
-DSP_LINT_FILES=(
-    dsp/effects/effects.c
-    dsp/math/fast_math.c
-)
+populate_cubemx_user_code_files() {
+    find \
+        firmware/stm32f303/cubemx/Core \
+        firmware/stm32f303/cubemx/USB_DEVICE/App \
+        firmware/stm32f303/cubemx/USB_DEVICE/Target \
+        -type f \
+        \( -name '*.c' -o -name '*.h' \) \
+        | LC_ALL=C sort
+}
 
-APP_HEADER_FILES=(
-    $(git -C "$REPO_ROOT" ls-files 'firmware/stm32f303/app/include/*.h')
-)
+populate_legacy_c_file_lists() {
+    DSP_FORMAT_FILES=()
+    while IFS= read -r source_file; do
+        DSP_FORMAT_FILES+=("$source_file")
+    done < <(
+        find dsp \
+            -type f \
+            \( -name '*.c' -o -name '*.h' \) \
+            | LC_ALL=C sort
+    )
 
-APP_SOURCE_FILES=(
-    $(git -C "$REPO_ROOT" ls-files 'firmware/stm32f303/app/src/*.c')
-)
+    APP_FORMAT_FILES=()
+    while IFS= read -r source_file; do
+        APP_FORMAT_FILES+=("$source_file")
+    done < <(
+        find firmware/stm32f303/app tests host \
+            -type f \
+            \( -name '*.c' -o -name '*.h' \) \
+            | LC_ALL=C sort
+    )
 
-APP_FORMAT_FILES=(
-    "${APP_HEADER_FILES[@]}"
-    "${APP_SOURCE_FILES[@]}"
-)
+    DSP_LINT_FILES=()
+    while IFS= read -r source_file; do
+        DSP_LINT_FILES+=("$source_file")
+    done < <(
+        find dsp \
+            -type f \
+            -name '*.c' \
+            | LC_ALL=C sort
+    )
 
-APP_LINT_FILES=(
-    "${APP_SOURCE_FILES[@]}"
-)
+    APP_LINT_FILES=()
+    while IFS= read -r source_file; do
+        APP_LINT_FILES+=("$source_file")
+    done < <(
+        find firmware/stm32f303/app \
+            -type f \
+            -name '*.c' \
+            | LC_ALL=C sort
+    )
 
-CUBEMX_USER_CODE_FILES=(
-    firmware/stm32f303/cubemx/Core/Src/main.c
-    firmware/stm32f303/cubemx/Core/Src/freertos.c
-    firmware/stm32f303/cubemx/Core/Src/stm32f3xx_hal_msp.c
-    firmware/stm32f303/cubemx/Core/Src/stm32f3xx_hal_timebase_tim.c
-    firmware/stm32f303/cubemx/Core/Src/stm32f3xx_it.c
-    firmware/stm32f303/cubemx/Core/Src/syscalls.c
-    firmware/stm32f303/cubemx/Core/Src/sysmem.c
-    firmware/stm32f303/cubemx/Core/Src/system_stm32f3xx.c
-)
+    CUBEMX_USER_CODE_FILES=()
+    while IFS= read -r source_file; do
+        CUBEMX_USER_CODE_FILES+=("$source_file")
+    done < <(populate_cubemx_user_code_files)
+}
+
+populate_c_file_lists() {
+    C_FORMAT_FULL_FILES=()
+    while IFS= read -r source_file; do
+        C_FORMAT_FULL_FILES+=("$source_file")
+    done < <(
+        find dsp firmware/stm32f303/app tests host \
+            -type f \
+            \( -name '*.c' -o -name '*.h' \) \
+            ! -path 'firmware/stm32f303/cubemx/*' \
+            | LC_ALL=C sort
+    )
+
+    C_LINT_FULL_FILES=()
+    while IFS= read -r source_file; do
+        C_LINT_FULL_FILES+=("$source_file")
+    done < <(
+        find dsp firmware/stm32f303/app tests host \
+            -type f \
+            -name '*.c' \
+            ! -path 'firmware/stm32f303/cubemx/*' \
+            | LC_ALL=C sort
+    )
+
+    C_CUBEMX_SECTION_FILES=()
+    while IFS= read -r source_file; do
+        C_CUBEMX_SECTION_FILES+=("$source_file")
+    done < <(populate_cubemx_user_code_files)
+
+    C_CUBEMX_SECTION_LINT_FILES=()
+    while IFS= read -r source_file; do
+        C_CUBEMX_SECTION_LINT_FILES+=("$source_file")
+    done < <(
+        find firmware/stm32f303/cubemx/Core firmware/stm32f303/cubemx/USB_DEVICE/App firmware/stm32f303/cubemx/USB_DEVICE/Target \
+            -type f \
+            -name '*.c' \
+            | LC_ALL=C sort
+    )
+}
+
+populate_legacy_c_file_lists
+populate_c_file_lists

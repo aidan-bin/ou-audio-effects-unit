@@ -17,6 +17,9 @@ Usage: ./scripts/run.sh [command]
 
 Commands:
   build
+	build-demo
+	build-firmware
+	build-tests
   check
   check-full
   clean
@@ -38,6 +41,9 @@ command_name="${1:-check}"
 
 case "$command_name" in
 	build) run_build ;;
+	build-demo) run_build_demo ;;
+	build-firmware) run_build_firmware ;;
+	build-tests) run_build_tests ;;
 	check) run_check ;;
 	check-full) run_check_full ;;
 	clean) run_clean ;;

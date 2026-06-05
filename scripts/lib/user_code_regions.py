@@ -7,6 +7,7 @@ from pathlib import Path
 BEGIN_RE = re.compile(r"USER\s+CODE\s+BEGIN\s+([^*]+)\*/")
 END_RE = re.compile(r"USER\s+CODE\s+END\s+([^*]+)\*/")
 SKIP_RE = re.compile(r"^\s*$|^\s*[{}]\s*$")
+COMMENT_RE = re.compile(r"^\s*(?://.*|/\*.*|\*.*|\*/\s*)$")
 USAGE = "Usage: user_code_regions.py <ranges|clang-format-args|clang-tidy-line-filter> <file>"
 
 
@@ -58,7 +59,9 @@ def trimmed_ranges(lines: list[str], ranges: list[tuple[int, int]]) -> list[tupl
             start += 1
         while stop >= start and SKIP_RE.match(lines[stop - 1]):
             stop -= 1
-        if start <= stop:
+        if start <= stop and any(
+            not SKIP_RE.match(line) and not COMMENT_RE.match(line) for line in lines[start - 1 : stop]
+        ):
             out.append((start, stop))
 
     return out
@@ -90,8 +93,9 @@ def main() -> int:
         return 0
 
     if mode == "clang-tidy-line-filter":
-        if ranges:
-            payload = [{"name": str(file_path), "lines": [[s, e] for s, e in ranges]}]
+        filtered_ranges = trimmed_ranges(lines, ranges)
+        if filtered_ranges:
+            payload = [{"name": str(file_path), "lines": [[s, e] for s, e in filtered_ranges]}]
             print(json.dumps(payload, separators=(",", ":")))
         return 0
 

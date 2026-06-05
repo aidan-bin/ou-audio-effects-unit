@@ -20,12 +20,15 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "cmsis_os.h"
+#include "usb_device.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdbool.h>
 #include <string.h>
 #include "button_task.h"
+#include "cli_core.h"
+#include "cli_line_buffer.h"
 #include "cli_service_adapter.h"
 #include "effects_model.h"
 #include "effects_pipeline.h"
@@ -36,6 +39,7 @@
 #include "pot_task.h"
 #include "rom_task_support.h"
 #include "switch_task.h"
+#include "usbd_cdc_if.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -88,8 +92,6 @@ OPAMP_HandleTypeDef hopamp3;
 OPAMP_HandleTypeDef hopamp4;
 
 TIM_HandleTypeDef htim2;
-
-PCD_HandleTypeDef hpcd_USB_FS;
 
 DMA_HandleTypeDef hdma_memtomem_dma1_channel1;
 osThreadId effectsTaskHandle;
@@ -162,6 +164,11 @@ static volatile uint16_t dac_buf[DAC_BUF_LEN] = {0};
 static volatile uint16_t *const dac_buf_a = dac_buf;
 static volatile uint16_t *const dac_buf_b = &dac_buf[DAC_BUF_LEN / 2];
 
+static CliServices cli_services;
+static CliIo cli_io;
+static CliLineBuffer cli_usb_rx_lines;
+static char cli_line[CLI_MAX_LINE_LENGTH + 1];
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -171,7 +178,6 @@ static void MX_DMA_Init(void);
 static void MX_DAC1_Init(void);
 static void MX_OPAMP2_Init(void);
 static void MX_TIM2_Init(void);
-static void MX_USB_PCD_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_OPAMP3_Init(void);
 static void MX_I2C1_Init(void);
@@ -226,7 +232,11 @@ static void set_rom_write_disable_adapter(bool disable_writes, void *context);
 static void cli_service_lock(void *context);
 static void cli_service_unlock(void *context);
 static void init_cli_service_adapter(void);
+static bool cli_usb_write(const char *text, void *context);
+static bool cli_usb_try_pop_line(char *line_out, size_t line_out_size);
 static void init_peripheral_dispatch(void);
+
+void usb_cdc_rx_bytes_callback(const uint8_t *bytes, uint32_t byte_count);
 
 /* USER CODE END PFP */
 
@@ -644,6 +654,60 @@ static void init_cli_service_adapter(void)
                              (EffectsParams *)&effects_params,
                              &ops,
                              UINT8_MAX);
+
+    cli_line_buffer_init(&cli_usb_rx_lines);
+}
+
+static bool cli_usb_write(const char *text, void *context)
+{
+    (void)context;
+
+    if (text == NULL)
+    {
+        return false;
+    }
+
+    const size_t length = strlen(text);
+    if (length == 0 || length > UINT16_MAX)
+    {
+        return false;
+    }
+
+    for (uint8_t attempts = 0; attempts < 10; attempts++)
+    {
+        const uint8_t result = CDC_Transmit_FS((uint8_t *)text, (uint16_t)length);
+        if (result == USBD_OK)
+        {
+            return true;
+        }
+
+        if (result != USBD_BUSY)
+        {
+            return false;
+        }
+
+        osDelay(1);
+    }
+
+    return false;
+}
+
+void usb_cdc_rx_bytes_callback(const uint8_t *bytes, uint32_t byte_count)
+{
+    __disable_irq();
+    cli_line_buffer_push_bytes(&cli_usb_rx_lines, bytes, byte_count);
+    __enable_irq();
+}
+
+static bool cli_usb_try_pop_line(char *line_out, size_t line_out_size)
+{
+    bool has_line;
+
+    __disable_irq();
+    has_line = cli_line_buffer_pop_line(&cli_usb_rx_lines, line_out, line_out_size);
+    __enable_irq();
+
+    return has_line;
 }
 
 static void init_peripheral_dispatch(void)
@@ -708,7 +772,6 @@ int main(void)
   MX_DAC1_Init();
   MX_OPAMP2_Init();
   MX_TIM2_Init();
-  MX_USB_PCD_Init();
   MX_ADC1_Init();
   MX_OPAMP3_Init();
   MX_I2C1_Init();
@@ -1277,38 +1340,6 @@ static void MX_TIM2_Init(void)
 }
 
 /**
-  * @brief USB Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_USB_PCD_Init(void)
-{
-
-  /* USER CODE BEGIN USB_Init 0 */
-
-  /* USER CODE END USB_Init 0 */
-
-  /* USER CODE BEGIN USB_Init 1 */
-
-  /* USER CODE END USB_Init 1 */
-  hpcd_USB_FS.Instance = USB;
-  hpcd_USB_FS.Init.dev_endpoints = 8;
-  hpcd_USB_FS.Init.speed = PCD_SPEED_FULL;
-  hpcd_USB_FS.Init.phy_itface = PCD_PHY_EMBEDDED;
-  hpcd_USB_FS.Init.low_power_enable = DISABLE;
-  hpcd_USB_FS.Init.lpm_enable = DISABLE;
-  hpcd_USB_FS.Init.battery_charging_enable = DISABLE;
-  if (HAL_PCD_Init(&hpcd_USB_FS) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN USB_Init 2 */
-
-  /* USER CODE END USB_Init 2 */
-
-}
-
-/**
   * Enable DMA controller clock
   * Configure DMA for memory to memory transfers
   *   hdma_memtomem_dma1_channel1
@@ -1472,6 +1503,8 @@ void hal_dma_cplt_callback(DMA_HandleTypeDef *hdma)
 /* USER CODE END Header_startEffectsTask */
 void startEffectsTask(void const * argument)
 {
+  /* init code for USB_DEVICE */
+  MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 5 */
   EffectsPipeline effects_pipeline;
   if (effects_pipeline_init(&effects_pipeline) != 0)
@@ -1732,9 +1765,22 @@ void startRomHandlerTask(void const * argument)
 void startDisplayHandlerTask(void const * argument)
 {
   /* USER CODE BEGIN startDisplayHandlerTask */
+  (void)argument;
+
+  cli_service_adapter_bind(&cli_service_adapter_context, &cli_services);
+  cli_io.write = cli_usb_write;
+  cli_io.context = NULL;
+
+  (void)cli_usb_write("ok cli ready\n", NULL);
+
   /* Infinite loop */
   for (;;)
   {
+      while (cli_usb_try_pop_line(cli_line, sizeof(cli_line)))
+      {
+          (void)cli_core_process_line(cli_line, &cli_services, &cli_io);
+      }
+
       osDelay(1);
   }
   /* USER CODE END startDisplayHandlerTask */

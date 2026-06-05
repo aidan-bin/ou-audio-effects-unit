@@ -15,6 +15,22 @@ run_build() {
 	cmake --build build -j
 }
 
+run_build_tests() {
+	ensure_release_build_tree
+	cmake --build build --target ou_build_tests -j
+}
+
+run_build_firmware() {
+	ensure_release_build_tree
+	cmake --build build --target ou_firmware_build
+}
+
+run_build_demo() {
+	rm -f host/python-demo/libeffects.dll host/python-demo/libeffects.so host/python-demo/libeffects.dylib
+	ensure_release_build_tree
+	cmake --build build --target ou_build_demo
+}
+
 run_test() {
 	ensure_release_build_tree
 	cmake --build build -j
@@ -214,6 +230,23 @@ run_lint() {
 		fi
 	}
 
+	select_app_compile_db_dir() {
+		local file="$1"
+
+		if compile_commands_contains_file "$root_compile_db_dir/compile_commands.json" "$file"; then
+			echo "$root_compile_db_dir"
+			return 0
+		fi
+
+		if [[ -n "$cubemx_compile_db_dir" ]] &&
+			compile_commands_contains_file "$cubemx_compile_db_dir/compile_commands.json" "$file"; then
+			echo "$cubemx_compile_db_dir"
+			return 0
+		fi
+
+		return 1
+	}
+
 	run_tidy() {
 		local file="$1"
 		local header_filter="$2"
@@ -260,14 +293,6 @@ run_lint() {
 			sed -E '/^[0-9]+ warnings generated\.$/d'
 	}
 
-	for file in "${DSP_LINT_FILES[@]}"; do
-		run_tidy "$file" '^dsp/' "$root_compile_db_dir"
-	done
-
-	for file in "${APP_LINT_FILES[@]}"; do
-		run_tidy "$file" '^(dsp|firmware/stm32f303/app)/' "$root_compile_db_dir"
-	done
-
 	if ! cubemx_compile_db_dir="$(resolve_cubemx_compile_db_dir)"; then
 		echo "Missing CubeMX compile database (expected under firmware/stm32f303/cubemx/build or via CUBEMX_LINT_BUILD_DIR)."
 		echo "Configure or regenerate the CubeMX build tree to enable USER CODE lint gating."
@@ -279,10 +304,26 @@ run_lint() {
 		return 1
 	fi
 
+	for file in "${DSP_LINT_FILES[@]}"; do
+		run_tidy "$file" '^dsp/' "$root_compile_db_dir"
+	done
+
+	for file in "${APP_LINT_FILES[@]}"; do
+		local compile_db_dir
+
+		if ! compile_db_dir="$(select_app_compile_db_dir "$file")"; then
+			echo "Lint requires compile_commands entry for $file in root or CubeMX compile database."
+			return 1
+		fi
+
+		run_tidy "$file" '^(dsp|firmware/stm32f303/app)/' "$compile_db_dir"
+	done
+
 	for file in "${CUBEMX_USER_CODE_FILES[@]}"; do
 		local line_filter
 		local line_filter_file
 		[[ ! -f "$file" ]] && continue
+		[[ "$file" != *.c ]] && continue
 
 		line_filter_file="$file"
 		[[ "$line_filter_file" != /* ]] && line_filter_file="$REPO_ROOT/$line_filter_file"

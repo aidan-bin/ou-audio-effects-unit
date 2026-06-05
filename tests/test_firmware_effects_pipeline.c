@@ -9,7 +9,8 @@
 
 int failures = 0;
 
-static void test_pipeline_init_and_sync_params(void) {
+static void test_pipeline_init_and_sync_params(void)
+{
     EffectsPipeline pipeline;
     memset(&pipeline, 0, sizeof(pipeline));
 
@@ -31,7 +32,8 @@ static void test_pipeline_init_and_sync_params(void) {
     expect_eq_size(7, delaySamples, "echo delay mirrors params");
 }
 
-static void test_pipeline_process_matches_runtime_helpers(void) {
+static void test_pipeline_process_matches_runtime_helpers(void)
+{
     EffectsPipeline pipeline;
     memset(&pipeline, 0, sizeof(pipeline));
     expect_true(effects_pipeline_init(&pipeline) == 0, "pipeline init for process succeeds");
@@ -63,7 +65,8 @@ static void test_pipeline_process_matches_runtime_helpers(void) {
                 "pipeline overdrive process succeeds");
     buf_overdrive(input, expected, 4, &params.overdrive);
 
-    for (size_t i = 0; i < 4; i++) {
+    for (size_t i = 0; i < 4; i++)
+    {
         expect_eq_u16(expected[i], output[i], "overdrive output matches runtime");
     }
 
@@ -76,16 +79,19 @@ static void test_pipeline_process_matches_runtime_helpers(void) {
                 "pipeline echo process succeeds");
     buf_echo(echoInput, expected, 4, &params.echo);
 
-    for (size_t i = 0; i < 4; i++) {
+    for (size_t i = 0; i < 4; i++)
+    {
         expect_eq_u16(expected[i], output[i], "echo output matches runtime");
     }
 }
 
-int main(void) {
+int main(void)
+{
     test_pipeline_init_and_sync_params();
     test_pipeline_process_matches_runtime_helpers();
 
-    if (failures != 0) {
+    if (failures != 0)
+    {
         fprintf(stderr, "Firmware effects pipeline tests failed: %d\n", failures);
         return 1;
     }

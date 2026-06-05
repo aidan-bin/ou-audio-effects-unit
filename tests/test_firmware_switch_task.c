@@ -8,7 +8,8 @@
 
 int failures = 0;
 
-typedef struct {
+typedef struct
+{
     bool switchValues[3];
     EffectsState sourceState;
 
@@ -23,10 +24,12 @@ typedef struct {
     uint32_t lastSleepMs;
 } SwitchTaskTestState;
 
-static bool read_switch(uint8_t index, bool *enabledOut, void *context) {
+static bool read_switch(uint8_t index, bool *enabledOut, void *context)
+{
     SwitchTaskTestState *state = (SwitchTaskTestState *)context;
 
-    if (!state->readSwitchSucceeds || enabledOut == NULL || index >= 3) {
+    if (!state->readSwitchSucceeds || enabledOut == NULL || index >= 3)
+    {
         return false;
     }
 
@@ -34,10 +37,12 @@ static bool read_switch(uint8_t index, bool *enabledOut, void *context) {
     return true;
 }
 
-static bool read_state(EffectsState *stateOut, void *context) {
+static bool read_state(EffectsState *stateOut, void *context)
+{
     SwitchTaskTestState *state = (SwitchTaskTestState *)context;
 
-    if (!state->readStateSucceeds || stateOut == NULL) {
+    if (!state->readStateSucceeds || stateOut == NULL)
+    {
         return false;
     }
 
@@ -45,10 +50,12 @@ static bool read_state(EffectsState *stateOut, void *context) {
     return true;
 }
 
-static bool write_state(const EffectsState *stateIn, void *context) {
+static bool write_state(const EffectsState *stateIn, void *context)
+{
     SwitchTaskTestState *state = (SwitchTaskTestState *)context;
 
-    if (!state->writeStateSucceeds || stateIn == NULL) {
+    if (!state->writeStateSucceeds || stateIn == NULL)
+    {
         return false;
     }
 
@@ -57,13 +64,15 @@ static bool write_state(const EffectsState *stateIn, void *context) {
     return true;
 }
 
-static void sleep_ms(uint32_t ms, void *context) {
+static void sleep_ms(uint32_t ms, void *context)
+{
     SwitchTaskTestState *state = (SwitchTaskTestState *)context;
     state->sleepCalls++;
     state->lastSleepMs = ms;
 }
 
-static SwitchTaskOps make_ops(SwitchTaskTestState *state) {
+static SwitchTaskOps make_ops(SwitchTaskTestState *state)
+{
     SwitchTaskOps ops = {
         .read_switch = read_switch,
         .read_state = read_state,
@@ -75,7 +84,8 @@ static SwitchTaskOps make_ops(SwitchTaskTestState *state) {
     return ops;
 }
 
-static SwitchTaskContext make_context(void) {
+static SwitchTaskContext make_context(void)
+{
     SwitchTaskContext context = {
         .pollingFrequencyMs = 5,
     };
@@ -83,7 +93,8 @@ static SwitchTaskContext make_context(void) {
     return context;
 }
 
-static void init_state(SwitchTaskTestState *state) {
+static void init_state(SwitchTaskTestState *state)
+{
     memset(state, 0, sizeof(*state));
     state->readSwitchSucceeds = true;
     state->readStateSucceeds = true;
@@ -93,7 +104,8 @@ static void init_state(SwitchTaskTestState *state) {
     state->sourceState.activeEffectSelection = 1;
 }
 
-static void test_switch_mapping_and_sleep(void) {
+static void test_switch_mapping_and_sleep(void)
+{
     SwitchTaskTestState state;
     init_state(&state);
     state.switchValues[0] = true;
@@ -116,7 +128,8 @@ static void test_switch_mapping_and_sleep(void) {
     expect_eq_u32(5, state.lastSleepMs, "sleep uses polling frequency");
 }
 
-static void test_state_is_normalized_before_write(void) {
+static void test_state_is_normalized_before_write(void)
+{
     SwitchTaskTestState state;
     init_state(&state);
 
@@ -136,11 +149,13 @@ static void test_state_is_normalized_before_write(void) {
                 "active selection normalized");
 }
 
-int main(void) {
+int main(void)
+{
     test_switch_mapping_and_sleep();
     test_state_is_normalized_before_write();
 
-    if (failures != 0) {
+    if (failures != 0)
+    {
         fprintf(stderr, "test_firmware_switch_task: %d failure(s)\n", failures);
         return 1;
     }

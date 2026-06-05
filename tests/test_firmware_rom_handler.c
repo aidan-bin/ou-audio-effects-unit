@@ -10,7 +10,8 @@
 
 int failures = 0;
 
-static void test_encode_address_big_endian(void) {
+static void test_encode_address_big_endian(void)
+{
     uint8_t payload[2] = {0};
 
     expect_true(rom_handler_encode_address(0x1234, payload, sizeof(payload)),
@@ -19,7 +20,8 @@ static void test_encode_address_big_endian(void) {
     expect_eq_u8(0x34, payload[1], "address lower byte");
 }
 
-static void test_encode_write_and_decode_round_trip(void) {
+static void test_encode_write_and_decode_round_trip(void)
+{
     EffectsState state = {
         .ordered = {ECHO, COMPRESSION, OVERDRIVE},
         .isEnabled = {true, false, true},
@@ -56,7 +58,8 @@ static void test_encode_write_and_decode_round_trip(void) {
     expect_true(decodedParams.compression.threshold == 333, "decode compression threshold");
 }
 
-static void test_encode_fails_for_small_buffer(void) {
+static void test_encode_fails_for_small_buffer(void)
+{
     uint8_t smallAddressBuf[1] = {0};
     expect_true(!rom_handler_encode_address(0x1111, smallAddressBuf, sizeof(smallAddressBuf)),
                 "encode address rejects small buffer");
@@ -70,12 +73,14 @@ static void test_encode_fails_for_small_buffer(void) {
         "encode write rejects small buffer");
 }
 
-int main(void) {
+int main(void)
+{
     test_encode_address_big_endian();
     test_encode_write_and_decode_round_trip();
     test_encode_fails_for_small_buffer();
 
-    if (failures != 0) {
+    if (failures != 0)
+    {
         fprintf(stderr, "Firmware rom handler tests failed: %d\n", failures);
         return 1;
     }

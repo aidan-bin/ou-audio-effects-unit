@@ -8,7 +8,8 @@
 
 int failures = 0;
 
-typedef struct {
+typedef struct
+{
     bool startSucceeds[4];
     bool waitSucceeds[4];
     uint32_t samples[4];
@@ -28,20 +29,23 @@ typedef struct {
     uint32_t appliedAdcMax[4];
 } PotTaskTestState;
 
-static bool start_adc(uint8_t potIndex, void *context) {
+static bool start_adc(uint8_t potIndex, void *context)
+{
     PotTaskTestState *state = (PotTaskTestState *)context;
     state->currentPot = potIndex;
     state->startCalls++;
     return state->startSucceeds[potIndex];
 }
 
-static bool wait_for_sample(uint32_t timeoutTicks, uint32_t *valueOut, void *context) {
+static bool wait_for_sample(uint32_t timeoutTicks, uint32_t *valueOut, void *context)
+{
     (void)timeoutTicks;
 
     PotTaskTestState *state = (PotTaskTestState *)context;
     state->waitCalls++;
 
-    if (!state->waitSucceeds[state->currentPot] || valueOut == NULL) {
+    if (!state->waitSucceeds[state->currentPot] || valueOut == NULL)
+    {
         return false;
     }
 
@@ -49,10 +53,12 @@ static bool wait_for_sample(uint32_t timeoutTicks, uint32_t *valueOut, void *con
     return true;
 }
 
-static bool read_active_effect(Effect *activeEffect, void *context) {
+static bool read_active_effect(Effect *activeEffect, void *context)
+{
     PotTaskTestState *state = (PotTaskTestState *)context;
 
-    if (activeEffect == NULL || !state->activeEffectValid[state->currentPot]) {
+    if (activeEffect == NULL || !state->activeEffectValid[state->currentPot])
+    {
         return false;
     }
 
@@ -61,11 +67,13 @@ static bool read_active_effect(Effect *activeEffect, void *context) {
 }
 
 static void apply_pot_sample(Effect activeEffect, uint8_t potIndex, uint32_t adcValue,
-                             uint32_t adcMax, void *context) {
+                             uint32_t adcMax, void *context)
+{
     PotTaskTestState *state = (PotTaskTestState *)context;
     uint32_t i = state->applyCalls;
 
-    if (i < 4) {
+    if (i < 4)
+    {
         state->appliedEffects[i] = activeEffect;
         state->appliedPots[i] = potIndex;
         state->appliedSamples[i] = adcValue;
@@ -75,7 +83,8 @@ static void apply_pot_sample(Effect activeEffect, uint8_t potIndex, uint32_t adc
     state->applyCalls++;
 }
 
-static PotTaskOps make_ops(PotTaskTestState *state) {
+static PotTaskOps make_ops(PotTaskTestState *state)
+{
     PotTaskOps ops = {
         .start_adc = start_adc,
         .wait_for_sample = wait_for_sample,
@@ -87,7 +96,8 @@ static PotTaskOps make_ops(PotTaskTestState *state) {
     return ops;
 }
 
-static PotTaskContext make_context(void) {
+static PotTaskContext make_context(void)
+{
     PotTaskContext context = {
         .samplingFrequencyTicks = 5,
         .timeoutSlackTicks = 1,
@@ -98,10 +108,12 @@ static PotTaskContext make_context(void) {
     return context;
 }
 
-static void init_state(PotTaskTestState *state) {
+static void init_state(PotTaskTestState *state)
+{
     memset(state, 0, sizeof(*state));
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 4; i++)
+    {
         state->startSucceeds[i] = true;
         state->waitSucceeds[i] = true;
         state->samples[i] = (uint32_t)(10 + i);
@@ -110,7 +122,8 @@ static void init_state(PotTaskTestState *state) {
     }
 }
 
-static void test_four_channel_sweep_updates_active_effect(void) {
+static void test_four_channel_sweep_updates_active_effect(void)
+{
     PotTaskTestState state;
     init_state(&state);
 
@@ -121,14 +134,16 @@ static void test_four_channel_sweep_updates_active_effect(void) {
     expect_true(ok, "pot step succeeds");
     expect_eq_u32(4, state.applyCalls, "apply called for each pot");
 
-    for (uint8_t i = 0; i < 4; i++) {
+    for (uint8_t i = 0; i < 4; i++)
+    {
         expect_eq_u32(i, state.appliedPots[i], "pot index propagated");
         expect_eq_u32(state.samples[i], state.appliedSamples[i], "sample propagated");
         expect_eq_u32(255, state.appliedAdcMax[i], "adc max propagated");
     }
 }
 
-static void test_inactive_effect_is_ignored(void) {
+static void test_inactive_effect_is_ignored(void)
+{
     PotTaskTestState state;
     init_state(&state);
     state.activeEffectValid[2] = false;
@@ -141,7 +156,8 @@ static void test_inactive_effect_is_ignored(void) {
     expect_eq_u32(3, state.applyCalls, "invalid active effect skips apply");
 }
 
-static void test_adc_start_failure_skips_channel(void) {
+static void test_adc_start_failure_skips_channel(void)
+{
     PotTaskTestState state;
     init_state(&state);
     state.startSucceeds[1] = false;
@@ -154,7 +170,8 @@ static void test_adc_start_failure_skips_channel(void) {
     expect_eq_u32(3, state.applyCalls, "start failure skips apply for that pot");
 }
 
-static void test_notify_timeout_skips_channel(void) {
+static void test_notify_timeout_skips_channel(void)
+{
     PotTaskTestState state;
     init_state(&state);
     state.waitSucceeds[3] = false;
@@ -167,13 +184,15 @@ static void test_notify_timeout_skips_channel(void) {
     expect_eq_u32(3, state.applyCalls, "wait timeout skips apply for that pot");
 }
 
-int main(void) {
+int main(void)
+{
     test_four_channel_sweep_updates_active_effect();
     test_inactive_effect_is_ignored();
     test_adc_start_failure_skips_channel();
     test_notify_timeout_skips_channel();
 
-    if (failures != 0) {
+    if (failures != 0)
+    {
         fprintf(stderr, "test_firmware_pot_task: %d failure(s)\n", failures);
         return 1;
     }

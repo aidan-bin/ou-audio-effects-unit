@@ -8,26 +8,30 @@
 #define FREERTOS_MOCK_MAX_QUEUE_CAPACITY 32
 #define FREERTOS_MOCK_MAX_ITEM_SIZE 128
 
-typedef enum {
+typedef enum
+{
     FREERTOS_MOCK_OK = 0,
     FREERTOS_MOCK_TIMEOUT = 1,
     FREERTOS_MOCK_ERROR = 2,
 } FreeRtosMockStatus;
 
-typedef struct {
+typedef struct
+{
     uint32_t giveCount;
     uint32_t takeCount;
     bool available;
 } FreeRtosMockBinarySemaphore;
 
-typedef struct {
+typedef struct
+{
     uint32_t notifySendCount;
     uint32_t notifyWaitCount;
     bool pending;
     uint32_t lastValue;
 } FreeRtosMockTaskNotify;
 
-typedef struct {
+typedef struct
+{
     uint32_t sendCount;
     uint32_t receiveCount;
 
@@ -40,7 +44,8 @@ typedef struct {
     uint8_t storage[FREERTOS_MOCK_MAX_QUEUE_CAPACITY][FREERTOS_MOCK_MAX_ITEM_SIZE];
 } FreeRtosMockQueue;
 
-typedef struct {
+typedef struct
+{
     FreeRtosMockBinarySemaphore semaphore;
     FreeRtosMockTaskNotify notify;
     FreeRtosMockQueue queue;
