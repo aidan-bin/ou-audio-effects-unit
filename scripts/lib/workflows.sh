@@ -9,10 +9,27 @@ run_user_code_regions() {
 user_code_clang_format_args() { run_user_code_regions clang-format-args "$1"; }
 user_code_clang_tidy_line_filter() { run_user_code_regions clang-tidy-line-filter "$1"; }
 
+run_firmware_project_build() {
+	local project_dir="$1"
+	local project_name="$2"
+	local firmware_build_preset="${OU_FIRMWARE_BUILD_PRESET:-Debug}"
+
+	if [[ ! -d "$project_dir" ]]; then
+		echo "Firmware project directory not found for ${project_name}: ${project_dir}"
+		exit 1
+	fi
+
+	echo "Building firmware (${project_name}) with preset ${firmware_build_preset}..."
+	(
+		cd "$project_dir"
+		cmake --preset "$firmware_build_preset"
+		cmake --build --preset "$firmware_build_preset"
+	)
+}
+
 run_build() {
-	rm -f host/python-demo/libeffects.dll host/python-demo/libeffects.so host/python-demo/libeffects.dylib
-	ensure_release_build_tree
-	cmake --build build -j
+	run_build_tests
+	run_build_firmware
 }
 
 run_build_tests() {
@@ -21,8 +38,8 @@ run_build_tests() {
 }
 
 run_build_firmware() {
-	ensure_release_build_tree
-	cmake --build build --target ou_firmware_build
+	run_firmware_project_build "firmware/stm32f303/cubemx" "custom board"
+	run_firmware_project_build "firmware/stm32f303/nucleo-ou-audio-effects" "nucleo"
 }
 
 run_build_demo() {

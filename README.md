@@ -55,10 +55,16 @@ Tests only:
 Build-only commands:
 
 ```sh
+./scripts/run.sh build
 ./scripts/run.sh build-tests
 ./scripts/run.sh build-firmware
 ./scripts/run.sh build-demo
 ```
+
+- `build`: builds host test targets plus firmware for both custom board and Nucleo projects
+- `build-tests`: builds host test targets only
+- `build-firmware`: builds firmware for both custom board and Nucleo projects
+- `build-demo`: builds only the shared DSP library for the Python demo
 
 Format check only:
 

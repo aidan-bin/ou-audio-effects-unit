@@ -27,8 +27,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include "button_task.h"
-#include "cli_core.h"
-#include "cli_line_buffer.h"
+#include "cli_session.h"
 #include "cli_service_adapter.h"
 #include "effects_model.h"
 #include "effects_pipeline.h"
@@ -69,6 +68,7 @@
 /* I2C Device Addresses */
 #define DISPLAY_I2C_ADDR 0x3C
 #define ROM_I2C_ADDR 0xA0
+#define CLI_USB_RX_BYTE_QUEUE_CAPACITY 256U
 
 /* USER CODE END PD */
 
@@ -165,9 +165,11 @@ static volatile uint16_t *const dac_buf_a = dac_buf;
 static volatile uint16_t *const dac_buf_b = &dac_buf[DAC_BUF_LEN / 2];
 
 static CliServices cli_services;
-static CliIo cli_io;
-static CliLineBuffer cli_usb_rx_lines;
-static char cli_line[CLI_MAX_LINE_LENGTH + 1];
+static CliSession cli_session;
+static uint8_t cli_usb_rx_bytes[CLI_USB_RX_BYTE_QUEUE_CAPACITY];
+static uint16_t cli_usb_rx_head;
+static uint16_t cli_usb_rx_tail;
+static uint16_t cli_usb_rx_count;
 
 /* USER CODE END PV */
 
@@ -233,8 +235,11 @@ static void cli_service_lock(void *context);
 static void cli_service_unlock(void *context);
 static void init_cli_service_adapter(void);
 static bool cli_usb_write(const char *text, void *context);
-static bool cli_usb_try_pop_line(char *line_out, size_t line_out_size);
+static void cli_usb_rx_queue_push_byte(uint8_t byte);
+static bool cli_usb_rx_queue_pop_byte(uint8_t *byte_out);
 static void init_peripheral_dispatch(void);
+static uint32_t tim_get_update_rate_hz(const TIM_HandleTypeDef *timer_handle, uint32_t timer_clock_hz);
+static uint32_t sampling_period_us_from_rate_hz(uint32_t sample_rate_hz);
 
 void usb_cdc_rx_bytes_callback(const uint8_t *bytes, uint32_t byte_count);
 
@@ -655,7 +660,9 @@ static void init_cli_service_adapter(void)
                              &ops,
                              UINT8_MAX);
 
-    cli_line_buffer_init(&cli_usb_rx_lines);
+    cli_usb_rx_head = 0;
+    cli_usb_rx_tail = 0;
+    cli_usb_rx_count = 0;
 }
 
 static bool cli_usb_write(const char *text, void *context)
@@ -695,19 +702,71 @@ static bool cli_usb_write(const char *text, void *context)
 void usb_cdc_rx_bytes_callback(const uint8_t *bytes, uint32_t byte_count)
 {
     __disable_irq();
-    cli_line_buffer_push_bytes(&cli_usb_rx_lines, bytes, byte_count);
+    for (uint32_t i = 0; i < byte_count; i++)
+    {
+        cli_usb_rx_queue_push_byte(bytes[i]);
+    }
     __enable_irq();
 }
 
-static bool cli_usb_try_pop_line(char *line_out, size_t line_out_size)
+static void cli_usb_rx_queue_push_byte(uint8_t byte)
 {
-    bool has_line;
+    if (cli_usb_rx_count >= CLI_USB_RX_BYTE_QUEUE_CAPACITY)
+    {
+        cli_usb_rx_head = (uint16_t)((cli_usb_rx_head + 1U) % CLI_USB_RX_BYTE_QUEUE_CAPACITY);
+        cli_usb_rx_count--;
+    }
+
+    cli_usb_rx_bytes[cli_usb_rx_tail] = byte;
+    cli_usb_rx_tail = (uint16_t)((cli_usb_rx_tail + 1U) % CLI_USB_RX_BYTE_QUEUE_CAPACITY);
+    cli_usb_rx_count++;
+}
+
+static bool cli_usb_rx_queue_pop_byte(uint8_t *byte_out)
+{
+    if (byte_out == NULL)
+    {
+        return false;
+    }
 
     __disable_irq();
-    has_line = cli_line_buffer_pop_line(&cli_usb_rx_lines, line_out, line_out_size);
+    if (cli_usb_rx_count == 0)
+    {
+        __enable_irq();
+        return false;
+    }
+
+    *byte_out = cli_usb_rx_bytes[cli_usb_rx_head];
+    cli_usb_rx_head = (uint16_t)((cli_usb_rx_head + 1U) % CLI_USB_RX_BYTE_QUEUE_CAPACITY);
+    cli_usb_rx_count--;
     __enable_irq();
 
-    return has_line;
+    return true;
+}
+
+static uint32_t tim_get_update_rate_hz(const TIM_HandleTypeDef *timer_handle, uint32_t timer_clock_hz)
+{
+    if (timer_handle == NULL)
+    {
+        return 0U;
+    }
+
+    const uint32_t prescaler_divisor = (uint32_t)timer_handle->Init.Prescaler + 1U;
+    const uint32_t period_divisor = (uint32_t)timer_handle->Init.Period + 1U;
+
+    return timer_clock_hz / prescaler_divisor / period_divisor;
+}
+
+static uint32_t sampling_period_us_from_rate_hz(uint32_t sample_rate_hz)
+{
+    const uint32_t micros_per_second = 1000000UL;
+
+    if (sample_rate_hz == 0U)
+    {
+        return 0U;
+    }
+
+    return micros_per_second / sample_rate_hz;
 }
 
 static void init_peripheral_dispatch(void)
@@ -1087,7 +1146,7 @@ static void MX_ADC3_Init(void)
   sConfig.Channel = ADC_CHANNEL_1;
   sConfig.Rank = ADC_REGULAR_RANK_1;
   sConfig.SingleDiff = ADC_SINGLE_ENDED;
-  sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
+  sConfig.SamplingTime = ADC_SAMPLETIME_19CYCLES_5;
   sConfig.OffsetNumber = ADC_OFFSET_NONE;
   sConfig.Offset = 0;
   if (HAL_ADC_ConfigChannel(&hadc3, &sConfig) != HAL_OK)
@@ -1506,6 +1565,23 @@ void startEffectsTask(void const * argument)
   /* init code for USB_DEVICE */
   MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 5 */
+  // TIM2 TRGO clocks DAC DMA, so update rate is the audio sample rate.
+  // Read TIM2 input clock directly from RCC peripheral clock config.
+  const uint32_t tim2_clock_hz = HAL_RCCEx_GetPeriphCLKFreq(RCC_PERIPHCLK_TIM2);
+  if (tim2_clock_hz == 0U)
+  {
+      vTaskDelete(NULL);
+      return;
+  }
+  const uint32_t audio_sample_rate_hz = tim_get_update_rate_hz(&htim2, tim2_clock_hz);
+  const uint32_t sampling_period_us = sampling_period_us_from_rate_hz(audio_sample_rate_hz);
+
+  if (sampling_period_us == 0U)
+  {
+      vTaskDelete(NULL);
+      return;
+  }
+
   EffectsPipeline effects_pipeline;
   if (effects_pipeline_init(&effects_pipeline) != 0)
   {
@@ -1524,7 +1600,7 @@ void startEffectsTask(void const * argument)
       .delaySamplesBuf = (uint16_t *)delay_samples_buf,
       .sampleBufLen = SAMPLE_BUF_LEN,
       .delaySamplesLen = NUM_DELAY_SAMPLES,
-      .samplingPeriodUs = 25,
+      .samplingPeriodUs = sampling_period_us,
       .processingSlackMs = 2,
   };
 
@@ -1768,17 +1844,20 @@ void startDisplayHandlerTask(void const * argument)
   (void)argument;
 
   cli_service_adapter_bind(&cli_service_adapter_context, &cli_services);
-  cli_io.write = cli_usb_write;
-  cli_io.context = NULL;
-
-  (void)cli_usb_write("ok cli ready\n", NULL);
+  CliSessionTransport transport = {
+      .write = cli_usb_write,
+      .context = NULL,
+  };
+  cli_session_init(&cli_session, &cli_services, &transport);
+  (void)cli_session_start(&cli_session);
 
   /* Infinite loop */
   for (;;)
   {
-      while (cli_usb_try_pop_line(cli_line, sizeof(cli_line)))
+      uint8_t byte = 0;
+      while (cli_usb_rx_queue_pop_byte(&byte))
       {
-          (void)cli_core_process_line(cli_line, &cli_services, &cli_io);
+          cli_session_push_bytes(&cli_session, &byte, 1);
       }
 
       osDelay(1);

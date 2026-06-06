@@ -23,6 +23,8 @@ Fixed-point helpers live in [dsp/math](../dsp/math). Signal convention is unsign
 
 Firmware runs as FreeRTOS tasks over a DMA ADC/DAC audio path with ping-pong buffers, enabling continuous fixed-rate processing.
 
+Audio trigger/timing details and CubeMX settings are documented in [audio-sampling-design.md](audio-sampling-design.md).
+
 Project-specific logic lives in [firmware/stm32f303/app](../firmware/stm32f303/app), which extends the CubeMX-generated firmware through user sections and app code.
 
 Subsystems include:

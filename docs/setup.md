@@ -55,6 +55,8 @@ Other common targets:
 
 ```sh
 ./scripts/run.sh build
+./scripts/run.sh build-tests
+./scripts/run.sh build-firmware
 ./scripts/run.sh format-check
 ./scripts/run.sh lint
 ./scripts/run.sh test
@@ -62,6 +64,9 @@ Other common targets:
 ./scripts/run.sh check-full
 ./scripts/run.sh doctor
 ```
+
+- `build` builds host test targets and both firmware variants (custom board + Nucleo).
+- `build-firmware` builds both firmware variants without building host tests.
 
 ## Host Demo
 
