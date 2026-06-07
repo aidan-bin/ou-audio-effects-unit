@@ -9,6 +9,12 @@
 
 Key point: TIM2 sets audio sample rate. ADC sampling-time cycles do not set output sample rate.
 
+## Runtime Buffering Logic
+
+- ADC and DAC each run ping-pong DMA (half + full callbacks).
+- Each callback records a typed buffer event (`adc_a`, `adc_b`, `dac_a`, `dac_b`) and wakes the effects task.
+- The effects task waits for a buffer type (ADC or DAC), then consumes the next pending event for that type.
+
 ## Trigger Path
 
 - TIM2 master trigger: `TIM_TRGO_UPDATE`

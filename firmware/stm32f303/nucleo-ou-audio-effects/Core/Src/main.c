@@ -54,6 +54,8 @@
 #define HEARTBEAT_PERIOD_MS_DEFAULT 500U
 #define HEARTBEAT_PERIOD_MS_MIN 50U
 #define HEARTBEAT_PERIOD_MS_MAX 5000U
+#define EFFECTS_RUNTIME_LOG_EVERY_FAILURES 10U
+#define EFFECTS_RUNTIME_LOG_EVERY_FRAMES 64U
 
 /* USER CODE END PD */
 
@@ -92,7 +94,13 @@ static volatile uint16_t *const adc_buf_a = adc_buf;
 static volatile uint16_t *const adc_buf_b = &adc_buf[SAMPLE_BUF_LEN];
 static volatile uint16_t *const dac_buf_a = dac_buf;
 static volatile uint16_t *const dac_buf_b = &dac_buf[SAMPLE_BUF_LEN];
+static volatile uint32_t effects_event_count_adc_a = 0U;
+static volatile uint32_t effects_event_count_adc_b = 0U;
+static volatile uint32_t effects_event_count_dac_a = 0U;
+static volatile uint32_t effects_event_count_dac_b = 0U;
 static volatile uint32_t heartbeat_period_ms = HEARTBEAT_PERIOD_MS_DEFAULT;
+static uint32_t effects_frames_ok = 0U;
+static uint32_t effects_frames_failed = 0U;
 
 static CliServiceAdapterContext cli_service_adapter_context;
 static CliServices cli_services;
@@ -128,6 +136,21 @@ static bool effects_task_read_latched_state(EffectsState *state, EffectsParams *
 static bool effects_task_replace_input_for_testing(uint16_t *buf, size_t count, void *context);
 static void effects_task_report_failure(void *context);
 static void effects_task_report_frame_complete(void *context);
+static void effects_task_log_runtime_stats(const char *reason, uint8_t level);
+
+typedef enum
+{
+    EFFECTS_BUFFER_ADC,
+    EFFECTS_BUFFER_DAC,
+} EffectsBufferType;
+
+typedef enum
+{
+    EFFECTS_BUFFER_EVENT_ADC_A,
+    EFFECTS_BUFFER_EVENT_ADC_B,
+    EFFECTS_BUFFER_EVENT_DAC_A,
+    EFFECTS_BUFFER_EVENT_DAC_B,
+} EffectsBufferEvent;
 
 static bool boot_uart_write(const char *text);
 static void boot_log_line(const char *text);
@@ -137,7 +160,8 @@ static bool log_is_enabled(void *context);
 static uint8_t log_get_level(void *context);
 static bool log_write_line(const char *line, void *context);
 
-static void notify_task_from_isr(osThreadId task_handle, uint32_t value);
+static void notify_task_from_isr(osThreadId task_handle);
+static void effects_task_record_buffer_event_from_isr(EffectsBufferEvent event);
 static bool cli_uart_write(const char *text, void *context);
 static void cli_service_lock(void *context);
 static void cli_service_unlock(void *context);
@@ -162,29 +186,114 @@ static uint32_t effects_task_ms_to_ticks(uint32_t ms, void *context)
     return pdMS_TO_TICKS(ms);
 }
 
-static bool effects_task_wait_for_adc_buffer(uint32_t timeout_ticks, uint16_t **buf_ptr,
-                                             void *context)
+static bool effects_task_try_take_pending_buffer(EffectsBufferType buffer_type, uint16_t **buf_ptr)
 {
-    (void)context;
     if (buf_ptr == NULL)
     {
         return false;
     }
 
-    uint32_t notification_value = 0;
-    if (xTaskNotifyWait(0, 0xFFFFFFFFUL, &notification_value, (TickType_t)timeout_ticks) != pdTRUE)
+    bool has_pending = false;
+
+    taskENTER_CRITICAL();
+    if (buffer_type == EFFECTS_BUFFER_ADC)
+    {
+        if (effects_event_count_adc_a > 0U)
+        {
+            effects_event_count_adc_a--;
+            *buf_ptr = (uint16_t *)adc_buf_a;
+            has_pending = true;
+        }
+        else if (effects_event_count_adc_b > 0U)
+        {
+            effects_event_count_adc_b--;
+            *buf_ptr = (uint16_t *)adc_buf_b;
+            has_pending = true;
+        }
+    }
+    else if (buffer_type == EFFECTS_BUFFER_DAC)
+    {
+        if (effects_event_count_dac_a > 0U)
+        {
+            effects_event_count_dac_a--;
+            *buf_ptr = (uint16_t *)dac_buf_a;
+            has_pending = true;
+        }
+        else if (effects_event_count_dac_b > 0U)
+        {
+            effects_event_count_dac_b--;
+            *buf_ptr = (uint16_t *)dac_buf_b;
+            has_pending = true;
+        }
+    }
+    taskEXIT_CRITICAL();
+
+    return has_pending;
+}
+
+static bool effects_task_wait_for_typed_buffer(uint32_t timeout_ticks, uint16_t **buf_ptr,
+                                               EffectsBufferType buffer_type)
+{
+    if (buf_ptr == NULL)
     {
         return false;
     }
 
-    *buf_ptr = (uint16_t *)(uintptr_t)notification_value;
-    return true;
+    if (effects_task_try_take_pending_buffer(buffer_type, buf_ptr))
+    {
+        return true;
+    }
+
+    TickType_t ticks_remaining = (TickType_t)timeout_ticks;
+    TickType_t started_at = 0;
+    const bool bounded_wait = (timeout_ticks != 0xFFFFFFFFU);
+
+    if (bounded_wait)
+    {
+        started_at = xTaskGetTickCount();
+    }
+
+    for (;;)
+    {
+        if (ulTaskNotifyTake(pdTRUE, ticks_remaining) == 0)
+        {
+            return false;
+        }
+
+        if (effects_task_try_take_pending_buffer(buffer_type, buf_ptr))
+        {
+            return true;
+        }
+
+        if (!bounded_wait)
+        {
+            continue;
+        }
+
+        TickType_t elapsed_ticks = xTaskGetTickCount() - started_at;
+        if (elapsed_ticks >= (TickType_t)timeout_ticks)
+        {
+            return false;
+        }
+
+        ticks_remaining = (TickType_t)timeout_ticks - elapsed_ticks;
+    }
+}
+
+static bool effects_task_wait_for_adc_buffer(uint32_t timeout_ticks, uint16_t **buf_ptr,
+                                             void *context)
+{
+    (void)context;
+    return effects_task_wait_for_typed_buffer(timeout_ticks, buf_ptr, EFFECTS_BUFFER_ADC);
 }
 
 static bool effects_task_wait_for_dac_buffer(uint32_t timeout_ticks, uint16_t **buf_ptr,
                                              void *context)
 {
-    return effects_task_wait_for_adc_buffer(timeout_ticks, buf_ptr, context);
+    (void)context;
+    (void)timeout_ticks;
+
+    return effects_task_wait_for_typed_buffer(0xFFFFFFFFU, buf_ptr, EFFECTS_BUFFER_DAC);
 }
 
 static bool effects_task_dma_copy(const uint16_t *src, uint16_t *dst, size_t count,
@@ -258,13 +367,37 @@ static bool effects_task_replace_input_for_testing(uint16_t *buf, size_t count, 
 
 static void effects_task_report_failure(void *context)
 {
+    effects_frames_failed++;
     cli_service_adapter_note_processing_failure((CliServiceAdapterContext *)context);
     HAL_GPIO_TogglePin(LED_STATUS_GPIO_Port, LED_STATUS_Pin);
+
+    if (effects_frames_failed % EFFECTS_RUNTIME_LOG_EVERY_FAILURES == 0U)
+    {
+        effects_task_log_runtime_stats("failure", LOG_LEVEL_WARN);
+    }
 }
 
 static void effects_task_report_frame_complete(void *context)
 {
+    effects_frames_ok++;
     cli_service_adapter_note_frame_processed((CliServiceAdapterContext *)context);
+
+    if (effects_frames_ok % EFFECTS_RUNTIME_LOG_EVERY_FRAMES == 0U)
+    {
+        (void)log_write(LOG_LEVEL_DEBUG, "effects frame end");
+    }
+}
+
+static void effects_task_log_runtime_stats(const char *reason, uint8_t level)
+{
+    char line[96];
+
+    (void)snprintf(line, sizeof(line),
+                   "effects runtime %s: ok=%lu fail=%lu",
+                   reason,
+                   (unsigned long)effects_frames_ok,
+                   (unsigned long)effects_frames_failed);
+    (void)log_write(level, line);
 }
 
 static bool boot_uart_write(const char *text)
@@ -296,7 +429,7 @@ static void boot_log_u32(const char *label, uint32_t value)
     boot_log_line(line);
 }
 
-static void notify_task_from_isr(osThreadId task_handle, uint32_t value)
+static void notify_task_from_isr(osThreadId task_handle)
 {
     if (task_handle == NULL)
     {
@@ -304,9 +437,33 @@ static void notify_task_from_isr(osThreadId task_handle, uint32_t value)
     }
 
     BaseType_t higher_priority_task_woken = pdFALSE;
-    xTaskNotifyFromISR((TaskHandle_t)task_handle, value, eSetValueWithOverwrite,
-                       &higher_priority_task_woken);
+    vTaskNotifyGiveFromISR((TaskHandle_t)task_handle, &higher_priority_task_woken);
     portYIELD_FROM_ISR(higher_priority_task_woken);
+}
+
+static void effects_task_record_buffer_event_from_isr(EffectsBufferEvent event)
+{
+    UBaseType_t saved_interrupt_mask = taskENTER_CRITICAL_FROM_ISR();
+
+    switch (event)
+    {
+    case EFFECTS_BUFFER_EVENT_ADC_A:
+        effects_event_count_adc_a++;
+        break;
+    case EFFECTS_BUFFER_EVENT_ADC_B:
+        effects_event_count_adc_b++;
+        break;
+    case EFFECTS_BUFFER_EVENT_DAC_A:
+        effects_event_count_dac_a++;
+        break;
+    case EFFECTS_BUFFER_EVENT_DAC_B:
+        effects_event_count_dac_b++;
+        break;
+    default:
+        break;
+    }
+
+    taskEXIT_CRITICAL_FROM_ISR(saved_interrupt_mask);
 }
 
 static bool cli_uart_write(const char *text, void *context)
@@ -800,7 +957,7 @@ static void MX_ADC3_Init(void)
   hadc3.Init.ExternalTrigConv = ADC_SOFTWARE_START;
   hadc3.Init.DataAlign = ADC_DATAALIGN_RIGHT;
   hadc3.Init.NbrOfConversion = 1;
-  hadc3.Init.DMAContinuousRequests = DISABLE;
+  hadc3.Init.DMAContinuousRequests = ENABLE;
   hadc3.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
   hadc3.Init.LowPowerAutoWait = DISABLE;
   hadc3.Init.Overrun = ADC_OVR_DATA_OVERWRITTEN;
@@ -1068,7 +1225,8 @@ void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef *hadc)
 {
     if (hadc == &hadc3)
     {
-        notify_task_from_isr(effectsTaskHandle, (uint32_t)(uintptr_t)adc_buf_a);
+        effects_task_record_buffer_event_from_isr(EFFECTS_BUFFER_EVENT_ADC_A);
+        notify_task_from_isr(effectsTaskHandle);
     }
 }
 
@@ -1076,7 +1234,8 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 {
     if (hadc == &hadc3)
     {
-        notify_task_from_isr(effectsTaskHandle, (uint32_t)(uintptr_t)adc_buf_b);
+        effects_task_record_buffer_event_from_isr(EFFECTS_BUFFER_EVENT_ADC_B);
+        notify_task_from_isr(effectsTaskHandle);
     }
 }
 
@@ -1084,7 +1243,8 @@ void HAL_DAC_ConvHalfCpltCallbackCh1(DAC_HandleTypeDef *hdac)
 {
     if (hdac == &hdac1)
     {
-        notify_task_from_isr(effectsTaskHandle, (uint32_t)(uintptr_t)dac_buf_a);
+        effects_task_record_buffer_event_from_isr(EFFECTS_BUFFER_EVENT_DAC_A);
+        notify_task_from_isr(effectsTaskHandle);
     }
 }
 
@@ -1092,7 +1252,8 @@ void HAL_DAC_ConvCpltCallbackCh1(DAC_HandleTypeDef *hdac)
 {
     if (hdac == &hdac1)
     {
-        notify_task_from_isr(effectsTaskHandle, (uint32_t)(uintptr_t)dac_buf_b);
+        effects_task_record_buffer_event_from_isr(EFFECTS_BUFFER_EVENT_DAC_B);
+        notify_task_from_isr(effectsTaskHandle);
     }
 }
 
