@@ -26,6 +26,7 @@
 /* USER CODE BEGIN Includes */
 #include <stdbool.h>
 #include <string.h>
+#include "log.h"
 #include "button_task.h"
 #include "cli_session.h"
 #include "cli_service_adapter.h"
@@ -231,6 +232,9 @@ static void free_payload_adapter(uint8_t *payload, void *context);
 static void *effects_task_alloc_adapter(size_t size, void *context);
 static void effects_task_free_adapter(void *ptr, void *context);
 static void set_rom_write_disable_adapter(bool disable_writes, void *context);
+static bool log_is_enabled(void *context);
+static uint8_t log_get_level(void *context);
+static bool log_write_line(const char *line, void *context);
 static void cli_service_lock(void *context);
 static void cli_service_unlock(void *context);
 static void init_cli_service_adapter(void);
@@ -628,6 +632,29 @@ static void set_rom_write_disable_adapter(bool disable_writes, void *context)
                       disable_writes ? GPIO_PIN_SET : GPIO_PIN_RESET);
 }
 
+static bool log_is_enabled(void *context)
+{
+    bool enabled = false;
+    return cli_service_adapter_get_log_enabled((CliServiceAdapterContext *)context, &enabled) &&
+           enabled;
+}
+
+static uint8_t log_get_level(void *context)
+{
+    uint8_t level = 0;
+    if (!cli_service_adapter_get_log_level((CliServiceAdapterContext *)context, &level))
+    {
+        return 0;
+    }
+
+    return level;
+}
+
+static bool log_write_line(const char *line, void *context)
+{
+    return cli_service_adapter_append_log_line((CliServiceAdapterContext *)context, line);
+}
+
 static void cli_service_lock(void *context)
 {
     (void)context;
@@ -659,6 +686,14 @@ static void init_cli_service_adapter(void)
                              (EffectsParams *)&effects_params,
                              &ops,
                              UINT8_MAX);
+
+    LogOps log_ops = {
+        .is_enabled = log_is_enabled,
+        .get_level = log_get_level,
+        .write_line = log_write_line,
+        .context = &cli_service_adapter_context,
+    };
+    log_configure(&log_ops);
 
     cli_usb_rx_head = 0;
     cli_usb_rx_tail = 0;

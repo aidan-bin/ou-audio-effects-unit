@@ -2,6 +2,8 @@
 
 #include <stddef.h>
 
+#include "log.h"
+
 void peripheral_drain_semaphore(void *semaphore_handle, const PeripheralDispatchOps *ops)
 {
     if (semaphore_handle == NULL || ops == NULL || ops->semaphore_take == NULL)
@@ -171,6 +173,7 @@ void peripheral_on_i2c_error(const PeripheralDispatchContext *dispatch,
 
     if (i2c_handle == dispatch->i2cHandle)
     {
+        (void)log_write(LOG_LEVEL_WARN, "i2c error callback");
         ops->i2c_signal_completion_from_isr(dispatch->i2cTaskSupportContext, true, ops->context);
     }
 }
@@ -185,6 +188,7 @@ void peripheral_on_i2c_abort_complete(const PeripheralDispatchContext *dispatch,
 
     if (i2c_handle == dispatch->i2cHandle)
     {
+        (void)log_write(LOG_LEVEL_WARN, "i2c abort callback");
         ops->i2c_signal_completion_from_isr(dispatch->i2cTaskSupportContext, true, ops->context);
     }
 }

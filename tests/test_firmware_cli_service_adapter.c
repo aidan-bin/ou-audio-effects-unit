@@ -272,6 +272,10 @@ static void test_log_stats_counters(void)
     expect_true(services.log_set_level(4, services.context), "set log level");
     expect_true(services.log_set_stream(true, services.context), "enable stream");
 
+    uint8_t level = 0;
+    expect_true(cli_service_adapter_get_log_level(&context, &level), "read log level helper");
+    expect_eq_u8(4, level, "log level helper tracks value");
+
     cli_service_adapter_note_frame_processed(&context);
     cli_service_adapter_note_frame_processed(&context);
     cli_service_adapter_note_processing_failure(&context);

@@ -44,6 +44,7 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
+    ../app/src/log.c
     ../app/src/button_task.c
     ../app/src/cli_core.c
     ../app/src/cli_parse.c

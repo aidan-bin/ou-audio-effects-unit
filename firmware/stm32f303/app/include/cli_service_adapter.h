@@ -93,6 +93,7 @@ bool cli_service_adapter_get_log_stats(CliServiceAdapterContext *context,
 bool cli_service_adapter_get_log_stream_enabled(CliServiceAdapterContext *context,
                                                 bool *enabledOut);
 bool cli_service_adapter_get_log_enabled(CliServiceAdapterContext *context, bool *enabledOut);
+bool cli_service_adapter_get_log_level(CliServiceAdapterContext *context, uint8_t *levelOut);
 bool cli_service_adapter_append_log_line(CliServiceAdapterContext *context, const char *line);
 
 void cli_service_adapter_note_frame_processed(CliServiceAdapterContext *context);

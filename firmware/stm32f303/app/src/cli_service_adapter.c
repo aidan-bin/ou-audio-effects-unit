@@ -922,6 +922,19 @@ bool cli_service_adapter_get_log_enabled(CliServiceAdapterContext *context, bool
     return true;
 }
 
+bool cli_service_adapter_get_log_level(CliServiceAdapterContext *context, uint8_t *level_out)
+{
+    if (context == NULL || level_out == NULL)
+    {
+        return false;
+    }
+
+    lock_ctx(context);
+    *level_out = context->logLevel;
+    unlock_ctx(context);
+    return true;
+}
+
 bool cli_service_adapter_append_log_line(CliServiceAdapterContext *context, const char *line)
 {
     if (context == NULL || line == NULL)

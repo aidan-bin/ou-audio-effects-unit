@@ -1,5 +1,6 @@
 #include "rom_task_support.h"
 
+#include "log.h"
 #include "i2c_handler.h"
 #include "rom_handler.h"
 
@@ -82,8 +83,11 @@ bool rom_task_bootstrap_effects(const RomTaskSupportConfig *config, const RomTas
 {
     if (config == NULL || ops == NULL || state == NULL || params == NULL)
     {
+        (void)log_write(LOG_LEVEL_ERROR, "rom bootstrap invalid args");
         return false;
     }
+
+    (void)log_write(LOG_LEVEL_INFO, "rom bootstrap start");
 
     const size_t address_payload_size_bytes = 2;
     const size_t payload_size_bytes = rom_handler_read_payload_size();
@@ -96,12 +100,14 @@ bool rom_task_bootstrap_effects(const RomTaskSupportConfig *config, const RomTas
     message.payload = allocate_payload(ops, address_payload_size_bytes);
     if (message.payload == NULL)
     {
+        (void)log_write(LOG_LEVEL_ERROR, "rom bootstrap address payload alloc failed");
         return false;
     }
 
     if (!rom_handler_encode_address(config->readAddress, message.payload,
                                     address_payload_size_bytes))
     {
+        (void)log_write(LOG_LEVEL_ERROR, "rom bootstrap address encode failed");
         free_payload(ops, message.payload);
         return false;
     }
@@ -113,6 +119,7 @@ bool rom_task_bootstrap_effects(const RomTaskSupportConfig *config, const RomTas
     set_write_disable(ops, false);
     if (!queue_message(config, ops, &message, message.pFailed, config->bootstrapTimeoutTicks))
     {
+        (void)log_write(LOG_LEVEL_ERROR, "rom bootstrap read-address transfer failed");
         set_write_disable(ops, true);
         free_payload(ops, message.payload);
         return false;
@@ -123,6 +130,7 @@ bool rom_task_bootstrap_effects(const RomTaskSupportConfig *config, const RomTas
     message.payload = allocate_payload(ops, payload_size_bytes);
     if (message.payload == NULL)
     {
+        (void)log_write(LOG_LEVEL_ERROR, "rom bootstrap read payload alloc failed");
         return false;
     }
 
@@ -132,6 +140,7 @@ bool rom_task_bootstrap_effects(const RomTaskSupportConfig *config, const RomTas
 
     if (!queue_message(config, ops, &message, message.pFailed, config->bootstrapTimeoutTicks))
     {
+        (void)log_write(LOG_LEVEL_ERROR, "rom bootstrap read transfer failed");
         free_payload(ops, message.payload);
         return false;
     }
@@ -142,6 +151,7 @@ bool rom_task_bootstrap_effects(const RomTaskSupportConfig *config, const RomTas
     if (!rom_handler_decode_read_payload(message.payload, payload_size_bytes, &loaded_state,
                                          &loaded_params))
     {
+        (void)log_write(LOG_LEVEL_ERROR, "rom bootstrap decode failed");
         free_payload(ops, message.payload);
         return false;
     }
@@ -149,6 +159,7 @@ bool rom_task_bootstrap_effects(const RomTaskSupportConfig *config, const RomTas
     free_payload(ops, message.payload);
     *state = loaded_state;
     *params = loaded_params;
+    (void)log_write(LOG_LEVEL_INFO, "rom bootstrap complete");
     return true;
 }
 
@@ -157,8 +168,11 @@ bool rom_task_save_effects(const RomTaskSupportConfig *config, const RomTaskSupp
 {
     if (config == NULL || ops == NULL || state == NULL || params == NULL)
     {
+        (void)log_write(LOG_LEVEL_ERROR, "rom save invalid args");
         return false;
     }
+
+    (void)log_write(LOG_LEVEL_INFO, "rom save start");
 
     const size_t payload_size_bytes = rom_handler_write_payload_size();
 
@@ -170,12 +184,14 @@ bool rom_task_save_effects(const RomTaskSupportConfig *config, const RomTaskSupp
     message.payload = allocate_payload(ops, payload_size_bytes);
     if (message.payload == NULL)
     {
+        (void)log_write(LOG_LEVEL_ERROR, "rom save payload alloc failed");
         return false;
     }
 
     if (!rom_handler_encode_write_payload(config->writeAddress, state, params, message.payload,
                                           payload_size_bytes))
     {
+        (void)log_write(LOG_LEVEL_ERROR, "rom save payload encode failed");
         free_payload(ops, message.payload);
         return false;
     }
@@ -187,11 +203,13 @@ bool rom_task_save_effects(const RomTaskSupportConfig *config, const RomTaskSupp
     set_write_disable(ops, false);
     if (!queue_message(config, ops, &message, message.pFailed, config->saveTimeoutTicks))
     {
+        (void)log_write(LOG_LEVEL_ERROR, "rom save transfer failed");
         set_write_disable(ops, true);
         free_payload(ops, message.payload);
         return false;
     }
 
     set_write_disable(ops, true);
+    (void)log_write(LOG_LEVEL_INFO, "rom save complete");
     return true;
 }

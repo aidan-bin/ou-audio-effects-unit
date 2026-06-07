@@ -29,6 +29,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "log.h"
 #include "cli_session.h"
 #include "cli_service_adapter.h"
 #include "effects_model.h"
@@ -131,6 +132,10 @@ static void effects_task_report_frame_complete(void *context);
 static bool boot_uart_write(const char *text);
 static void boot_log_line(const char *text);
 static void boot_log_u32(const char *label, uint32_t value);
+
+static bool log_is_enabled(void *context);
+static uint8_t log_get_level(void *context);
+static bool log_write_line(const char *line, void *context);
 
 static void notify_task_from_isr(osThreadId task_handle, uint32_t value);
 static bool cli_uart_write(const char *text, void *context);
@@ -333,6 +338,29 @@ static void cli_service_unlock(void *context)
     taskEXIT_CRITICAL();
 }
 
+static bool log_is_enabled(void *context)
+{
+    bool enabled = false;
+    return cli_service_adapter_get_log_enabled((CliServiceAdapterContext *)context, &enabled) &&
+           enabled;
+}
+
+static uint8_t log_get_level(void *context)
+{
+    uint8_t level = 0;
+    if (!cli_service_adapter_get_log_level((CliServiceAdapterContext *)context, &level))
+    {
+        return 0;
+    }
+
+    return level;
+}
+
+static bool log_write_line(const char *line, void *context)
+{
+    return cli_service_adapter_append_log_line((CliServiceAdapterContext *)context, line);
+}
+
 static void cli_uart_recover_rx_errors(void)
 {
     if (__HAL_UART_GET_FLAG(&huart2, UART_FLAG_ORE) != RESET)
@@ -382,6 +410,14 @@ static void init_cli_service_adapter(void)
                                               (uint32_t *)&heartbeat_period_ms,
                                               HEARTBEAT_PERIOD_MS_MIN,
                                               HEARTBEAT_PERIOD_MS_MAX);
+
+    LogOps log_ops = {
+        .is_enabled = log_is_enabled,
+        .get_level = log_get_level,
+        .write_line = log_write_line,
+        .context = &cli_service_adapter_context,
+    };
+    log_configure(&log_ops);
 }
 
 static void init_effects_defaults(void)
@@ -481,6 +517,8 @@ void startEffectsTask(void const *argument)
 {
     (void)argument;
 
+    (void)log_write(LOG_LEVEL_INFO, "effects task start");
+
     EffectsPipeline effects_pipeline;
     if (effects_pipeline_init(&effects_pipeline) != 0)
     {
@@ -543,6 +581,8 @@ void startEffectsTask(void const *argument)
 void startCliTask(void const *argument)
 {
     (void)argument;
+
+    (void)log_write(LOG_LEVEL_INFO, "cli task start");
 
     cli_service_adapter_bind(&cli_service_adapter_context, &cli_services);
     CliSessionTransport transport = {

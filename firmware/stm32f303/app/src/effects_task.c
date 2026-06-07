@@ -1,5 +1,7 @@
 #include "effects_task.h"
 
+#include "log.h"
+
 static uint32_t compute_ticks_to_wait(const EffectsTaskContext *task_context,
                                       const EffectsTaskOps *ops)
 {
@@ -24,6 +26,7 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
         ops->wait_for_dac_buffer == NULL || ops->dma_copy == NULL || ops->alloc == NULL ||
         ops->free == NULL || ops->read_latched_state == NULL || ops->ms_to_ticks == NULL)
     {
+        (void)log_write(LOG_LEVEL_ERROR, "effects task invalid context or ops");
         return false;
     }
 
@@ -42,17 +45,20 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
 
     if (!ops->wait_for_adc_buffer(0xFFFFFFFFU, &curr_adc_buf, ops->context))
     {
+        (void)log_write(LOG_LEVEL_WARN, "effects task adc wait failed");
         return false;
     }
 
     if (curr_adc_buf != task_context->adcBufA && curr_adc_buf != task_context->adcBufB)
     {
+        (void)log_write(LOG_LEVEL_ERROR, "effects task received invalid adc buffer");
         return false;
     }
 
     if (ops->replace_input_for_testing != NULL &&
         !ops->replace_input_for_testing(curr_adc_buf, task_context->sampleBufLen, ops->context))
     {
+        (void)log_write(LOG_LEVEL_WARN, "effects task test input replacement failed");
         return false;
     }
 
@@ -62,6 +68,7 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
         if (!ops->dma_copy(&task_context->delaySamplesBuf[task_context->sampleBufLen],
                            task_context->delaySamplesBuf, shift_count, ticks_to_wait, ops->context))
         {
+            (void)log_write(LOG_LEVEL_ERROR, "effects task delay sample shift failed");
             return false;
         }
     }
@@ -71,16 +78,19 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
             &task_context->delaySamplesBuf[task_context->delaySamplesLen - task_context->sampleBufLen],
             task_context->sampleBufLen, ticks_to_wait, ops->context))
     {
+        (void)log_write(LOG_LEVEL_ERROR, "effects task delay sample capture failed");
         return false;
     }
 
     if (!ops->wait_for_dac_buffer(ticks_to_wait, &curr_dac_buf, ops->context))
     {
+        (void)log_write(LOG_LEVEL_WARN, "effects task dac wait failed");
         return false;
     }
 
     if (curr_dac_buf != task_context->dacBufA && curr_dac_buf != task_context->dacBufB)
     {
+        (void)log_write(LOG_LEVEL_ERROR, "effects task received invalid dac buffer");
         return false;
     }
 
@@ -208,6 +218,7 @@ cleanup:
 
     if (process_failed && ops->report_failure != NULL)
     {
+        (void)log_write(LOG_LEVEL_ERROR, "effects task frame processing failed");
         ops->report_failure(ops->context);
     }
 

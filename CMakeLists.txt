@@ -21,6 +21,7 @@ set(OU_FIRMWARE_APP_INCLUDE_DIR
 )
 
 set(OU_FIRMWARE_APP_STANDARD_TESTS
+    log
     effects_model
     effects_pipeline
     effects_task
@@ -68,6 +69,7 @@ set(OU_DSP_SOURCES
 )
 
 set(OU_FIRMWARE_APP_SOURCES
+    firmware/stm32f303/app/src/log.c
     firmware/stm32f303/app/src/button_task.c
     firmware/stm32f303/app/src/cli_core.c
     firmware/stm32f303/app/src/cli_parse.c
