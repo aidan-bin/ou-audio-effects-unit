@@ -1,6 +1,7 @@
 #include "cli_service_adapter.h"
 
 #include <limits.h>
+#include <stdio.h>
 #include <string.h>
 
 static void lock_ctx(CliServiceAdapterContext *context)
@@ -321,6 +322,65 @@ static bool in_rom_window(const CliServiceAdapterContext *context, uint16_t addr
     return end <= context->romRawMaxAddress;
 }
 
+static void log_stream_queue_clear(CliServiceAdapterContext *context)
+{
+    if (context == NULL)
+    {
+        return;
+    }
+
+    context->logStreamHead = 0;
+    context->logStreamTail = 0;
+    context->logStreamCount = 0;
+}
+
+static bool log_stream_queue_push(CliServiceAdapterContext *context, const char *line)
+{
+    if (context == NULL || line == NULL)
+    {
+        return false;
+    }
+
+    if (context->logStreamCount >= CLI_LOG_STREAM_QUEUE_DEPTH)
+    {
+        context->logStreamHead = (uint8_t)((context->logStreamHead + 1U) % CLI_LOG_STREAM_QUEUE_DEPTH);
+        context->logStreamCount--;
+    }
+
+    (void)strncpy(context->logStreamQueue[context->logStreamTail], line,
+                  CLI_LOG_STREAM_LINE_MAX - 1U);
+    context->logStreamQueue[context->logStreamTail][CLI_LOG_STREAM_LINE_MAX - 1U] = '\0';
+    context->logStreamTail = (uint8_t)((context->logStreamTail + 1U) % CLI_LOG_STREAM_QUEUE_DEPTH);
+    context->logStreamCount++;
+    return true;
+}
+
+static bool log_stream_queue_pop(CliServiceAdapterContext *context,
+                                 char *line_out,
+                                 size_t line_capacity,
+                                 bool *has_line_out)
+{
+    if (context == NULL || line_out == NULL || line_capacity == 0 || has_line_out == NULL)
+    {
+        return false;
+    }
+
+    if (context->logStreamCount == 0)
+    {
+        *has_line_out = false;
+        line_out[0] = '\0';
+        return true;
+    }
+
+    (void)strncpy(line_out, context->logStreamQueue[context->logStreamHead], line_capacity - 1U);
+    line_out[line_capacity - 1U] = '\0';
+
+    context->logStreamHead = (uint8_t)((context->logStreamHead + 1U) % CLI_LOG_STREAM_QUEUE_DEPTH);
+    context->logStreamCount--;
+    *has_line_out = true;
+    return true;
+}
+
 static bool service_set_pot_override(uint8_t pot_index, uint32_t value, void *ctx)
 {
     CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
@@ -533,6 +593,10 @@ static bool service_log_set_stream(bool enabled, void *ctx)
     lock_ctx(context);
     context->logEnabled = enabled;
     context->logStreamEnabled = enabled;
+    if (!enabled)
+    {
+        log_stream_queue_clear(context);
+    }
     unlock_ctx(context);
 
     if (context->ops.log_set_stream != NULL)
@@ -541,6 +605,24 @@ static bool service_log_set_stream(bool enabled, void *ctx)
     }
 
     return true;
+}
+
+static bool service_log_read_line(char *line_out,
+                                  size_t line_capacity,
+                                  bool *has_line_out,
+                                  void *ctx)
+{
+    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    if (context == NULL || line_out == NULL || line_capacity == 0 || has_line_out == NULL)
+    {
+        return false;
+    }
+
+    lock_ctx(context);
+    const bool success = log_stream_queue_pop(context, line_out, line_capacity, has_line_out);
+    unlock_ctx(context);
+
+    return success;
 }
 
 static bool service_log_get_stream(bool *enabled_out, void *ctx)
@@ -743,6 +825,7 @@ void cli_service_adapter_bind(CliServiceAdapterContext *context, CliServices *se
     services_out->log_set_enabled = service_log_set_enabled;
     services_out->log_set_stream = service_log_set_stream;
     services_out->log_get_stream = service_log_get_stream;
+    services_out->log_read_line = service_log_read_line;
     services_out->log_get_stats = service_log_get_stats;
     services_out->test_set_mode = service_test_set_mode;
     services_out->test_set_vector = service_test_set_vector;
@@ -855,6 +938,19 @@ bool cli_service_adapter_get_log_enabled(CliServiceAdapterContext *context, bool
     return true;
 }
 
+bool cli_service_adapter_append_log_line(CliServiceAdapterContext *context, const char *line)
+{
+    if (context == NULL || line == NULL)
+    {
+        return false;
+    }
+
+    lock_ctx(context);
+    const bool success = log_stream_queue_push(context, line);
+    unlock_ctx(context);
+    return success;
+}
+
 void cli_service_adapter_note_frame_processed(CliServiceAdapterContext *context)
 {
     if (context == NULL)
@@ -876,5 +972,9 @@ void cli_service_adapter_note_processing_failure(CliServiceAdapterContext *conte
 
     lock_ctx(context);
     context->logFailureCount++;
+    char line[CLI_LOG_STREAM_LINE_MAX] = {0};
+    (void)snprintf(line, sizeof(line), "log failure count=%lu",
+                   (unsigned long)context->logFailureCount);
+    (void)log_stream_queue_push(context, line);
     unlock_ctx(context);
 }

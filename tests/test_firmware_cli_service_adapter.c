@@ -295,6 +295,36 @@ static void test_log_stats_counters(void)
     expect_false(log_enabled, "stream disable clears logging state");
 }
 
+static void test_log_stream_line_queue(void)
+{
+    EffectsState state;
+    EffectsParams params;
+    set_default_effects_state(&state);
+    set_default_effects_params(&params);
+
+    CliServiceAdapterContext context;
+    cli_service_adapter_init(&context, &state, &params, NULL, 255);
+
+    CliServices services = {0};
+    cli_service_adapter_bind(&context, &services);
+
+    expect_true(services.log_set_stream(true, services.context), "enable stream");
+    expect_true(cli_service_adapter_append_log_line(&context, "log event alpha"),
+                "append stream log line");
+
+    char line[64] = {0};
+    bool has_line = false;
+    expect_true(services.log_read_line(line, sizeof(line), &has_line, services.context),
+                "read stream line");
+    expect_true(has_line, "stream queue reports available line");
+    expect_true(strcmp(line, "log event alpha") == 0, "stream line content preserved");
+
+    has_line = true;
+    expect_true(services.log_read_line(line, sizeof(line), &has_line, services.context),
+                "read empty stream queue");
+    expect_false(has_line, "empty stream queue reports no line");
+}
+
 int main(void)
 {
     test_pot_override_precedence();
@@ -303,6 +333,7 @@ int main(void)
     test_rom_raw_guardrails();
     test_test_mode_status_and_validation();
     test_log_stats_counters();
+    test_log_stream_line_queue();
 
     if (failures != 0)
     {

@@ -18,6 +18,17 @@ typedef enum
     CLI_STATUS_SERVICE_ERROR = 5,
 } CliStatus;
 
+typedef enum
+{
+    CLI_COMMAND_ACTION_NONE = 0,
+    CLI_COMMAND_ACTION_ENTER_LOG_STREAM = 1,
+} CliCommandAction;
+
+typedef struct
+{
+    CliCommandAction action;
+} CliCommandResult;
+
 typedef struct
 {
     bool (*write)(const char *text, void *context);
@@ -62,6 +73,10 @@ typedef struct
     bool (*log_set_enabled)(bool enabled, void *context);
     bool (*log_set_stream)(bool enabled, void *context);
     bool (*log_get_stream)(bool *enabledOut, void *context);
+    bool (*log_read_line)(char *lineOut,
+                          size_t lineCapacity,
+                          bool *hasLineOut,
+                          void *context);
     bool (*log_get_stats)(CliLogStats *statsOut, void *context);
 
     bool (*test_set_mode)(bool enabled, void *context);
@@ -73,6 +88,11 @@ typedef struct
 } CliServices;
 
 const char *cli_core_error_text(CliStatus status);
+bool cli_core_stop_log_stream(const CliServices *services);
+CliStatus cli_core_process_line_ex(const char *line,
+                                   const CliServices *services,
+                                   const CliIo *io,
+                                   CliCommandResult *result_out);
 CliStatus cli_core_process_line(const char *line, const CliServices *services, const CliIo *io);
 
 #endif

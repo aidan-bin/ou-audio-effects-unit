@@ -17,6 +17,8 @@ typedef struct
 typedef struct
 {
     bool log_stream_enabled;
+    char pending_log_line[64];
+    bool has_pending_log_line;
 } SessionServicesContext;
 
 static bool test_log_set_stream(bool enabled, void *context)
@@ -30,6 +32,31 @@ static bool test_log_get_stream(bool *enabled_out, void *context)
 {
     SessionServicesContext *service_context = (SessionServicesContext *)context;
     *enabled_out = service_context->log_stream_enabled;
+    return true;
+}
+
+static bool test_log_read_line(char *line_out,
+                               size_t line_capacity,
+                               bool *has_line_out,
+                               void *context)
+{
+    SessionServicesContext *service_context = (SessionServicesContext *)context;
+    if (line_out == NULL || line_capacity == 0 || has_line_out == NULL)
+    {
+        return false;
+    }
+
+    if (!service_context->has_pending_log_line)
+    {
+        *has_line_out = false;
+        line_out[0] = '\0';
+        return true;
+    }
+
+    strncpy(line_out, service_context->pending_log_line, line_capacity - 1U);
+    line_out[line_capacity - 1U] = '\0';
+    service_context->has_pending_log_line = false;
+    *has_line_out = true;
     return true;
 }
 
@@ -192,6 +219,7 @@ static void test_log_stream_command_hides_prompt_until_quit(void)
     CliServices services = {0};
     services.log_set_stream = test_log_set_stream;
     services.log_get_stream = test_log_get_stream;
+    services.log_read_line = test_log_read_line;
     services.context = &services_context;
 
     CliSession session = make_session(&ctx, &services);
@@ -210,6 +238,33 @@ static void test_log_stream_command_hides_prompt_until_quit(void)
                    "stream mode does not emit prompt after command");
 }
 
+static void test_log_stream_poll_writes_stream_lines(void)
+{
+    CliSessionTestContext ctx = {0};
+    SessionServicesContext services_context = {.log_stream_enabled = false};
+    CliServices services = {0};
+    services.log_set_stream = test_log_set_stream;
+    services.log_get_stream = test_log_get_stream;
+    services.log_read_line = test_log_read_line;
+    services.context = &services_context;
+
+    CliSession session = make_session(&ctx, &services);
+    (void)cli_session_start(&session);
+
+    ctx.output_used = 0;
+    ctx.output[0] = '\0';
+
+    const uint8_t command[] = {'l', 'o', 'g', ' ', 's', 't', 'r', 'e', 'a', 'm', '\r'};
+    cli_session_push_bytes(&session, command, sizeof(command));
+
+    strcpy(services_context.pending_log_line, "event: frame dropped");
+    services_context.has_pending_log_line = true;
+    cli_session_poll(&session);
+
+    expect_true(strstr(ctx.output, "event: frame dropped\r\n") != NULL,
+                "poll emits queued stream line");
+}
+
 static void test_log_stream_mode_exits_on_q(void)
 {
     CliSessionTestContext ctx = {0};
@@ -217,11 +272,12 @@ static void test_log_stream_mode_exits_on_q(void)
     CliServices services = {0};
     services.log_set_stream = test_log_set_stream;
     services.log_get_stream = test_log_get_stream;
+    services.log_read_line = test_log_read_line;
     services.context = &services_context;
 
     CliSession session = make_session(&ctx, &services);
     (void)cli_session_start(&session);
-    session.log_stream_mode = true;
+    session.command_stream_mode = true;
 
     ctx.output_used = 0;
     ctx.output[0] = '\0';
@@ -241,6 +297,7 @@ int main(void)
     test_arrow_key_escape_sequences_are_ignored();
     test_arrow_key_escape_sequence_split_across_reads();
     test_log_stream_command_hides_prompt_until_quit();
+    test_log_stream_poll_writes_stream_lines();
     test_log_stream_mode_exits_on_q();
 
     if (failures != 0)

@@ -26,7 +26,7 @@ typedef struct
     bool drop_current_line;
     bool started;
     bool last_byte_was_cr;
-    bool log_stream_mode;
+    bool command_stream_mode;
     bool escape_sequence_active;
     bool escape_sequence_csi;
 } CliSession;
@@ -34,6 +34,7 @@ typedef struct
 void cli_session_init(CliSession *session, const CliServices *services,
                       const CliSessionTransport *transport);
 bool cli_session_start(CliSession *session);
+void cli_session_poll(CliSession *session);
 void cli_session_push_bytes(CliSession *session, const uint8_t *bytes, size_t byte_count);
 
 #endif

@@ -137,7 +137,6 @@ static bool cli_uart_write(const char *text, void *context);
 static void cli_service_lock(void *context);
 static void cli_service_unlock(void *context);
 static void cli_uart_recover_rx_errors(void);
-static void cli_emit_stream_status_if_due(void);
 static void init_cli_service_adapter(void);
 static void init_effects_defaults(void);
 static uint32_t compute_sampling_period_us(void);
@@ -359,51 +358,6 @@ static void cli_uart_recover_rx_errors(void)
     huart2.ErrorCode = HAL_UART_ERROR_NONE;
 }
 
-static void cli_emit_stream_status_if_due(void)
-{
-    static TickType_t last_emit_tick = 0;
-    static uint32_t last_frame_count = 0;
-
-    const TickType_t emit_interval_ticks = pdMS_TO_TICKS(100U);
-    const TickType_t now = xTaskGetTickCount();
-
-    bool stream_enabled = false;
-    if (!cli_service_adapter_get_log_stream_enabled(&cli_service_adapter_context, &stream_enabled) ||
-        !stream_enabled)
-    {
-        last_emit_tick = now;
-        last_frame_count = 0;
-        return;
-    }
-
-    if ((now - last_emit_tick) < emit_interval_ticks)
-    {
-        return;
-    }
-
-    last_emit_tick = now;
-
-    CliLogStats stats = {0};
-    if (!cli_service_adapter_get_log_stats(&cli_service_adapter_context, &stats) || !stats.enabled ||
-        stats.frameCount == 0U)
-    {
-        return;
-    }
-
-    if (stats.frameCount == last_frame_count)
-    {
-        return;
-    }
-
-    last_frame_count = stats.frameCount;
-
-    char line[96];
-    (void)snprintf(line, sizeof(line), "log stream frame=%lu failures=%lu",
-                   (unsigned long)stats.frameCount, (unsigned long)stats.failureCount);
-    (void)cli_uart_write(line, NULL);
-    (void)cli_uart_write("\r\n", NULL);
-}
-
 static void init_cli_service_adapter(void)
 {
     CliServiceAdapterOps ops = {
@@ -608,8 +562,7 @@ void startCliTask(void const *argument)
         }
 
         cli_uart_recover_rx_errors();
-
-        cli_emit_stream_status_if_due();
+        cli_session_poll(&cli_session);
 
         osDelay(1);
     }

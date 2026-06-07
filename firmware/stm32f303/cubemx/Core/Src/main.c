@@ -1860,6 +1860,8 @@ void startDisplayHandlerTask(void const * argument)
           cli_session_push_bytes(&cli_session, &byte, 1);
       }
 
+      cli_session_poll(&cli_session);
+
       osDelay(1);
   }
   /* USER CODE END startDisplayHandlerTask */

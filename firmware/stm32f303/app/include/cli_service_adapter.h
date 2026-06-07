@@ -10,6 +10,8 @@
 
 #define CLI_POT_COUNT 4
 #define CLI_SWITCH_COUNT 3
+#define CLI_LOG_STREAM_QUEUE_DEPTH 8
+#define CLI_LOG_STREAM_LINE_MAX 96
 
 typedef struct
 {
@@ -55,6 +57,10 @@ typedef struct
     uint8_t logLevel;
     uint32_t logFrameCount;
     uint32_t logFailureCount;
+    char logStreamQueue[CLI_LOG_STREAM_QUEUE_DEPTH][CLI_LOG_STREAM_LINE_MAX];
+    uint8_t logStreamHead;
+    uint8_t logStreamTail;
+    uint8_t logStreamCount;
 
     bool testModeEnabled;
     uint8_t testVector;
@@ -88,6 +94,7 @@ bool cli_service_adapter_get_log_stats(CliServiceAdapterContext *context,
 bool cli_service_adapter_get_log_stream_enabled(CliServiceAdapterContext *context,
                                                 bool *enabledOut);
 bool cli_service_adapter_get_log_enabled(CliServiceAdapterContext *context, bool *enabledOut);
+bool cli_service_adapter_append_log_line(CliServiceAdapterContext *context, const char *line);
 
 void cli_service_adapter_note_frame_processed(CliServiceAdapterContext *context);
 void cli_service_adapter_note_processing_failure(CliServiceAdapterContext *context);
