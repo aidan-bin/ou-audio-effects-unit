@@ -8,6 +8,8 @@ STM32 audio effects project with fixed-point DSP in C, STM32 firmware, a Python 
 
 - [dsp](dsp): portable DSP and math code
 - [firmware](firmware): STM32 target firmware
+    - [custom board firmware](firmware/stm32f303/cubemx): CubeMX project for custom board
+    - [nucleo firmware](firmware/stm32f303/nucleo-ou-audio-effects): CubeMX project for Nucleo F303RE
 - [host](host): host-side demo tooling
 - [hardware](hardware): board and analog design assets
 - [tests](tests): test assets
@@ -24,17 +26,14 @@ Builds the DSP library, prepares a local demo virtualenv, installs demo deps, an
 
 ## Firmware
 
-The STM32 firmware project is generated locally with CubeMX and is not checked into this repository.
+The STM32 firmware source code is generated locally with CubeMX and is not checked into this repository. There are two CubeMX projects: one for the custom board and one for the Nucleo F303RE. These projects use the same DSP and application code, but with separate configurations.
 
 - FreeRTOS task-based control flow
 - DMA-driven ADC/DAC audio transfer
 - ping-pong sample buffering
 - effect model/state/control and processing tasks
 - I2C path for peripherals (EEPROM/display)
-
-There are two CubeMX projects targeting different firmware variants:
-- `firmware/stm32f303/cubemx/`: for the custom board
-- `firmware/stm32f303/nucleo-ou-audio-effects/`: for the Nucleo F303RE development board
+- CLI for configuration and logging over USART
 
 ## Tests
 
