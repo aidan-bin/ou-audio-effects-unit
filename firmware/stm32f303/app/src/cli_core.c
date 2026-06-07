@@ -9,6 +9,50 @@ static bool write_line(const CliIo *io, const char *line)
     return io != NULL && io->write != NULL && io->write(line, io->context);
 }
 
+static const char *test_vector_name(uint8_t vector)
+{
+    return vector == 1U ? "lut" : "sine";
+}
+
+static const char *command_help_text(const char *command)
+{
+    if (command == NULL)
+    {
+        return "commands: help ping override config rom log test\n";
+    }
+
+    if (strcmp(command, "help") == 0)
+    {
+        return "help [command]\n";
+    }
+    if (strcmp(command, "ping") == 0)
+    {
+        return "ping\n";
+    }
+    if (strcmp(command, "override") == 0)
+    {
+        return "override pot|switch set|clear <index> [value] | clear-all\n";
+    }
+    if (strcmp(command, "config") == 0)
+    {
+        return "config set|get <key> [value]\n";
+    }
+    if (strcmp(command, "rom") == 0)
+    {
+        return "rom save-state|load-state|read <addr> <len>|write <addr> <hex>\n";
+    }
+    if (strcmp(command, "log") == 0)
+    {
+        return "log enable <0|1> | level <0-255> | stream [0|1] (q to stop) | stats\n";
+    }
+    if (strcmp(command, "test") == 0)
+    {
+        return "test mode <0|1> | vector <sine|lut> | freq <hz> | amp <value> | status\n";
+    }
+
+    return NULL;
+}
+
 const char *cli_core_error_text(CliStatus status)
 {
     switch (status)
@@ -29,10 +73,20 @@ const char *cli_core_error_text(CliStatus status)
     }
 }
 
-static CliStatus handle_help(const CliIo *io)
+static CliStatus handle_help(char *tokens[CLI_PARSE_MAX_TOKENS], size_t token_count, const CliIo *io)
 {
-    if (!write_line(io,
-                    "ok commands: help ping override config rom log\n"))
+    if (token_count > 2)
+    {
+        return CLI_STATUS_INVALID_ARGUMENTS;
+    }
+
+    const char *help = command_help_text(token_count == 2 ? tokens[1] : NULL);
+    if (help == NULL)
+    {
+        return CLI_STATUS_UNKNOWN_COMMAND;
+    }
+
+    if (!write_line(io, help))
     {
         return CLI_STATUS_SERVICE_ERROR;
     }
@@ -42,7 +96,7 @@ static CliStatus handle_help(const CliIo *io)
 
 static CliStatus handle_ping(const CliIo *io)
 {
-    if (!write_line(io, "ok pong\n"))
+    if (!write_line(io, "pong\n"))
     {
         return CLI_STATUS_SERVICE_ERROR;
     }
@@ -53,6 +107,8 @@ static CliStatus handle_ping(const CliIo *io)
 static CliStatus handle_override(char *tokens[CLI_PARSE_MAX_TOKENS], size_t token_count,
                                  const CliServices *services, const CliIo *io)
 {
+    (void)io;
+
     if (token_count < 2)
     {
         return CLI_STATUS_INVALID_ARGUMENTS;
@@ -69,8 +125,6 @@ static CliStatus handle_override(char *tokens[CLI_PARSE_MAX_TOKENS], size_t toke
         {
             return CLI_STATUS_SERVICE_ERROR;
         }
-
-        write_line(io, "ok override clear-all\n");
         return CLI_STATUS_OK;
     }
 
@@ -100,8 +154,6 @@ static CliStatus handle_override(char *tokens[CLI_PARSE_MAX_TOKENS], size_t toke
             {
                 return CLI_STATUS_SERVICE_ERROR;
             }
-
-            write_line(io, "ok override pot set\n");
             return CLI_STATUS_OK;
         }
 
@@ -116,8 +168,6 @@ static CliStatus handle_override(char *tokens[CLI_PARSE_MAX_TOKENS], size_t toke
             {
                 return CLI_STATUS_SERVICE_ERROR;
             }
-
-            write_line(io, "ok override pot clear\n");
             return CLI_STATUS_OK;
         }
     }
@@ -137,8 +187,6 @@ static CliStatus handle_override(char *tokens[CLI_PARSE_MAX_TOKENS], size_t toke
             {
                 return CLI_STATUS_SERVICE_ERROR;
             }
-
-            write_line(io, "ok override switch set\n");
             return CLI_STATUS_OK;
         }
 
@@ -153,8 +201,6 @@ static CliStatus handle_override(char *tokens[CLI_PARSE_MAX_TOKENS], size_t toke
             {
                 return CLI_STATUS_SERVICE_ERROR;
             }
-
-            write_line(io, "ok override switch clear\n");
             return CLI_STATUS_OK;
         }
     }
@@ -188,8 +234,6 @@ static CliStatus handle_config(char *tokens[CLI_PARSE_MAX_TOKENS], size_t token_
         {
             return CLI_STATUS_SERVICE_ERROR;
         }
-
-        write_line(io, "ok config set\n");
         return CLI_STATUS_OK;
     }
 
@@ -212,7 +256,7 @@ static CliStatus handle_config(char *tokens[CLI_PARSE_MAX_TOKENS], size_t token_
         }
 
         char line[48];
-        snprintf(line, sizeof(line), "ok config %ld\n", (long)value);
+        snprintf(line, sizeof(line), "config %ld\n", (long)value);
         write_line(io, line);
         return CLI_STATUS_OK;
     }
@@ -239,8 +283,6 @@ static CliStatus handle_rom(char *tokens[CLI_PARSE_MAX_TOKENS], size_t token_cou
         {
             return CLI_STATUS_SERVICE_ERROR;
         }
-
-        write_line(io, "ok rom save-state\n");
         return CLI_STATUS_OK;
     }
 
@@ -255,8 +297,6 @@ static CliStatus handle_rom(char *tokens[CLI_PARSE_MAX_TOKENS], size_t token_cou
         {
             return CLI_STATUS_SERVICE_ERROR;
         }
-
-        write_line(io, "ok rom load-state\n");
         return CLI_STATUS_OK;
     }
 
@@ -289,7 +329,7 @@ static CliStatus handle_rom(char *tokens[CLI_PARSE_MAX_TOKENS], size_t token_cou
         }
 
         char line[(CLI_MAX_ROM_BYTES * 2) + 16];
-        size_t used = (size_t)snprintf(line, sizeof(line), "ok rom data ");
+        size_t used = (size_t)snprintf(line, sizeof(line), "rom data ");
         for (size_t i = 0; i < bytes_count && used + 2 < sizeof(line); i++)
         {
             used += (size_t)snprintf(&line[used], sizeof(line) - used, "%02X", bytes[i]);
@@ -324,8 +364,6 @@ static CliStatus handle_rom(char *tokens[CLI_PARSE_MAX_TOKENS], size_t token_cou
         {
             return CLI_STATUS_SERVICE_ERROR;
         }
-
-        write_line(io, "ok rom write\n");
         return CLI_STATUS_OK;
     }
 
@@ -335,6 +373,71 @@ static CliStatus handle_rom(char *tokens[CLI_PARSE_MAX_TOKENS], size_t token_cou
 static CliStatus handle_log(char *tokens[CLI_PARSE_MAX_TOKENS], size_t token_count,
                             const CliServices *services, const CliIo *io)
 {
+    if (token_count < 2)
+    {
+        return CLI_STATUS_INVALID_ARGUMENTS;
+    }
+
+    if (strcmp(tokens[1], "stats") == 0)
+    {
+        if (token_count != 2)
+        {
+            return CLI_STATUS_INVALID_ARGUMENTS;
+        }
+
+        if (services->log_get_stats == NULL)
+        {
+            return CLI_STATUS_UNSUPPORTED;
+        }
+
+        CliLogStats stats = {0};
+        if (!services->log_get_stats(&stats, services->context))
+        {
+            return CLI_STATUS_SERVICE_ERROR;
+        }
+
+        char line[96];
+        snprintf(line, sizeof(line), "log stats enabled=%u level=%u frames=%lu failures=%lu\n",
+                 stats.enabled ? 1U : 0U, stats.level, (unsigned long)stats.frameCount,
+                 (unsigned long)stats.failureCount);
+        write_line(io, line);
+        return CLI_STATUS_OK;
+    }
+
+    if (strcmp(tokens[1], "stream") == 0)
+    {
+        if (services->log_set_stream == NULL)
+        {
+            return CLI_STATUS_UNSUPPORTED;
+        }
+
+        bool enabled = true;
+        if (token_count == 3)
+        {
+            if (!cli_parse_bool01(tokens[2], &enabled))
+            {
+                return CLI_STATUS_PARSE_ERROR;
+            }
+        }
+        else if (token_count != 2)
+        {
+            return CLI_STATUS_INVALID_ARGUMENTS;
+        }
+
+        if (!services->log_set_stream(enabled, services->context))
+        {
+            return CLI_STATUS_SERVICE_ERROR;
+        }
+
+        if (!write_line(io, enabled ? "log stream active (press q to stop)\n"
+                                    : "log stream stopped\n"))
+        {
+            return CLI_STATUS_SERVICE_ERROR;
+        }
+
+        return CLI_STATUS_OK;
+    }
+
     if (token_count != 3)
     {
         return CLI_STATUS_INVALID_ARGUMENTS;
@@ -353,8 +456,6 @@ static CliStatus handle_log(char *tokens[CLI_PARSE_MAX_TOKENS], size_t token_cou
         {
             return CLI_STATUS_SERVICE_ERROR;
         }
-
-        write_line(io, "ok log level\n");
         return CLI_STATUS_OK;
     }
 
@@ -371,8 +472,129 @@ static CliStatus handle_log(char *tokens[CLI_PARSE_MAX_TOKENS], size_t token_cou
         {
             return CLI_STATUS_SERVICE_ERROR;
         }
+        return CLI_STATUS_OK;
+    }
 
-        write_line(io, "ok log enable\n");
+    return CLI_STATUS_UNKNOWN_COMMAND;
+}
+
+static CliStatus handle_test(char *tokens[CLI_PARSE_MAX_TOKENS], size_t token_count,
+                             const CliServices *services, const CliIo *io)
+{
+    if (token_count < 2)
+    {
+        return CLI_STATUS_INVALID_ARGUMENTS;
+    }
+
+    if (strcmp(tokens[1], "status") == 0)
+    {
+        if (token_count != 2)
+        {
+            return CLI_STATUS_INVALID_ARGUMENTS;
+        }
+
+        if (services->test_get_status == NULL)
+        {
+            return CLI_STATUS_UNSUPPORTED;
+        }
+
+        CliTestModeStatus status = {0};
+        if (!services->test_get_status(&status, services->context))
+        {
+            return CLI_STATUS_SERVICE_ERROR;
+        }
+
+        char line[112];
+        snprintf(line, sizeof(line),
+                 "test status mode=%u vector=%s freq_hz=%u amp=%u\n",
+                 status.enabled ? 1U : 0U, test_vector_name(status.vector), status.frequencyHz,
+                 status.amplitude);
+        write_line(io, line);
+        return CLI_STATUS_OK;
+    }
+
+    if (token_count != 3)
+    {
+        return CLI_STATUS_INVALID_ARGUMENTS;
+    }
+
+    if (strcmp(tokens[1], "mode") == 0)
+    {
+        if (services->test_set_mode == NULL)
+        {
+            return CLI_STATUS_UNSUPPORTED;
+        }
+
+        bool enabled = false;
+        if (!cli_parse_bool01(tokens[2], &enabled) ||
+            !services->test_set_mode(enabled, services->context))
+        {
+            return CLI_STATUS_SERVICE_ERROR;
+        }
+
+        return CLI_STATUS_OK;
+    }
+
+    if (strcmp(tokens[1], "vector") == 0)
+    {
+        if (services->test_set_vector == NULL)
+        {
+            return CLI_STATUS_UNSUPPORTED;
+        }
+
+        uint8_t vector = 0;
+        if (strcmp(tokens[2], "sine") == 0)
+        {
+            vector = 0;
+        }
+        else if (strcmp(tokens[2], "lut") == 0)
+        {
+            vector = 1;
+        }
+        else
+        {
+            return CLI_STATUS_PARSE_ERROR;
+        }
+
+        if (!services->test_set_vector(vector, services->context))
+        {
+            return CLI_STATUS_SERVICE_ERROR;
+        }
+
+        return CLI_STATUS_OK;
+    }
+
+    if (strcmp(tokens[1], "freq") == 0)
+    {
+        if (services->test_set_frequency_hz == NULL)
+        {
+            return CLI_STATUS_UNSUPPORTED;
+        }
+
+        uint32_t frequency_hz = 0;
+        if (!cli_parse_u32(tokens[2], &frequency_hz) || frequency_hz > UINT16_MAX ||
+            !services->test_set_frequency_hz((uint16_t)frequency_hz, services->context))
+        {
+            return CLI_STATUS_SERVICE_ERROR;
+        }
+
+        return CLI_STATUS_OK;
+    }
+
+    if (strcmp(tokens[1], "amp") == 0)
+    {
+        if (services->test_set_amplitude == NULL)
+        {
+            return CLI_STATUS_UNSUPPORTED;
+        }
+
+        uint32_t amplitude = 0;
+        if (!cli_parse_u32(tokens[2], &amplitude) || amplitude > UINT16_MAX ||
+            !services->test_set_amplitude((uint16_t)amplitude, services->context))
+        {
+            return CLI_STATUS_SERVICE_ERROR;
+        }
+
         return CLI_STATUS_OK;
     }
 
@@ -407,7 +629,7 @@ CliStatus cli_core_process_line(const char *line, const CliServices *services, c
 
     if (strcmp(tokens[0], "help") == 0)
     {
-        status = handle_help(io);
+        status = handle_help(tokens, token_count, io);
     }
     else if (strcmp(tokens[0], "ping") == 0)
     {
@@ -428,6 +650,10 @@ CliStatus cli_core_process_line(const char *line, const CliServices *services, c
     else if (strcmp(tokens[0], "log") == 0)
     {
         status = handle_log(tokens, token_count, services, io);
+    }
+    else if (strcmp(tokens[0], "test") == 0)
+    {
+        status = handle_test(tokens, token_count, services, io);
     }
 
     const char *error = cli_core_error_text(status);

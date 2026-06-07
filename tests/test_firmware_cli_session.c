@@ -14,6 +14,25 @@ typedef struct
     size_t output_used;
 } CliSessionTestContext;
 
+typedef struct
+{
+    bool log_stream_enabled;
+} SessionServicesContext;
+
+static bool test_log_set_stream(bool enabled, void *context)
+{
+    SessionServicesContext *service_context = (SessionServicesContext *)context;
+    service_context->log_stream_enabled = enabled;
+    return true;
+}
+
+static bool test_log_get_stream(bool *enabled_out, void *context)
+{
+    SessionServicesContext *service_context = (SessionServicesContext *)context;
+    *enabled_out = service_context->log_stream_enabled;
+    return true;
+}
+
 static bool test_write(const char *text, void *context)
 {
     CliSessionTestContext *ctx = (CliSessionTestContext *)context;
@@ -92,7 +111,7 @@ static void test_ping_echo_and_prompt(void)
     cli_session_push_bytes(&session, input, sizeof(input));
 
     expect_true(strstr(ctx.output, "ping\r\n") != NULL, "typed input echoed with newline");
-    expect_true(strstr(ctx.output, "ok pong\r\n") != NULL, "ping result uses CRLF");
+    expect_true(strstr(ctx.output, "pong\r\n") != NULL, "ping result uses CRLF");
     expect_true(strstr(ctx.output, "> ") != NULL, "prompt emitted after command");
 }
 
@@ -111,7 +130,7 @@ static void test_backspace_and_crlf_pair(void)
 
     expect_true(strstr(ctx.output, "pingx\b \b\r\n") != NULL,
                 "backspace erases one character in echo");
-    expect_true(strstr(ctx.output, "ok pong\r\n") != NULL, "corrected line executes");
+    expect_true(strstr(ctx.output, "pong\r\n") != NULL, "corrected line executes");
 
     ctx.output_used = 0;
     ctx.output[0] = '\0';
@@ -119,10 +138,99 @@ static void test_backspace_and_crlf_pair(void)
     const uint8_t help_crlf[] = {'h', 'e', 'l', 'p', '\r', '\n'};
     cli_session_push_bytes(&session, help_crlf, sizeof(help_crlf));
 
-    expect_eq_size(1, count_occurrences(ctx.output, "ok commands:"),
+    expect_eq_size(1, count_occurrences(ctx.output, "commands:"),
                    "CRLF executes command once");
     expect_eq_size(1, count_occurrences(ctx.output, "> "),
                    "CRLF emits one prompt after command");
+}
+
+static void test_arrow_key_escape_sequences_are_ignored(void)
+{
+    CliSessionTestContext ctx = {0};
+    CliServices services = {0};
+    CliSession session = make_session(&ctx, &services);
+    (void)cli_session_start(&session);
+
+    ctx.output_used = 0;
+    ctx.output[0] = '\0';
+
+    const uint8_t input[] = {'p', 'i', 'n', 'g', 0x1BU, '[', 'A', '\r'};
+    cli_session_push_bytes(&session, input, sizeof(input));
+
+    expect_true(strstr(ctx.output, "ping\r\n") != NULL,
+                "arrow-key escape sequence does not alter command echo");
+    expect_true(strstr(ctx.output, "pong\r\n") != NULL,
+                "arrow-key escape sequence does not break command execution");
+}
+
+static void test_arrow_key_escape_sequence_split_across_reads(void)
+{
+    CliSessionTestContext ctx = {0};
+    CliServices services = {0};
+    CliSession session = make_session(&ctx, &services);
+    (void)cli_session_start(&session);
+
+    ctx.output_used = 0;
+    ctx.output[0] = '\0';
+
+    const uint8_t prefix[] = {'p', 'i', 'n', 'g', 0x1BU};
+    const uint8_t csi_and_end[] = {'[', 'A', '\r'};
+
+    cli_session_push_bytes(&session, prefix, sizeof(prefix));
+    cli_session_push_bytes(&session, csi_and_end, sizeof(csi_and_end));
+
+    expect_true(strstr(ctx.output, "ping\r\n") != NULL,
+                "split arrow-key sequence does not alter command echo");
+    expect_true(strstr(ctx.output, "pong\r\n") != NULL,
+                "split arrow-key sequence does not break command execution");
+}
+
+static void test_log_stream_command_hides_prompt_until_quit(void)
+{
+    CliSessionTestContext ctx = {0};
+    SessionServicesContext services_context = {.log_stream_enabled = false};
+    CliServices services = {0};
+    services.log_set_stream = test_log_set_stream;
+    services.log_get_stream = test_log_get_stream;
+    services.context = &services_context;
+
+    CliSession session = make_session(&ctx, &services);
+    (void)cli_session_start(&session);
+
+    ctx.output_used = 0;
+    ctx.output[0] = '\0';
+
+    const uint8_t command[] = {'l', 'o', 'g', ' ', 's', 't', 'r', 'e', 'a', 'm', '\r'};
+    cli_session_push_bytes(&session, command, sizeof(command));
+
+    expect_true(services_context.log_stream_enabled, "log stream command enables stream mode");
+    expect_true(strstr(ctx.output, "log stream active") != NULL,
+                "log stream command emits active status");
+    expect_eq_size(0, count_occurrences(ctx.output, "> "),
+                   "stream mode does not emit prompt after command");
+}
+
+static void test_log_stream_mode_exits_on_q(void)
+{
+    CliSessionTestContext ctx = {0};
+    SessionServicesContext services_context = {.log_stream_enabled = true};
+    CliServices services = {0};
+    services.log_set_stream = test_log_set_stream;
+    services.log_get_stream = test_log_get_stream;
+    services.context = &services_context;
+
+    CliSession session = make_session(&ctx, &services);
+    (void)cli_session_start(&session);
+    session.log_stream_mode = true;
+
+    ctx.output_used = 0;
+    ctx.output[0] = '\0';
+
+    const uint8_t input[] = {'q'};
+    cli_session_push_bytes(&session, input, sizeof(input));
+
+    expect_false(services_context.log_stream_enabled, "q disables log stream mode");
+    expect_true(strstr(ctx.output, "\r\n> ") != NULL, "q returns the CLI prompt");
 }
 
 int main(void)
@@ -130,6 +238,10 @@ int main(void)
     test_start_writes_banner_once();
     test_ping_echo_and_prompt();
     test_backspace_and_crlf_pair();
+    test_arrow_key_escape_sequences_are_ignored();
+    test_arrow_key_escape_sequence_split_across_reads();
+    test_log_stream_command_hides_prompt_until_quit();
+    test_log_stream_mode_exits_on_q();
 
     if (failures != 0)
     {

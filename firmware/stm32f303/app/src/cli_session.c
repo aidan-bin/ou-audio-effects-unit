@@ -87,6 +87,56 @@ static bool session_write_char(CliSession *session, char value)
     return session_write(session, text);
 }
 
+static bool session_is_log_stream_active(CliSession *session)
+{
+    bool enabled = false;
+
+    if (session == NULL || session->services == NULL || session->services->log_get_stream == NULL)
+    {
+        return false;
+    }
+
+    if (!session->services->log_get_stream(&enabled, session->services->context))
+    {
+        return false;
+    }
+
+    return enabled;
+}
+
+static void session_set_log_stream_mode(CliSession *session, bool enabled)
+{
+    if (session == NULL)
+    {
+        return;
+    }
+
+    session->log_stream_mode = enabled;
+    session->escape_sequence_active = false;
+    session->escape_sequence_csi = false;
+}
+
+static void session_refresh_log_stream_mode(CliSession *session)
+{
+    session_set_log_stream_mode(session, session_is_log_stream_active(session));
+}
+
+static bool session_exit_log_stream_mode(CliSession *session)
+{
+    if (session == NULL || session->services == NULL || session->services->log_set_stream == NULL)
+    {
+        return false;
+    }
+
+    if (!session->services->log_set_stream(false, session->services->context))
+    {
+        return false;
+    }
+
+    session_set_log_stream_mode(session, false);
+    return true;
+}
+
 static bool is_printable_ascii(uint8_t value)
 {
     return value >= 0x20U && value <= 0x7EU;
@@ -107,8 +157,16 @@ static void cli_session_handle_line_complete(CliSession *session)
         (void)cli_core_process_line(session->current_line, session->services, &session->core_io);
     }
 
+    session_refresh_log_stream_mode(session);
+
     session->current_length = 0;
     session->drop_current_line = false;
+
+    if (session->log_stream_mode)
+    {
+        return;
+    }
+
     (void)session_write_prompt(session);
 }
 
@@ -130,6 +188,9 @@ void cli_session_init(CliSession *session, const CliServices *services,
     session->services = services;
     session->core_io.write = session_core_write;
     session->core_io.context = session;
+    session->log_stream_mode = false;
+    session->escape_sequence_active = false;
+    session->escape_sequence_csi = false;
 }
 
 bool cli_session_start(CliSession *session)
@@ -165,6 +226,85 @@ void cli_session_push_bytes(CliSession *session, const uint8_t *bytes, size_t by
     for (size_t i = 0; i < byte_count; i++)
     {
         uint8_t value = bytes[i];
+
+        if (session->log_stream_mode)
+        {
+            if (session->escape_sequence_active)
+            {
+                if (!session->escape_sequence_csi)
+                {
+                    session->escape_sequence_csi = (value == '[' || value == 'O');
+                    if (session->escape_sequence_csi)
+                    {
+                        continue;
+                    }
+
+                    session->escape_sequence_active = false;
+                    continue;
+                }
+
+                if (value >= 0x40U && value <= 0x7EU)
+                {
+                    session->escape_sequence_active = false;
+                    session->escape_sequence_csi = false;
+                }
+
+                continue;
+            }
+
+            if (value == 0x1BU)
+            {
+                session->escape_sequence_active = true;
+                session->escape_sequence_csi = false;
+                continue;
+            }
+
+            if ((value == 'q' || value == 'Q') && session->current_length == 0U)
+            {
+                if (session_exit_log_stream_mode(session))
+                {
+                    (void)session_write(session, "\r\n");
+                    (void)session_write_prompt(session);
+                }
+                continue;
+            }
+
+            continue;
+        }
+
+        if (value == 0x1BU)
+        {
+            session->escape_sequence_active = true;
+            session->escape_sequence_csi = false;
+            continue;
+        }
+
+        if (session->escape_sequence_active)
+        {
+            if (!session->escape_sequence_csi)
+            {
+                session->escape_sequence_csi = (value == '[' || value == 'O');
+                if (session->escape_sequence_csi)
+                {
+                    continue;
+                }
+
+                session->escape_sequence_active = false;
+                session->escape_sequence_csi = false;
+            }
+
+            else if (value >= 0x40U && value <= 0x7EU)
+            {
+                session->escape_sequence_active = false;
+                session->escape_sequence_csi = false;
+                continue;
+            }
+
+            else
+            {
+                continue;
+            }
+        }
 
         if (value == '\r')
         {

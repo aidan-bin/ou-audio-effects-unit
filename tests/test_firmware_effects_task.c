@@ -23,7 +23,12 @@ typedef struct
     EffectsParams latchedParams;
 
     uint32_t failureReports;
+    uint32_t frameReports;
     uint32_t outstandingAllocs;
+
+    bool replaceInputForTestingSucceeds;
+    bool replaceInputForTestingCalled;
+    uint16_t replaceInputValue;
 } EffectsTaskTestOpsState;
 
 static bool wait_for_adc(uint32_t timeoutTicks, uint16_t **bufPtr, void *context)
@@ -106,10 +111,33 @@ static bool read_latched_state(EffectsState *stateOut, EffectsParams *paramsOut,
     return true;
 }
 
+static bool replace_input_for_testing(uint16_t *buf, size_t count, void *context)
+{
+    EffectsTaskTestOpsState *state = (EffectsTaskTestOpsState *)context;
+    if (!state->replaceInputForTestingSucceeds)
+    {
+        return false;
+    }
+
+    state->replaceInputForTestingCalled = true;
+    for (size_t i = 0; i < count; i++)
+    {
+        buf[i] = state->replaceInputValue;
+    }
+
+    return true;
+}
+
 static void report_failure(void *context)
 {
     EffectsTaskTestOpsState *state = (EffectsTaskTestOpsState *)context;
     state->failureReports++;
+}
+
+static void report_frame_complete(void *context)
+{
+    EffectsTaskTestOpsState *state = (EffectsTaskTestOpsState *)context;
+    state->frameReports++;
 }
 
 static uint32_t ms_to_ticks(uint32_t ms, void *context)
@@ -127,7 +155,9 @@ static EffectsTaskOps make_ops(EffectsTaskTestOpsState *state)
         .alloc = alloc_buf,
         .free = free_buf,
         .read_latched_state = read_latched_state,
+        .replace_input_for_testing = replace_input_for_testing,
         .report_failure = report_failure,
+        .report_frame_complete = report_frame_complete,
         .ms_to_ticks = ms_to_ticks,
         .context = state,
     };
@@ -169,6 +199,8 @@ static void test_effects_task_happy_path_matches_pipeline(void)
     opsState.waitForAdcSucceeds = true;
     opsState.waitForDacSucceeds = true;
     opsState.dmaCopySucceeds = true;
+    opsState.replaceInputForTestingSucceeds = true;
+    opsState.replaceInputValue = X_AXIS + 100;
     opsState.adcBufferToReturn = adcA;
     opsState.dacBufferToReturn = dacA;
 
@@ -186,12 +218,20 @@ static void test_effects_task_happy_path_matches_pipeline(void)
 
     bool stepOk = effects_task_step(&taskContext, &ops);
     expect_true(stepOk, "effects task step succeeds");
+    expect_true(opsState.replaceInputForTestingCalled, "test input replacement hook called");
+    expect_eq_u32(1, opsState.frameReports, "frame report callback called on success");
     expect_true(opsState.outstandingAllocs == 0, "effects task step frees temporary allocations");
 
     uint16_t expected[8] = {0};
     expect_true(effects_pipeline_sync_params(&expectedPipeline, &opsState.latchedParams) == 0,
                 "expected pipeline sync succeeds");
-    expect_true(effects_pipeline_process(&expectedPipeline, OVERDRIVE, adcA, expected, 8) == 0,
+    uint16_t expectedInput[8] = {0};
+    for (size_t i = 0; i < 8; i++)
+    {
+        expectedInput[i] = opsState.replaceInputValue;
+    }
+
+    expect_true(effects_pipeline_process(&expectedPipeline, OVERDRIVE, expectedInput, expected, 8) == 0,
                 "expected overdrive process succeeds");
 
     for (size_t i = 0; i < 8; i++)
@@ -232,6 +272,7 @@ static void test_effects_task_rejects_stray_adc_notification(void)
     opsState.waitForAdcSucceeds = true;
     opsState.waitForDacSucceeds = true;
     opsState.dmaCopySucceeds = true;
+    opsState.replaceInputForTestingSucceeds = true;
     opsState.adcBufferToReturn = stray;
     opsState.dacBufferToReturn = dacA;
 
@@ -245,10 +286,57 @@ static void test_effects_task_rejects_stray_adc_notification(void)
     expect_true(opsState.outstandingAllocs == 0, "no allocations leaked on stray notification");
 }
 
+static void test_effects_task_reports_failure_when_test_replace_fails(void)
+{
+    EffectsPipeline pipeline;
+    expect_true(effects_pipeline_init(&pipeline) == 0, "pipeline init succeeds");
+
+    uint16_t adcA[4] = {X_AXIS};
+    uint16_t adcB[4] = {0};
+    uint16_t dacA[4] = {0};
+    uint16_t dacB[4] = {0};
+    uint16_t delaySamples[8] = {0};
+
+    EffectsTaskContext taskContext = {
+        .pipeline = &pipeline,
+        .effectsState = NULL,
+        .effectsParams = NULL,
+        .adcBufA = adcA,
+        .adcBufB = adcB,
+        .dacBufA = dacA,
+        .dacBufB = dacB,
+        .delaySamplesBuf = delaySamples,
+        .sampleBufLen = 4,
+        .delaySamplesLen = 8,
+        .samplingPeriodUs = 25,
+        .processingSlackMs = 1,
+    };
+
+    EffectsTaskTestOpsState opsState = {0};
+    opsState.waitForAdcSucceeds = true;
+    opsState.waitForDacSucceeds = true;
+    opsState.dmaCopySucceeds = true;
+    opsState.replaceInputForTestingSucceeds = false;
+    opsState.adcBufferToReturn = adcA;
+    opsState.dacBufferToReturn = dacA;
+
+    effects_state_set_default_order(&opsState.latchedState);
+    memset(&opsState.latchedParams, 0, sizeof(opsState.latchedParams));
+
+    EffectsTaskOps ops = make_ops(&opsState);
+
+    bool stepOk = effects_task_step(&taskContext, &ops);
+    expect_false(stepOk, "effects task fails when test replacement fails");
+    expect_eq_u32(0, opsState.frameReports, "frame report not called on failure");
+    expect_eq_u32(0, opsState.failureReports,
+                  "replacement hook failure exits early without processing-failure callback");
+}
+
 int main(void)
 {
     test_effects_task_happy_path_matches_pipeline();
     test_effects_task_rejects_stray_adc_notification();
+    test_effects_task_reports_failure_when_test_replace_fails();
 
     if (failures != 0)
     {

@@ -26,6 +26,22 @@ typedef struct
 
 typedef struct
 {
+    bool enabled;
+    uint8_t vector;
+    uint16_t frequencyHz;
+    uint16_t amplitude;
+} CliTestModeStatus;
+
+typedef struct
+{
+    bool enabled;
+    uint8_t level;
+    uint32_t frameCount;
+    uint32_t failureCount;
+} CliLogStats;
+
+typedef struct
+{
     bool (*set_pot_override)(uint8_t potIndex, uint32_t value, void *context);
     bool (*clear_pot_override)(uint8_t potIndex, void *context);
     bool (*set_switch_override)(uint8_t switchIndex, bool enabled, void *context);
@@ -44,6 +60,15 @@ typedef struct
 
     bool (*log_set_level)(uint8_t level, void *context);
     bool (*log_set_enabled)(bool enabled, void *context);
+    bool (*log_set_stream)(bool enabled, void *context);
+    bool (*log_get_stream)(bool *enabledOut, void *context);
+    bool (*log_get_stats)(CliLogStats *statsOut, void *context);
+
+    bool (*test_set_mode)(bool enabled, void *context);
+    bool (*test_set_vector)(uint8_t vector, void *context);
+    bool (*test_set_frequency_hz)(uint16_t frequencyHz, void *context);
+    bool (*test_set_amplitude)(uint16_t amplitude, void *context);
+    bool (*test_get_status)(CliTestModeStatus *statusOut, void *context);
     void *context;
 } CliServices;
 

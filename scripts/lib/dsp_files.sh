@@ -7,10 +7,22 @@ APP_LINT_FILES=()
 CUBEMX_USER_CODE_FILES=()
 
 populate_cubemx_user_code_files() {
-    find \
-        firmware/stm32f303/cubemx/Core \
-        firmware/stm32f303/cubemx/USB_DEVICE/App \
-        firmware/stm32f303/cubemx/USB_DEVICE/Target \
+    local user_code_dirs=(
+        firmware/stm32f303/cubemx/Core
+        firmware/stm32f303/cubemx/USB_DEVICE/App
+        firmware/stm32f303/cubemx/USB_DEVICE/Target
+        firmware/stm32f303/nucleo-ou-audio-effects/Core
+    )
+    local existing_dirs=()
+    local dir
+
+    for dir in "${user_code_dirs[@]}"; do
+        [[ -d "$dir" ]] && existing_dirs+=("$dir")
+    done
+
+    [[ "${#existing_dirs[@]}" -eq 0 ]] && return 0
+
+    find "${existing_dirs[@]}" \
         -type f \
         \( -name '*.c' -o -name '*.h' \) \
         | LC_ALL=C sort
@@ -95,10 +107,7 @@ populate_c_file_lists() {
     while IFS= read -r source_file; do
         C_CUBEMX_SECTION_LINT_FILES+=("$source_file")
     done < <(
-        find firmware/stm32f303/cubemx/Core firmware/stm32f303/cubemx/USB_DEVICE/App firmware/stm32f303/cubemx/USB_DEVICE/Target \
-            -type f \
-            -name '*.c' \
-            | LC_ALL=C sort
+        populate_cubemx_user_code_files | grep -E '\.c$' || true
     )
 }
 

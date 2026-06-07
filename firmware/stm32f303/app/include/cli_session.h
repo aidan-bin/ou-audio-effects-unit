@@ -26,6 +26,9 @@ typedef struct
     bool drop_current_line;
     bool started;
     bool last_byte_was_cr;
+    bool log_stream_mode;
+    bool escape_sequence_active;
+    bool escape_sequence_csi;
 } CliSession;
 
 void cli_session_init(CliSession *session, const CliServices *services,

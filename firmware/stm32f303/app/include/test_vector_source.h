@@ -1,0 +1,20 @@
+#ifndef TEST_VECTOR_SOURCE_H
+#define TEST_VECTOR_SOURCE_H
+
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include "cli_core.h"
+
+typedef struct
+{
+    uint32_t sample_rate_hz;
+    uint32_t phase_q16;
+} TestVectorSource;
+
+void test_vector_source_init(TestVectorSource *source, uint32_t sample_rate_hz);
+bool test_vector_source_fill_buffer(TestVectorSource *source, const CliTestModeStatus *status,
+                                    uint16_t *buf, size_t count);
+
+#endif

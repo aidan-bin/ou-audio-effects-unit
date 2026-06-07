@@ -127,9 +127,9 @@ run_clang_format_scope() {
 	local clang_format_bin="$1"
 	shift
 
-	"$clang_format_bin" "$@" "${DSP_FORMAT_FILES[@]}" "${APP_FORMAT_FILES[@]}"
+	"$clang_format_bin" "$@" "${C_FORMAT_FULL_FILES[@]}"
 
-	for file in "${CUBEMX_USER_CODE_FILES[@]}"; do
+	for file in "${C_CUBEMX_SECTION_FILES[@]}"; do
 		local line_args=()
 		local line_arg
 		[[ ! -f "$file" ]] && continue
@@ -161,8 +161,10 @@ run_lint() {
 	local clang_tidy_bin
 	local host_extra_args=()
 	local cubemx_extra_args=()
+	local nucleo_extra_args=()
 	local root_compile_db_dir="build"
 	local cubemx_compile_db_dir=""
+	local nucleo_compile_db_dir=""
 
 	clang_tidy_bin="$(ensure_clang_tool clang-tidy)"
 
@@ -213,10 +215,38 @@ run_lint() {
 		return 1
 	}
 
-	configure_cubemx_tidy_extra_args() {
+	resolve_nucleo_compile_db_dir() {
+		local candidate
+
+		if [[ -n "${NUCLEO_LINT_BUILD_DIR:-}" ]]; then
+			candidate="$NUCLEO_LINT_BUILD_DIR"
+			if [[ -f "$candidate/compile_commands.json" ]]; then
+				echo "$candidate"
+				return 0
+			fi
+
+			echo "Configured NUCLEO_LINT_BUILD_DIR has no compile_commands.json: $candidate"
+			return 1
+		fi
+
+		for candidate in \
+			firmware/stm32f303/nucleo-ou-audio-effects/build/Debug \
+			firmware/stm32f303/nucleo-ou-audio-effects/build/Release \
+			firmware/stm32f303/nucleo-ou-audio-effects/build; do
+			if [[ -f "$candidate/compile_commands.json" ]]; then
+				echo "$candidate"
+				return 0
+			fi
+		done
+
+		return 1
+	}
+
+	emit_arm_tidy_extra_args() {
 		local compile_db_file="$1"
 		local arm_gcc_bin=""
 		local include_dir
+		local extra_args=()
 
 		arm_gcc_bin="$(grep -m1 -o '/[^ ]*arm-none-eabi-gcc' "$compile_db_file" || true)"
 		if [[ -z "$arm_gcc_bin" ]] && command -v arm-none-eabi-gcc >/dev/null 2>&1; then
@@ -237,14 +267,16 @@ run_lint() {
 			fi
 
 			if [[ -d "$include_dir" ]]; then
-				cubemx_extra_args+=("--extra-arg-before=-isystem$include_dir")
+				extra_args+=("--extra-arg-before=-isystem$include_dir")
 			fi
 		done
 
-		if [[ "${#cubemx_extra_args[@]}" -eq 0 ]]; then
+		if [[ "${#extra_args[@]}" -eq 0 ]]; then
 			echo "No valid ARM GCC include directories found for CubeMX lint."
 			return 1
 		fi
+
+		printf '%s\n' "${extra_args[@]}"
 	}
 
 	select_app_compile_db_dir() {
@@ -283,6 +315,10 @@ run_lint() {
 			tidy_args+=("${cubemx_extra_args[@]}")
 		fi
 
+		if [[ -n "$nucleo_compile_db_dir" && "$compile_db_dir" == "$nucleo_compile_db_dir" ]]; then
+			tidy_args+=("${nucleo_extra_args[@]}")
+		fi
+
 		if [[ ! -f "$compile_db_file" ]]; then
 			echo "Missing compile database for lint at $compile_db_file"
 			return 1
@@ -316,31 +352,65 @@ run_lint() {
 		return 1
 	fi
 
-	if ! configure_cubemx_tidy_extra_args "$cubemx_compile_db_dir/compile_commands.json"; then
+	if ! nucleo_compile_db_dir="$(resolve_nucleo_compile_db_dir)"; then
+		echo "Missing Nucleo compile database (expected under firmware/stm32f303/nucleo-ou-audio-effects/build or via NUCLEO_LINT_BUILD_DIR)."
+		echo "Configure or regenerate the Nucleo build tree to enable USER CODE lint gating."
+		return 1
+	fi
+
+	while IFS= read -r arg; do
+		[[ -n "$arg" ]] && cubemx_extra_args+=("$arg")
+	done < <(emit_arm_tidy_extra_args "$cubemx_compile_db_dir/compile_commands.json")
+
+	if [[ "${#cubemx_extra_args[@]}" -eq 0 ]]; then
 		echo "Failed to configure CubeMX clang-tidy include paths from ARM GCC toolchain."
 		return 1
 	fi
 
-	for file in "${DSP_LINT_FILES[@]}"; do
-		run_tidy "$file" '^dsp/' "$root_compile_db_dir"
-	done
+	while IFS= read -r arg; do
+		[[ -n "$arg" ]] && nucleo_extra_args+=("$arg")
+	done < <(emit_arm_tidy_extra_args "$nucleo_compile_db_dir/compile_commands.json")
 
-	for file in "${APP_LINT_FILES[@]}"; do
-		local compile_db_dir
+	if [[ "${#nucleo_extra_args[@]}" -eq 0 ]]; then
+		echo "Failed to configure Nucleo clang-tidy include paths from ARM GCC toolchain."
+		return 1
+	fi
 
-		if ! compile_db_dir="$(select_app_compile_db_dir "$file")"; then
-			echo "Lint requires compile_commands entry for $file in root or CubeMX compile database."
-			return 1
+	for file in "${C_LINT_FULL_FILES[@]}"; do
+		local compile_db_dir="$root_compile_db_dir"
+		local header_filter='^dsp/'
+		local checks_override=""
+
+		if [[ "$file" == firmware/stm32f303/app/* ]]; then
+			header_filter='^(dsp|firmware/stm32f303/app)/'
+			if ! compile_db_dir="$(select_app_compile_db_dir "$file")"; then
+				echo "Lint requires compile_commands entry for $file in root or CubeMX compile database."
+				return 1
+			fi
+		elif [[ "$file" == tests/* || "$file" == host/* ]]; then
+			header_filter='^(dsp|firmware/stm32f303/app|tests|host)/'
+			checks_override='clang-analyzer-*,bugprone-*,-bugprone-easily-swappable-parameters,performance-*,-readability-identifier-naming,-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,-clang-analyzer-optin.core.EnumCastOutOfRange'
 		fi
 
-		run_tidy "$file" '^(dsp|firmware/stm32f303/app)/' "$compile_db_dir"
+		run_tidy "$file" "$header_filter" "$compile_db_dir" "" fail "$checks_override"
 	done
 
-	for file in "${CUBEMX_USER_CODE_FILES[@]}"; do
+	for file in "${C_CUBEMX_SECTION_LINT_FILES[@]}"; do
 		local line_filter
 		local line_filter_file
+		local generated_compile_db_dir
+		local checks_override='clang-analyzer-*,bugprone-*,-bugprone-easily-swappable-parameters,performance-*,-readability-identifier-naming,-performance-no-int-to-ptr,-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling'
 		[[ ! -f "$file" ]] && continue
 		[[ "$file" != *.c ]] && continue
+
+		if [[ "$file" == firmware/stm32f303/cubemx/* ]]; then
+			generated_compile_db_dir="$cubemx_compile_db_dir"
+		elif [[ "$file" == firmware/stm32f303/nucleo-ou-audio-effects/* ]]; then
+			generated_compile_db_dir="$nucleo_compile_db_dir"
+		else
+			echo "Unsupported generated source path for USER CODE lint: $file"
+			return 1
+		fi
 
 		line_filter_file="$file"
 		[[ "$line_filter_file" != /* ]] && line_filter_file="$REPO_ROOT/$line_filter_file"
@@ -348,8 +418,8 @@ run_lint() {
 		line_filter="$(user_code_clang_tidy_line_filter "$line_filter_file")"
 		[[ -z "$line_filter" ]] && continue
 
-		run_tidy "$file" '^(dsp|firmware/stm32f303/app|firmware/stm32f303/cubemx)/' \
-			"$cubemx_compile_db_dir" "$line_filter" fail
+		run_tidy "$file" '^(dsp|firmware/stm32f303/app|firmware/stm32f303/cubemx|firmware/stm32f303/nucleo-ou-audio-effects)/' \
+			"$generated_compile_db_dir" "$line_filter" fail "$checks_override"
 	done
 }
 

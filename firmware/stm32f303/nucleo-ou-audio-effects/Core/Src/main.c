@@ -24,6 +24,7 @@
 /* USER CODE BEGIN Includes */
 
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -33,6 +34,7 @@
 #include "effects_model.h"
 #include "effects_pipeline.h"
 #include "effects_task.h"
+#include "test_vector_source.h"
 
 /* USER CODE END Includes */
 
@@ -48,6 +50,9 @@
 #define ADC_BUF_LEN (2U * SAMPLE_BUF_LEN)
 #define DAC_BUF_LEN ADC_BUF_LEN
 #define NUM_DELAY_SAMPLES MAX_ECHO_DELAY_SAMPLES
+#define HEARTBEAT_PERIOD_MS_DEFAULT 500U
+#define HEARTBEAT_PERIOD_MS_MIN 50U
+#define HEARTBEAT_PERIOD_MS_MAX 5000U
 
 /* USER CODE END PD */
 
@@ -86,10 +91,12 @@ static volatile uint16_t *const adc_buf_a = adc_buf;
 static volatile uint16_t *const adc_buf_b = &adc_buf[SAMPLE_BUF_LEN];
 static volatile uint16_t *const dac_buf_a = dac_buf;
 static volatile uint16_t *const dac_buf_b = &dac_buf[SAMPLE_BUF_LEN];
+static volatile uint32_t heartbeat_period_ms = HEARTBEAT_PERIOD_MS_DEFAULT;
 
 static CliServiceAdapterContext cli_service_adapter_context;
 static CliServices cli_services;
 static CliSession cli_session;
+static TestVectorSource test_vector_source;
 
 /* USER CODE END PV */
 
@@ -117,15 +124,25 @@ static void *effects_task_alloc(size_t size, void *context);
 static void effects_task_free(void *ptr, void *context);
 static bool effects_task_read_latched_state(EffectsState *state, EffectsParams *params,
                                             void *context);
+static bool effects_task_replace_input_for_testing(uint16_t *buf, size_t count, void *context);
 static void effects_task_report_failure(void *context);
+static void effects_task_report_frame_complete(void *context);
+
+static bool boot_uart_write(const char *text);
+static void boot_log_line(const char *text);
+static void boot_log_u32(const char *label, uint32_t value);
 
 static void notify_task_from_isr(osThreadId task_handle, uint32_t value);
 static bool cli_uart_write(const char *text, void *context);
 static void cli_service_lock(void *context);
 static void cli_service_unlock(void *context);
+static void cli_uart_recover_rx_errors(void);
+static void cli_emit_stream_status_if_due(void);
 static void init_cli_service_adapter(void);
 static void init_effects_defaults(void);
 static uint32_t compute_sampling_period_us(void);
+static uint32_t read_heartbeat_period_ms(void);
+static void configure_status_led_on_indicator(void);
 
 void startEffectsTask(void const *argument);
 void startCliTask(void const *argument);
@@ -137,295 +154,465 @@ void startCliTask(void const *argument);
 
 static uint32_t effects_task_ms_to_ticks(uint32_t ms, void *context)
 {
-  (void)context;
-  return pdMS_TO_TICKS(ms);
+    (void)context;
+    return pdMS_TO_TICKS(ms);
 }
 
 static bool effects_task_wait_for_adc_buffer(uint32_t timeout_ticks, uint16_t **buf_ptr,
-                       void *context)
+                                             void *context)
 {
-  (void)context;
-  if (buf_ptr == NULL)
-  {
-    return false;
-  }
+    (void)context;
+    if (buf_ptr == NULL)
+    {
+        return false;
+    }
 
-  uint32_t notification_value = 0;
-  if (xTaskNotifyWait(0, 0xFFFFFFFFUL, &notification_value, (TickType_t)timeout_ticks) != pdTRUE)
-  {
-    return false;
-  }
+    uint32_t notification_value = 0;
+    if (xTaskNotifyWait(0, 0xFFFFFFFFUL, &notification_value, (TickType_t)timeout_ticks) != pdTRUE)
+    {
+        return false;
+    }
 
-  *buf_ptr = (uint16_t *)(uintptr_t)notification_value;
-  return true;
+    *buf_ptr = (uint16_t *)(uintptr_t)notification_value;
+    return true;
 }
 
 static bool effects_task_wait_for_dac_buffer(uint32_t timeout_ticks, uint16_t **buf_ptr,
-                       void *context)
+                                             void *context)
 {
-  return effects_task_wait_for_adc_buffer(timeout_ticks, buf_ptr, context);
+    return effects_task_wait_for_adc_buffer(timeout_ticks, buf_ptr, context);
 }
 
 static bool effects_task_dma_copy(const uint16_t *src, uint16_t *dst, size_t count,
-                  uint32_t timeout_ticks, void *context)
+                                  uint32_t timeout_ticks, void *context)
 {
-  (void)context;
-  (void)timeout_ticks;
+    (void)context;
+    (void)timeout_ticks;
 
-  if (src == NULL || dst == NULL || count == 0)
-  {
-    return false;
-  }
+    if (src == NULL || dst == NULL || count == 0)
+    {
+        return false;
+    }
 
-  (void)memcpy(dst, src, count * sizeof(uint16_t));
-  return true;
+    (void)memcpy(dst, src, count * sizeof(uint16_t));
+    return true;
 }
 
 static void *effects_task_alloc(size_t size, void *context)
 {
-  (void)context;
-  return pvPortMalloc(size);
+    (void)context;
+    return pvPortMalloc(size);
 }
 
 static void effects_task_free(void *ptr, void *context)
 {
-  (void)context;
-  if (ptr != NULL)
-  {
-    vPortFree(ptr);
-  }
+    (void)context;
+    if (ptr != NULL)
+    {
+        vPortFree(ptr);
+    }
 }
 
 static bool effects_task_read_latched_state(EffectsState *state, EffectsParams *params,
-                      void *context)
+                                            void *context)
 {
-  (void)context;
-  if (state == NULL || params == NULL)
-  {
-    return false;
-  }
+    (void)context;
+    if (state == NULL || params == NULL)
+    {
+        return false;
+    }
 
-  taskENTER_CRITICAL();
-  *state = effects_state;
-  *params = effects_params;
-  taskEXIT_CRITICAL();
-  return true;
+    taskENTER_CRITICAL();
+    *state = effects_state;
+    *params = effects_params;
+    taskEXIT_CRITICAL();
+    return true;
+}
+
+static bool effects_task_replace_input_for_testing(uint16_t *buf, size_t count, void *context)
+{
+    CliServiceAdapterContext *adapter_context = (CliServiceAdapterContext *)context;
+    CliTestModeStatus status = {0};
+
+    if (buf == NULL || adapter_context == NULL)
+    {
+        return false;
+    }
+
+    if (!cli_service_adapter_get_test_mode_status(adapter_context, &status))
+    {
+        return false;
+    }
+
+    if (!status.enabled)
+    {
+        return true;
+    }
+
+    return test_vector_source_fill_buffer(&test_vector_source, &status, buf, count);
 }
 
 static void effects_task_report_failure(void *context)
 {
-  (void)context;
-  HAL_GPIO_TogglePin(LED_STATUS_GPIO_Port, LED_STATUS_Pin);
+    cli_service_adapter_note_processing_failure((CliServiceAdapterContext *)context);
+    HAL_GPIO_TogglePin(LED_STATUS_GPIO_Port, LED_STATUS_Pin);
+}
+
+static void effects_task_report_frame_complete(void *context)
+{
+    cli_service_adapter_note_frame_processed((CliServiceAdapterContext *)context);
+}
+
+static bool boot_uart_write(const char *text)
+{
+    if (text == NULL)
+    {
+        return false;
+    }
+
+    const size_t length = strlen(text);
+    if (length == 0 || length > UINT16_MAX)
+    {
+        return false;
+    }
+
+    return HAL_UART_Transmit(&huart2, (uint8_t *)text, (uint16_t)length, 25) == HAL_OK;
+}
+
+static void boot_log_line(const char *text)
+{
+    (void)boot_uart_write(text);
+    (void)boot_uart_write("\r\n");
+}
+
+static void boot_log_u32(const char *label, uint32_t value)
+{
+    char line[96];
+    (void)snprintf(line, sizeof(line), "%s%lu", label, (unsigned long)value);
+    boot_log_line(line);
 }
 
 static void notify_task_from_isr(osThreadId task_handle, uint32_t value)
 {
-  if (task_handle == NULL)
-  {
-    return;
-  }
+    if (task_handle == NULL)
+    {
+        return;
+    }
 
-  BaseType_t higher_priority_task_woken = pdFALSE;
-  xTaskNotifyFromISR((TaskHandle_t)task_handle, value, eSetValueWithOverwrite,
-             &higher_priority_task_woken);
-  portYIELD_FROM_ISR(higher_priority_task_woken);
+    BaseType_t higher_priority_task_woken = pdFALSE;
+    xTaskNotifyFromISR((TaskHandle_t)task_handle, value, eSetValueWithOverwrite,
+                       &higher_priority_task_woken);
+    portYIELD_FROM_ISR(higher_priority_task_woken);
 }
 
 static bool cli_uart_write(const char *text, void *context)
 {
-  (void)context;
-  if (text == NULL)
-  {
-    return false;
-  }
+    (void)context;
+    if (text == NULL)
+    {
+        return false;
+    }
 
-  const size_t length = strlen(text);
-  if (length == 0 || length > UINT16_MAX)
-  {
-    return false;
-  }
+    const size_t length = strlen(text);
+    if (length == 0 || length > UINT16_MAX)
+    {
+        return false;
+    }
 
-  return HAL_UART_Transmit(&huart2, (uint8_t *)text, (uint16_t)length, 25) == HAL_OK;
+    return HAL_UART_Transmit(&huart2, (uint8_t *)text, (uint16_t)length, 25) == HAL_OK;
 }
 
 static void cli_service_lock(void *context)
 {
-  (void)context;
-  taskENTER_CRITICAL();
+    (void)context;
+    taskENTER_CRITICAL();
 }
 
 static void cli_service_unlock(void *context)
 {
-  (void)context;
-  taskEXIT_CRITICAL();
+    (void)context;
+    taskEXIT_CRITICAL();
+}
+
+static void cli_uart_recover_rx_errors(void)
+{
+    if (__HAL_UART_GET_FLAG(&huart2, UART_FLAG_ORE) != RESET)
+    {
+        __HAL_UART_CLEAR_OREFLAG(&huart2);
+    }
+
+    if (__HAL_UART_GET_FLAG(&huart2, UART_FLAG_FE) != RESET)
+    {
+        __HAL_UART_CLEAR_FEFLAG(&huart2);
+    }
+
+    if (__HAL_UART_GET_FLAG(&huart2, UART_FLAG_NE) != RESET)
+    {
+        __HAL_UART_CLEAR_NEFLAG(&huart2);
+    }
+
+    if (__HAL_UART_GET_FLAG(&huart2, UART_FLAG_PE) != RESET)
+    {
+        __HAL_UART_CLEAR_PEFLAG(&huart2);
+    }
+
+    huart2.ErrorCode = HAL_UART_ERROR_NONE;
+}
+
+static void cli_emit_stream_status_if_due(void)
+{
+    static TickType_t last_emit_tick = 0;
+    static uint32_t last_frame_count = 0;
+
+    const TickType_t emit_interval_ticks = pdMS_TO_TICKS(100U);
+    const TickType_t now = xTaskGetTickCount();
+
+    bool stream_enabled = false;
+    if (!cli_service_adapter_get_log_stream_enabled(&cli_service_adapter_context, &stream_enabled) ||
+        !stream_enabled)
+    {
+        last_emit_tick = now;
+        last_frame_count = 0;
+        return;
+    }
+
+    if ((now - last_emit_tick) < emit_interval_ticks)
+    {
+        return;
+    }
+
+    last_emit_tick = now;
+
+    CliLogStats stats = {0};
+    if (!cli_service_adapter_get_log_stats(&cli_service_adapter_context, &stats) || !stats.enabled ||
+        stats.frameCount == 0U)
+    {
+        return;
+    }
+
+    if (stats.frameCount == last_frame_count)
+    {
+        return;
+    }
+
+    last_frame_count = stats.frameCount;
+
+    char line[96];
+    (void)snprintf(line, sizeof(line), "log stream frame=%lu failures=%lu",
+                   (unsigned long)stats.frameCount, (unsigned long)stats.failureCount);
+    (void)cli_uart_write(line, NULL);
+    (void)cli_uart_write("\r\n", NULL);
 }
 
 static void init_cli_service_adapter(void)
 {
-  CliServiceAdapterOps ops = {
-    .lock = cli_service_lock,
-    .unlock = cli_service_unlock,
-    .rom_save_state = NULL,
-    .rom_load_state = NULL,
-    .rom_read_raw = NULL,
-    .rom_write_raw = NULL,
-    .log_set_level = NULL,
-    .log_set_enabled = NULL,
-    .context = NULL,
-  };
+    CliServiceAdapterOps ops = {
+        .lock = cli_service_lock,
+        .unlock = cli_service_unlock,
+        .rom_save_state = NULL,
+        .rom_load_state = NULL,
+        .rom_read_raw = NULL,
+        .rom_write_raw = NULL,
+        .log_set_level = NULL,
+        .log_set_enabled = NULL,
+        .log_set_stream = NULL,
+        .log_get_stream = NULL,
+        .context = NULL,
+    };
 
-  cli_service_adapter_init(&cli_service_adapter_context,
-               (EffectsState *)&effects_state,
-               (EffectsParams *)&effects_params,
-               &ops,
-               UINT16_MAX);
+    cli_service_adapter_init(&cli_service_adapter_context,
+                             (EffectsState *)&effects_state,
+                             (EffectsParams *)&effects_params,
+                             &ops,
+                             UINT16_MAX);
+    cli_service_adapter_bind_heartbeat_period(&cli_service_adapter_context,
+                                              (uint32_t *)&heartbeat_period_ms,
+                                              HEARTBEAT_PERIOD_MS_MIN,
+                                              HEARTBEAT_PERIOD_MS_MAX);
 }
 
 static void init_effects_defaults(void)
 {
-  taskENTER_CRITICAL();
+    taskENTER_CRITICAL();
 
-  (void)memset((void *)&effects_state, 0, sizeof(effects_state));
-  (void)memset((void *)&effects_params, 0, sizeof(effects_params));
+    (void)memset((void *)&effects_state, 0, sizeof(effects_state));
+    (void)memset((void *)&effects_params, 0, sizeof(effects_params));
 
-  effects_state_set_default_order((EffectsState *)&effects_state);
-  effects_state.activeEffectSelection = 0;
-  effects_state.isEnabled[OVERDRIVE] = true;
-  effects_state.isEnabled[ECHO] = false;
-  effects_state.isEnabled[COMPRESSION] = false;
+    effects_state_set_default_order((EffectsState *)&effects_state);
+    effects_state.activeEffectSelection = 0;
+    effects_state.isEnabled[OVERDRIVE] = true;
+    effects_state.isEnabled[ECHO] = false;
+    effects_state.isEnabled[COMPRESSION] = false;
 
-  effects_params.overdrive.gain = MAX_OVERDRIVE_GAIN;
-  effects_params.overdrive.level = MAX_OVERDRIVE_LEVEL;
-  effects_params.overdrive.tone = MIN_OVERDRIVE_TONE;
-  effects_params.overdrive.mix = 0;
+    effects_params.overdrive.gain = MAX_OVERDRIVE_GAIN;
+    effects_params.overdrive.level = MAX_OVERDRIVE_LEVEL;
+    effects_params.overdrive.tone = MIN_OVERDRIVE_TONE;
+    effects_params.overdrive.mix = 0;
 
-  effects_params.echo.delay_samples = 1;
-  effects_params.echo.pre_delay = MIN_ECHO_PRE_DELAY;
-  effects_params.echo.density = MAX_ECHO_DENSITY;
-  effects_params.echo.attack = MAX_ECHO_ATTACK;
-  effects_params.echo.decay = MAX_ECHO_DECAY;
+    effects_params.echo.delay_samples = 1;
+    effects_params.echo.pre_delay = MIN_ECHO_PRE_DELAY;
+    effects_params.echo.density = MAX_ECHO_DENSITY;
+    effects_params.echo.attack = MAX_ECHO_ATTACK;
+    effects_params.echo.decay = MAX_ECHO_DECAY;
 
-  effects_params.compression.threshold = X_AXIS;
-  effects_params.compression.ratio = 0;
+    effects_params.compression.threshold = X_AXIS;
+    effects_params.compression.ratio = 0;
 
-  effects_params.overdriveMin.gain = 0;
-  effects_params.overdriveMin.level = 0;
-  effects_params.overdriveMin.tone = MIN_OVERDRIVE_TONE;
-  effects_params.overdriveMin.mix = 0;
+    effects_params.overdriveMin.gain = 0;
+    effects_params.overdriveMin.level = 0;
+    effects_params.overdriveMin.tone = MIN_OVERDRIVE_TONE;
+    effects_params.overdriveMin.mix = 0;
 
-  effects_params.overdriveMax.gain = MAX_OVERDRIVE_GAIN;
-  effects_params.overdriveMax.level = MAX_OVERDRIVE_LEVEL;
-  effects_params.overdriveMax.tone = MAX_OVERDRIVE_TONE;
-  effects_params.overdriveMax.mix = MAX_OVERDRIVE_MIX;
+    effects_params.overdriveMax.gain = MAX_OVERDRIVE_GAIN;
+    effects_params.overdriveMax.level = MAX_OVERDRIVE_LEVEL;
+    effects_params.overdriveMax.tone = MAX_OVERDRIVE_TONE;
+    effects_params.overdriveMax.mix = MAX_OVERDRIVE_MIX;
 
-  effects_params.echoMin.delay_samples = 0;
-  effects_params.echoMin.pre_delay = MIN_ECHO_PRE_DELAY;
-  effects_params.echoMin.density = 0;
-  effects_params.echoMin.attack = 0;
-  effects_params.echoMin.decay = 0;
+    effects_params.echoMin.delay_samples = 0;
+    effects_params.echoMin.pre_delay = MIN_ECHO_PRE_DELAY;
+    effects_params.echoMin.density = 0;
+    effects_params.echoMin.attack = 0;
+    effects_params.echoMin.decay = 0;
 
-  effects_params.echoMax.delay_samples = MAX_ECHO_DELAY_SAMPLES;
-  effects_params.echoMax.pre_delay = MAX_ECHO_PRE_DELAY;
-  effects_params.echoMax.density = MAX_ECHO_DENSITY;
-  effects_params.echoMax.attack = MAX_ECHO_ATTACK;
-  effects_params.echoMax.decay = MAX_ECHO_DECAY;
+    effects_params.echoMax.delay_samples = MAX_ECHO_DELAY_SAMPLES;
+    effects_params.echoMax.pre_delay = MAX_ECHO_PRE_DELAY;
+    effects_params.echoMax.density = MAX_ECHO_DENSITY;
+    effects_params.echoMax.attack = MAX_ECHO_ATTACK;
+    effects_params.echoMax.decay = MAX_ECHO_DECAY;
 
-  effects_params.compressionMin.threshold = 0;
-  effects_params.compressionMin.ratio = 0;
-  effects_params.compressionMax.threshold = MAX_COMPRESSION_THRESHOLD;
-  effects_params.compressionMax.ratio = MAX_COMPRESSION_RATIO;
+    effects_params.compressionMin.threshold = 0;
+    effects_params.compressionMin.ratio = 0;
+    effects_params.compressionMax.threshold = MAX_COMPRESSION_THRESHOLD;
+    effects_params.compressionMax.ratio = MAX_COMPRESSION_RATIO;
 
-  taskEXIT_CRITICAL();
+    taskEXIT_CRITICAL();
 }
 
 static uint32_t compute_sampling_period_us(void)
 {
-  const uint32_t timer_clock_hz = HAL_RCC_GetHCLKFreq();
+    const uint32_t timer_clock_hz = HAL_RCC_GetHCLKFreq();
     const uint32_t prescaler = (uint32_t)(htim2.Instance->PSC) + 1U;
     const uint32_t period = (uint32_t)(htim2.Instance->ARR) + 1U;
-  const uint32_t sample_rate_hz = timer_clock_hz / (prescaler * period);
+    const uint32_t sample_rate_hz = timer_clock_hz / (prescaler * period);
 
-  return sample_rate_hz == 0U ? 25U : (1000000U / sample_rate_hz);
+    return sample_rate_hz == 0U ? 25U : (1000000U / sample_rate_hz);
+}
+
+static uint32_t read_heartbeat_period_ms(void)
+{
+    uint32_t period_ms = HEARTBEAT_PERIOD_MS_DEFAULT;
+
+    taskENTER_CRITICAL();
+    period_ms = heartbeat_period_ms;
+    taskEXIT_CRITICAL();
+
+    return period_ms;
+}
+
+static void configure_status_led_on_indicator(void)
+{
+    HAL_NVIC_DisableIRQ(STATUS_LED_EXTI_IRQn);
+    HAL_GPIO_DeInit(STATUS_LED_GPIO_Port, STATUS_LED_Pin);
+
+    GPIO_InitTypeDef gpio_init = {0};
+    gpio_init.Pin = STATUS_LED_Pin;
+    gpio_init.Mode = GPIO_MODE_OUTPUT_PP;
+    gpio_init.Pull = GPIO_NOPULL;
+    gpio_init.Speed = GPIO_SPEED_FREQ_LOW;
+    HAL_GPIO_Init(STATUS_LED_GPIO_Port, &gpio_init);
+
+    HAL_GPIO_WritePin(STATUS_LED_GPIO_Port, STATUS_LED_Pin, GPIO_PIN_SET);
 }
 
 void startEffectsTask(void const *argument)
 {
-  (void)argument;
+    (void)argument;
 
-  EffectsPipeline effects_pipeline;
-  if (effects_pipeline_init(&effects_pipeline) != 0)
-  {
-    vTaskDelete(NULL);
-    return;
-  }
+    EffectsPipeline effects_pipeline;
+    if (effects_pipeline_init(&effects_pipeline) != 0)
+    {
+        vTaskDelete(NULL);
+        return;
+    }
 
-  EffectsTaskContext task_context = {
-    .pipeline = &effects_pipeline,
-    .effectsState = &effects_state,
-    .effectsParams = &effects_params,
-    .adcBufA = (uint16_t *)adc_buf_a,
-    .adcBufB = (uint16_t *)adc_buf_b,
-    .dacBufA = (uint16_t *)dac_buf_a,
-    .dacBufB = (uint16_t *)dac_buf_b,
-    .delaySamplesBuf = (uint16_t *)delay_samples_buf,
-    .sampleBufLen = SAMPLE_BUF_LEN,
-    .delaySamplesLen = NUM_DELAY_SAMPLES,
-    .samplingPeriodUs = compute_sampling_period_us(),
-    .processingSlackMs = 2,
-  };
+    EffectsTaskContext task_context = {
+        .pipeline = &effects_pipeline,
+        .effectsState = &effects_state,
+        .effectsParams = &effects_params,
+        .adcBufA = (uint16_t *)adc_buf_a,
+        .adcBufB = (uint16_t *)adc_buf_b,
+        .dacBufA = (uint16_t *)dac_buf_a,
+        .dacBufB = (uint16_t *)dac_buf_b,
+        .delaySamplesBuf = (uint16_t *)delay_samples_buf,
+        .sampleBufLen = SAMPLE_BUF_LEN,
+        .delaySamplesLen = NUM_DELAY_SAMPLES,
+        .samplingPeriodUs = compute_sampling_period_us(),
+        .processingSlackMs = 2,
+    };
 
-  EffectsTaskOps task_ops = {
-    .wait_for_adc_buffer = effects_task_wait_for_adc_buffer,
-    .wait_for_dac_buffer = effects_task_wait_for_dac_buffer,
-    .dma_copy = effects_task_dma_copy,
-    .alloc = effects_task_alloc,
-    .free = effects_task_free,
-    .read_latched_state = effects_task_read_latched_state,
-    .report_failure = effects_task_report_failure,
-    .ms_to_ticks = effects_task_ms_to_ticks,
-    .context = NULL,
-  };
+    test_vector_source_init(&test_vector_source,
+                            task_context.samplingPeriodUs == 0U
+                                ? 40500U
+                                : (1000000U / task_context.samplingPeriodUs));
 
-  if (HAL_OPAMP_Start(&hopamp3) != HAL_OK ||
-    HAL_ADCEx_Calibration_Start(&hadc3, ADC_SINGLE_ENDED) != HAL_OK ||
-    HAL_ADC_Start_DMA(&hadc3, (uint32_t *)adc_buf, ADC_BUF_LEN) != HAL_OK ||
-    HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t *)dac_buf, DAC_BUF_LEN,
-              DAC_ALIGN_12B_R) != HAL_OK ||
-    HAL_TIM_OC_Start(&htim2, TIM_CHANNEL_1) != HAL_OK ||
-    HAL_TIM_Base_Start(&htim2) != HAL_OK)
-  {
-    vTaskDelete(NULL);
-    return;
-  }
+    EffectsTaskOps task_ops = {
+        .wait_for_adc_buffer = effects_task_wait_for_adc_buffer,
+        .wait_for_dac_buffer = effects_task_wait_for_dac_buffer,
+        .dma_copy = effects_task_dma_copy,
+        .alloc = effects_task_alloc,
+        .free = effects_task_free,
+        .read_latched_state = effects_task_read_latched_state,
+        .replace_input_for_testing = effects_task_replace_input_for_testing,
+        .report_failure = effects_task_report_failure,
+        .report_frame_complete = effects_task_report_frame_complete,
+        .ms_to_ticks = effects_task_ms_to_ticks,
+        .context = &cli_service_adapter_context,
+    };
 
-  for (;;)
-  {
-    (void)effects_task_step(&task_context, &task_ops);
-  }
+    if (HAL_OPAMP_Start(&hopamp3) != HAL_OK ||
+        HAL_ADCEx_Calibration_Start(&hadc3, ADC_SINGLE_ENDED) != HAL_OK ||
+        HAL_ADC_Start_DMA(&hadc3, (uint32_t *)adc_buf, ADC_BUF_LEN) != HAL_OK ||
+        HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t *)dac_buf, DAC_BUF_LEN,
+                          DAC_ALIGN_12B_R) != HAL_OK ||
+        HAL_TIM_OC_Start(&htim2, TIM_CHANNEL_1) != HAL_OK ||
+        HAL_TIM_Base_Start(&htim2) != HAL_OK)
+    {
+        vTaskDelete(NULL);
+        return;
+    }
+
+    for (;;)
+    {
+        (void)effects_task_step(&task_context, &task_ops);
+    }
 }
 
 void startCliTask(void const *argument)
 {
-  (void)argument;
+    (void)argument;
 
-  cli_service_adapter_bind(&cli_service_adapter_context, &cli_services);
-  CliSessionTransport transport = {
-    .write = cli_uart_write,
-    .context = NULL,
-  };
-  cli_session_init(&cli_session, &cli_services, &transport);
-  (void)cli_session_start(&cli_session);
+    cli_service_adapter_bind(&cli_service_adapter_context, &cli_services);
+    CliSessionTransport transport = {
+        .write = cli_uart_write,
+        .context = NULL,
+    };
+    cli_session_init(&cli_session, &cli_services, &transport);
+    (void)cli_session_start(&cli_session);
 
-  for (;;)
-  {
-    uint8_t byte = 0;
-    while (HAL_UART_Receive(&huart2, &byte, 1, 0) == HAL_OK)
+    for (;;)
     {
-      cli_session_push_bytes(&cli_session, &byte, 1);
-    }
+        uint8_t byte = 0;
+        while (HAL_UART_Receive(&huart2, &byte, 1, 0) == HAL_OK)
+        {
+            cli_session_push_bytes(&cli_session, &byte, 1);
+        }
 
-    osDelay(1);
-  }
+        cli_uart_recover_rx_errors();
+
+        cli_emit_stream_status_if_due();
+
+        osDelay(1);
+    }
 }
 
 /* USER CODE END 0 */
@@ -467,8 +654,18 @@ int main(void)
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
 
+  configure_status_led_on_indicator();
+
+  boot_log_line("");
+  boot_log_line("boot: init effects defaults");
+
   init_effects_defaults();
+
+  boot_log_line("boot: init cli service adapter");
   init_cli_service_adapter();
+
+  boot_log_u32("boot: sample period us=", compute_sampling_period_us());
+  boot_log_u32("boot: delay samples=", NUM_DELAY_SAMPLES);
 
   /* USER CODE END 2 */
 
@@ -494,19 +691,25 @@ int main(void)
   defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
+  boot_log_line("boot: create effects task");
   osThreadDef(effectsTask, startEffectsTask, osPriorityRealtime, 0, 384);
   effectsTaskHandle = osThreadCreate(osThread(effectsTask), NULL);
   if (effectsTaskHandle == NULL)
   {
-    Error_Handler();
+      boot_log_line("boot: effects task create failed");
+      Error_Handler();
   }
+
+  boot_log_line("boot: create cli task");
 
   osThreadDef(cliTask, startCliTask, osPriorityNormal, 0, 256);
   cliTaskHandle = osThreadCreate(osThread(cliTask), NULL);
   if (cliTaskHandle == NULL)
   {
-    Error_Handler();
+      boot_log_line("boot: cli task create failed");
+      Error_Handler();
   }
+  boot_log_line("boot: starting scheduler");
   /* USER CODE END RTOS_THREADS */
 
   /* Start scheduler */
@@ -871,34 +1074,34 @@ static void MX_GPIO_Init(void)
 
 void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef *hadc)
 {
-  if (hadc == &hadc3)
-  {
-    notify_task_from_isr(effectsTaskHandle, (uint32_t)(uintptr_t)adc_buf_a);
-  }
+    if (hadc == &hadc3)
+    {
+        notify_task_from_isr(effectsTaskHandle, (uint32_t)(uintptr_t)adc_buf_a);
+    }
 }
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 {
-  if (hadc == &hadc3)
-  {
-    notify_task_from_isr(effectsTaskHandle, (uint32_t)(uintptr_t)adc_buf_b);
-  }
+    if (hadc == &hadc3)
+    {
+        notify_task_from_isr(effectsTaskHandle, (uint32_t)(uintptr_t)adc_buf_b);
+    }
 }
 
 void HAL_DAC_ConvHalfCpltCallbackCh1(DAC_HandleTypeDef *hdac)
 {
-  if (hdac == &hdac1)
-  {
-    notify_task_from_isr(effectsTaskHandle, (uint32_t)(uintptr_t)dac_buf_a);
-  }
+    if (hdac == &hdac1)
+    {
+        notify_task_from_isr(effectsTaskHandle, (uint32_t)(uintptr_t)dac_buf_a);
+    }
 }
 
 void HAL_DAC_ConvCpltCallbackCh1(DAC_HandleTypeDef *hdac)
 {
-  if (hdac == &hdac1)
-  {
-    notify_task_from_isr(effectsTaskHandle, (uint32_t)(uintptr_t)dac_buf_b);
-  }
+    if (hdac == &hdac1)
+    {
+        notify_task_from_isr(effectsTaskHandle, (uint32_t)(uintptr_t)dac_buf_b);
+    }
 }
 
 /* USER CODE END 4 */
@@ -917,8 +1120,8 @@ void StartDefaultTask(void const * argument)
 
   for (;;)
   {
-    HAL_GPIO_TogglePin(LED_STATUS_GPIO_Port, LED_STATUS_Pin);
-    osDelay(500);
+      HAL_GPIO_TogglePin(LED_STATUS_GPIO_Port, LED_STATUS_Pin);
+      osDelay(read_heartbeat_period_ms());
   }
   /* USER CODE END 5 */
 }

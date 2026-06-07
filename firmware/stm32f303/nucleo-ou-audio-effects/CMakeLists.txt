@@ -52,6 +52,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ../app/src/effects_model.c
     ../app/src/effects_pipeline.c
     ../app/src/effects_task.c
+    ../app/src/test_vector_source.c
     ../../../dsp/effects/effect_runtime.c
     ../../../dsp/effects/effects.c
     ../../../dsp/math/bam.c

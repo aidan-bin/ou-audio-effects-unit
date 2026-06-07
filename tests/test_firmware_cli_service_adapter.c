@@ -141,6 +141,8 @@ static void test_config_bounds_and_state_updates(void)
 
     CliServiceAdapterContext context;
     cli_service_adapter_init(&context, &state, &params, NULL, 255);
+    uint32_t heartbeat_period_ms = 500;
+    cli_service_adapter_bind_heartbeat_period(&context, &heartbeat_period_ms, 50, 5000);
 
     CliServices services = {0};
     cli_service_adapter_bind(&context, &services);
@@ -160,6 +162,18 @@ static void test_config_bounds_and_state_updates(void)
     expect_eq_u8(2, state.activeEffectSelection, "active effect updated");
     expect_false(services.config_set("state.active_effect", 9, services.context),
                  "reject invalid active effect");
+
+    expect_true(services.config_set("heartbeat.period_ms", 250, services.context),
+                "set heartbeat period");
+    expect_eq_u32(250, heartbeat_period_ms, "heartbeat period updated");
+
+    value = -1;
+    expect_true(services.config_get("heartbeat.period_ms", &value, services.context),
+                "read heartbeat period");
+    expect_eq_u32(250, (uint32_t)value, "heartbeat period read back");
+
+    expect_false(services.config_set("heartbeat.period_ms", 10, services.context),
+                 "reject too-small heartbeat period");
 }
 
 static void test_rom_raw_guardrails(void)
@@ -205,12 +219,90 @@ static void test_rom_raw_guardrails(void)
     expect_eq_u32(1, ops_context.romWriteCalls, "rom write not delegated when rejected");
 }
 
+static void test_test_mode_status_and_validation(void)
+{
+    EffectsState state;
+    EffectsParams params;
+    set_default_effects_state(&state);
+    set_default_effects_params(&params);
+
+    CliServiceAdapterContext context;
+    cli_service_adapter_init(&context, &state, &params, NULL, 255);
+
+    CliServices services = {0};
+    cli_service_adapter_bind(&context, &services);
+
+    CliTestModeStatus status = {0};
+    expect_true(services.test_get_status(&status, services.context), "read default test status");
+    expect_false(status.enabled, "test mode disabled by default");
+
+    expect_true(services.test_set_mode(true, services.context), "enable test mode");
+    expect_true(services.test_set_vector(1, services.context), "set test vector");
+    expect_true(services.test_set_frequency_hz(2000, services.context), "set test frequency");
+    expect_true(services.test_set_amplitude((uint16_t)(X_AXIS / 2U), services.context),
+                "set test amplitude");
+
+    expect_false(services.test_set_vector(3, services.context), "reject invalid test vector");
+    expect_false(services.test_set_frequency_hz(10, services.context),
+                 "reject too-low frequency");
+    expect_false(services.test_set_amplitude((uint16_t)(X_AXIS + 1U), services.context),
+                 "reject out-of-range amplitude");
+
+    expect_true(cli_service_adapter_get_test_mode_status(&context, &status),
+                "read test status through adapter helper");
+    expect_true(status.enabled, "test mode remains enabled");
+    expect_eq_u8(1, status.vector, "test vector persisted");
+    expect_eq_u16(2000, status.frequencyHz, "test frequency persisted");
+}
+
+static void test_log_stats_counters(void)
+{
+    EffectsState state;
+    EffectsParams params;
+    set_default_effects_state(&state);
+    set_default_effects_params(&params);
+
+    CliServiceAdapterContext context;
+    cli_service_adapter_init(&context, &state, &params, NULL, 255);
+
+    CliServices services = {0};
+    cli_service_adapter_bind(&context, &services);
+
+    expect_true(services.log_set_enabled(true, services.context), "enable logging");
+    expect_true(services.log_set_level(4, services.context), "set log level");
+    expect_true(services.log_set_stream(true, services.context), "enable stream");
+
+    cli_service_adapter_note_frame_processed(&context);
+    cli_service_adapter_note_frame_processed(&context);
+    cli_service_adapter_note_processing_failure(&context);
+
+    CliLogStats stats = {0};
+    expect_true(services.log_get_stats(&stats, services.context), "read log stats");
+    expect_true(stats.enabled, "logging enabled tracked");
+    expect_eq_u8(4, stats.level, "log level tracked");
+    expect_eq_u32(2, stats.frameCount, "frame count tracked");
+    expect_eq_u32(1, stats.failureCount, "failure count tracked");
+
+    bool stream_enabled = false;
+    expect_true(cli_service_adapter_get_log_stream_enabled(&context, &stream_enabled),
+                "read log stream state");
+    expect_true(stream_enabled, "log stream enabled tracked");
+
+    expect_true(services.log_set_stream(false, services.context), "disable stream");
+    bool log_enabled = false;
+    expect_true(cli_service_adapter_get_log_enabled(&context, &log_enabled),
+                "read log enabled state");
+    expect_false(log_enabled, "stream disable clears logging state");
+}
+
 int main(void)
 {
     test_pot_override_precedence();
     test_switch_override_precedence();
     test_config_bounds_and_state_updates();
     test_rom_raw_guardrails();
+    test_test_mode_status_and_validation();
+    test_log_stats_counters();
 
     if (failures != 0)
     {

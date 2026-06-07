@@ -50,6 +50,12 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
         return false;
     }
 
+    if (ops->replace_input_for_testing != NULL &&
+        !ops->replace_input_for_testing(curr_adc_buf, task_context->sampleBufLen, ops->context))
+    {
+        return false;
+    }
+
     if (task_context->delaySamplesLen > task_context->sampleBufLen)
     {
         size_t shift_count = task_context->delaySamplesLen - task_context->sampleBufLen;
@@ -203,6 +209,11 @@ cleanup:
     if (process_failed && ops->report_failure != NULL)
     {
         ops->report_failure(ops->context);
+    }
+
+    if (!process_failed && ops->report_frame_complete != NULL)
+    {
+        ops->report_frame_complete(ops->context);
     }
 
     return !process_failed;

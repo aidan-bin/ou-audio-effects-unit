@@ -38,7 +38,9 @@ typedef struct
     void (*free)(void *ptr, void *context);
 
     bool (*read_latched_state)(EffectsState *state, EffectsParams *params, void *context);
+    bool (*replace_input_for_testing)(uint16_t *buf, size_t count, void *context);
     void (*report_failure)(void *context);
+    void (*report_frame_complete)(void *context);
 
     uint32_t (*ms_to_ticks)(uint32_t ms, void *context);
     void *context;

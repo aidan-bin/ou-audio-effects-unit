@@ -84,6 +84,7 @@ set(OU_FIRMWARE_APP_SOURCES
     firmware/stm32f303/app/src/rom_task_support.c
     firmware/stm32f303/app/src/rom_handler.c
     firmware/stm32f303/app/src/switch_task.c
+    firmware/stm32f303/app/src/test_vector_source.c
 )
 
 add_library(ou_dsp STATIC ${OU_DSP_SOURCES})
