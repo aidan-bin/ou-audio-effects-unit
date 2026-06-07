@@ -45,7 +45,6 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ../app/src/cli_core.c
-    ../app/src/cli_line_buffer.c
     ../app/src/cli_parse.c
     ../app/src/cli_session.c
     ../app/src/cli_service_adapter.c

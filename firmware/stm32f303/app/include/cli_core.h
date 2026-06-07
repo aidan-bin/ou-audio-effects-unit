@@ -72,7 +72,6 @@ typedef struct
     bool (*log_set_level)(uint8_t level, void *context);
     bool (*log_set_enabled)(bool enabled, void *context);
     bool (*log_set_stream)(bool enabled, void *context);
-    bool (*log_get_stream)(bool *enabledOut, void *context);
     bool (*log_read_line)(char *lineOut,
                           size_t lineCapacity,
                           bool *hasLineOut,

@@ -28,13 +28,6 @@ static bool test_log_set_stream(bool enabled, void *context)
     return true;
 }
 
-static bool test_log_get_stream(bool *enabled_out, void *context)
-{
-    SessionServicesContext *service_context = (SessionServicesContext *)context;
-    *enabled_out = service_context->log_stream_enabled;
-    return true;
-}
-
 static bool test_log_read_line(char *line_out,
                                size_t line_capacity,
                                bool *has_line_out,
@@ -218,7 +211,6 @@ static void test_log_stream_command_hides_prompt_until_quit(void)
     SessionServicesContext services_context = {.log_stream_enabled = false};
     CliServices services = {0};
     services.log_set_stream = test_log_set_stream;
-    services.log_get_stream = test_log_get_stream;
     services.log_read_line = test_log_read_line;
     services.context = &services_context;
 
@@ -244,7 +236,6 @@ static void test_log_stream_poll_writes_stream_lines(void)
     SessionServicesContext services_context = {.log_stream_enabled = false};
     CliServices services = {0};
     services.log_set_stream = test_log_set_stream;
-    services.log_get_stream = test_log_get_stream;
     services.log_read_line = test_log_read_line;
     services.context = &services_context;
 
@@ -271,7 +262,6 @@ static void test_log_stream_mode_exits_on_q(void)
     SessionServicesContext services_context = {.log_stream_enabled = true};
     CliServices services = {0};
     services.log_set_stream = test_log_set_stream;
-    services.log_get_stream = test_log_get_stream;
     services.log_read_line = test_log_read_line;
     services.context = &services_context;
 

@@ -625,21 +625,6 @@ static bool service_log_read_line(char *line_out,
     return success;
 }
 
-static bool service_log_get_stream(bool *enabled_out, void *ctx)
-{
-    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
-    if (context == NULL || enabled_out == NULL)
-    {
-        return false;
-    }
-
-    lock_ctx(context);
-    *enabled_out = context->logStreamEnabled;
-    unlock_ctx(context);
-
-    return true;
-}
-
 static bool service_log_get_stats(CliLogStats *stats_out, void *ctx)
 {
     CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
@@ -824,7 +809,6 @@ void cli_service_adapter_bind(CliServiceAdapterContext *context, CliServices *se
     services_out->log_set_level = service_log_set_level;
     services_out->log_set_enabled = service_log_set_enabled;
     services_out->log_set_stream = service_log_set_stream;
-    services_out->log_get_stream = service_log_get_stream;
     services_out->log_read_line = service_log_read_line;
     services_out->log_get_stats = service_log_get_stats;
     services_out->test_set_mode = service_test_set_mode;

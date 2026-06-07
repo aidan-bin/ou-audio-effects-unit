@@ -167,18 +167,6 @@ static bool log_set_stream(bool enabled, void *context)
     return !ctx->failService;
 }
 
-static bool log_get_stream(bool *enabledOut, void *context)
-{
-    CliCoreTestContext *ctx = (CliCoreTestContext *)context;
-    if (enabledOut == NULL)
-    {
-        return false;
-    }
-
-    *enabledOut = ctx->logStreamEnabled;
-    return !ctx->failService;
-}
-
 static bool log_get_stats(CliLogStats *statsOut, void *context)
 {
     CliCoreTestContext *ctx = (CliCoreTestContext *)context;
@@ -254,7 +242,6 @@ static CliServices make_services(CliCoreTestContext *ctx)
         .log_set_level = log_set_level,
         .log_set_enabled = log_set_enabled,
         .log_set_stream = log_set_stream,
-        .log_get_stream = log_get_stream,
         .log_get_stats = log_get_stats,
         .test_set_mode = test_set_mode,
         .test_set_vector = test_set_vector,

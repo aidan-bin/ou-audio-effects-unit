@@ -28,7 +28,6 @@ typedef struct
     bool (*log_set_level)(uint8_t level, void *context);
     bool (*log_set_enabled)(bool enabled, void *context);
     bool (*log_set_stream)(bool enabled, void *context);
-    bool (*log_get_stream)(bool *enabledOut, void *context);
     bool (*test_set_mode)(bool enabled, void *context);
     bool (*test_set_vector)(uint8_t vector, void *context);
     bool (*test_set_frequency_hz)(uint16_t frequencyHz, void *context);

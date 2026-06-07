@@ -370,7 +370,6 @@ static void init_cli_service_adapter(void)
         .log_set_level = NULL,
         .log_set_enabled = NULL,
         .log_set_stream = NULL,
-        .log_get_stream = NULL,
         .context = NULL,
     };
 

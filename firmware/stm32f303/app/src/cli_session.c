@@ -144,6 +144,49 @@ static bool is_printable_ascii(uint8_t value)
     return value >= 0x20U && value <= 0x7EU;
 }
 
+static bool session_handle_escape_byte(CliSession *session,
+                                       uint8_t value,
+                                       bool consume_non_csi_byte)
+{
+    if (session == NULL)
+    {
+        return false;
+    }
+
+    if (!session->escape_sequence_active)
+    {
+        if (value != 0x1BU)
+        {
+            return false;
+        }
+
+        session->escape_sequence_active = true;
+        session->escape_sequence_csi = false;
+        return true;
+    }
+
+    if (!session->escape_sequence_csi)
+    {
+        session->escape_sequence_csi = (value == '[' || value == 'O');
+        if (session->escape_sequence_csi)
+        {
+            return true;
+        }
+
+        session->escape_sequence_active = false;
+        session->escape_sequence_csi = false;
+        return consume_non_csi_byte;
+    }
+
+    if (value >= 0x40U && value <= 0x7EU)
+    {
+        session->escape_sequence_active = false;
+        session->escape_sequence_csi = false;
+    }
+
+    return true;
+}
+
 static void cli_session_handle_line_complete(CliSession *session)
 {
     if (session == NULL)
@@ -271,33 +314,8 @@ void cli_session_push_bytes(CliSession *session, const uint8_t *bytes, size_t by
 
         if (session->command_stream_mode)
         {
-            if (session->escape_sequence_active)
+            if (session_handle_escape_byte(session, value, true))
             {
-                if (!session->escape_sequence_csi)
-                {
-                    session->escape_sequence_csi = (value == '[' || value == 'O');
-                    if (session->escape_sequence_csi)
-                    {
-                        continue;
-                    }
-
-                    session->escape_sequence_active = false;
-                    continue;
-                }
-
-                if (value >= 0x40U && value <= 0x7EU)
-                {
-                    session->escape_sequence_active = false;
-                    session->escape_sequence_csi = false;
-                }
-
-                continue;
-            }
-
-            if (value == 0x1BU)
-            {
-                session->escape_sequence_active = true;
-                session->escape_sequence_csi = false;
                 continue;
             }
 
@@ -314,38 +332,9 @@ void cli_session_push_bytes(CliSession *session, const uint8_t *bytes, size_t by
             continue;
         }
 
-        if (value == 0x1BU)
+        if (session_handle_escape_byte(session, value, false))
         {
-            session->escape_sequence_active = true;
-            session->escape_sequence_csi = false;
             continue;
-        }
-
-        if (session->escape_sequence_active)
-        {
-            if (!session->escape_sequence_csi)
-            {
-                session->escape_sequence_csi = (value == '[' || value == 'O');
-                if (session->escape_sequence_csi)
-                {
-                    continue;
-                }
-
-                session->escape_sequence_active = false;
-                session->escape_sequence_csi = false;
-            }
-
-            else if (value >= 0x40U && value <= 0x7EU)
-            {
-                session->escape_sequence_active = false;
-                session->escape_sequence_csi = false;
-                continue;
-            }
-
-            else
-            {
-                continue;
-            }
         }
 
         if (value == '\r')

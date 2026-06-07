@@ -32,6 +32,10 @@ The STM32 firmware project is generated locally with CubeMX and is not checked i
 - effect model/state/control and processing tasks
 - I2C path for peripherals (EEPROM/display)
 
+There are two CubeMX projects targeting different firmware variants:
+- `firmware/stm32f303/cubemx/`: for the custom board
+- `firmware/stm32f303/nucleo-ou-audio-effects/`: for the Nucleo F303RE development board
+
 ## Tests
 
 ```sh
