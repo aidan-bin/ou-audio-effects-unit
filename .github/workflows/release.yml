@@ -1,0 +1,147 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential clang-format clang-tidy \
+            python3 python3-pip gcc-arm-none-eabi
+      - name: Check
+        run: ./scripts/run.sh check-full
+
+  build-firmware-custom:
+    needs: [check]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tooling
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build gcc-arm-none-eabi
+      - name: Configure
+        run: cmake --preset Release
+        working-directory: firmware/stm32f303/cubemx
+      - name: Build
+        run: cmake --build --preset Release
+        working-directory: firmware/stm32f303/cubemx
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-custom
+          path: |
+            firmware/stm32f303/cubemx/build/Release/STM32F303RETx-Audio-Effects-Unit.elf
+
+  build-firmware-nucleo:
+    needs: [check]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tooling
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build gcc-arm-none-eabi
+      - name: Configure
+        run: cmake --preset Release
+        working-directory: firmware/stm32f303/nucleo-ou-audio-effects
+      - name: Build
+        run: cmake --build --preset Release
+        working-directory: firmware/stm32f303/nucleo-ou-audio-effects
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-nucleo
+          path: |
+            firmware/stm32f303/nucleo-ou-audio-effects/build/Release/nucleo-ou-audio-effects.elf
+
+  build-host-linux:
+    needs: [check]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tooling
+        run: sudo apt-get update && sudo apt-get install -y cmake build-essential
+      - name: Configure
+        run: cmake -S . -B build-host -DCMAKE_BUILD_TYPE=Release
+      - name: Build shared library
+        run: cmake --build build-host --target ou_effects_shared
+      - name: Upload shared library
+        uses: actions/upload-artifact@v4
+        with:
+          name: host-linux
+          path: host/python-demo/libeffects.so
+
+  build-host-macos:
+    needs: [check]
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tooling
+        run: brew install --quiet cmake
+      - name: Configure
+        run: cmake -S . -B build-host -DCMAKE_BUILD_TYPE=Release
+      - name: Build shared library
+        run: cmake --build build-host --target ou_effects_shared
+      - name: Upload shared library
+        uses: actions/upload-artifact@v4
+        with:
+          name: host-macos
+          path: host/python-demo/libeffects.dylib
+
+  release:
+    needs:
+      - build-firmware-custom
+      - build-firmware-nucleo
+      - build-host-linux
+      - build-host-macos
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+      - name: Bundle host-demo-linux
+        run: |
+          cd host/python-demo
+          zip ../../host-demo-linux.zip \
+            main.py effects.py demo.ui requirements.txt MoodySlide2_110.wav
+          cd ../..
+          zip -j host-demo-linux.zip host-linux/libeffects.so
+      - name: Bundle host-demo-macos
+        run: |
+          cd host/python-demo
+          zip ../../host-demo-macos.zip \
+            main.py effects.py demo.ui requirements.txt MoodySlide2_110.wav
+          cd ../..
+          zip -j host-demo-macos.zip host-macos/libeffects.dylib
+      - name: Delete old latest release
+        run: gh release delete latest --yes --cleanup-tag || true
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "Latest Build"
+          body: "Rolling release built from ${{ github.sha }}"
+          prerelease: false
+          files: |
+            firmware-custom/STM32F303RETx-Audio-Effects-Unit.elf
+            firmware-nucleo/nucleo-ou-audio-effects.elf
+            host-demo-linux.zip
+            host-demo-macos.zip
