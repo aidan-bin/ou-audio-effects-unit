@@ -63,7 +63,7 @@ typedef struct
                       // clipping)
 } CompressionParam;
 
-#define MAX_COMPRESSION_THRESHOLD UINT16_MAX // Cannot exceed UINT16_MAX
+#define MAX_COMPRESSION_THRESHOLD X_AXIS
 #define MAX_COMPRESSION_RATIO \
     (1U << FIXED_POINT_Q) // Max gain reduction is 1.0 (equivalent to clipping)
 

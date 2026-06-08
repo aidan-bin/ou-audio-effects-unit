@@ -24,6 +24,10 @@ First power-on and audio-path validation for the target.
 8. Confirm EEPROM path is functional if configured.
 9. Confirm USB/USART CLI or serial logs if configured.
 
+## Output Configuration
+
+If you have a piezo, you can connect one terminal to the DAC output (PA4) and the other to GND. It is recommended to add a series resistor (~1k) for protection, a series capacitor (~1uF) for AC coupling (since the DAC output is DC biased), and a parallel resistor (~1M) for discharge.
+
 ## Calibration and Tuning Notes
 
 Run these checks during bring-up and whenever board-level analog behavior changes.
