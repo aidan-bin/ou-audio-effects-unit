@@ -70,6 +70,7 @@ DMA_HandleTypeDef hdma_adc3;
 DAC_HandleTypeDef hdac1;
 DMA_HandleTypeDef hdma_dac1_ch1;
 
+OPAMP_HandleTypeDef hopamp2;
 OPAMP_HandleTypeDef hopamp3;
 
 TIM_HandleTypeDef htim2;
@@ -118,6 +119,7 @@ static void MX_ADC3_Init(void);
 static void MX_DAC1_Init(void);
 static void MX_OPAMP3_Init(void);
 static void MX_TIM2_Init(void);
+static void MX_OPAMP2_Init(void);
 void StartDefaultTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
@@ -776,7 +778,8 @@ void startEffectsTask(void const *argument)
         .context = &cli_service_adapter_context,
     };
 
-    if (HAL_OPAMP_Start(&hopamp3) != HAL_OK ||
+    if (HAL_OPAMP_Start(&hopamp2) != HAL_OK ||
+        HAL_OPAMP_Start(&hopamp3) != HAL_OK ||
         HAL_ADCEx_Calibration_Start(&hadc3, ADC_SINGLE_ENDED) != HAL_OK ||
         HAL_ADC_Start_DMA(&hadc3, (uint32_t *)adc_buf, ADC_BUF_LEN) != HAL_OK ||
         HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t *)dac_buf, DAC_BUF_LEN,
@@ -861,6 +864,7 @@ int main(void)
   MX_DAC1_Init();
   MX_OPAMP3_Init();
   MX_TIM2_Init();
+  MX_OPAMP2_Init();
   /* USER CODE BEGIN 2 */
 
   boot_log_line("");
@@ -1092,6 +1096,36 @@ static void MX_DAC1_Init(void)
 }
 
 /**
+  * @brief OPAMP2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_OPAMP2_Init(void)
+{
+
+  /* USER CODE BEGIN OPAMP2_Init 0 */
+
+  /* USER CODE END OPAMP2_Init 0 */
+
+  /* USER CODE BEGIN OPAMP2_Init 1 */
+
+  /* USER CODE END OPAMP2_Init 1 */
+  hopamp2.Instance = OPAMP2;
+  hopamp2.Init.Mode = OPAMP_FOLLOWER_MODE;
+  hopamp2.Init.NonInvertingInput = OPAMP_NONINVERTINGINPUT_IO0;
+  hopamp2.Init.TimerControlledMuxmode = OPAMP_TIMERCONTROLLEDMUXMODE_DISABLE;
+  hopamp2.Init.UserTrimming = OPAMP_TRIMMING_FACTORY;
+  if (HAL_OPAMP_Init(&hopamp2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN OPAMP2_Init 2 */
+
+  /* USER CODE END OPAMP2_Init 2 */
+
+}
+
+/**
   * @brief OPAMP3 Initialization Function
   * @param None
   * @retval None
@@ -1107,9 +1141,8 @@ static void MX_OPAMP3_Init(void)
 
   /* USER CODE END OPAMP3_Init 1 */
   hopamp3.Instance = OPAMP3;
-  hopamp3.Init.Mode = OPAMP_STANDALONE_MODE;
+  hopamp3.Init.Mode = OPAMP_FOLLOWER_MODE;
   hopamp3.Init.NonInvertingInput = OPAMP_NONINVERTINGINPUT_IO1;
-  hopamp3.Init.InvertingInput = OPAMP_INVERTINGINPUT_IO1;
   hopamp3.Init.TimerControlledMuxmode = OPAMP_TIMERCONTROLLEDMUXMODE_DISABLE;
   hopamp3.Init.UserTrimming = OPAMP_TRIMMING_FACTORY;
   if (HAL_OPAMP_Init(&hopamp3) != HAL_OK)

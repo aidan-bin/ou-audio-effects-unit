@@ -24,9 +24,21 @@ First power-on and audio-path validation for the target.
 8. Confirm EEPROM path is functional if configured.
 9. Confirm USB/USART CLI or serial logs if configured.
 
-## Output Configuration
+## Nucleo-Specific Notes
+
+### Input Configuration
+
+The ADC is internally connected to OPAMP3 in follower mode to buffer the input signal. No external OPAMP-ADC wiring is required.
+
+To bias the input signal, you can create a mid-rail reference using a resistor divider (e.g., two 10k resistors) between Vdda and GND, with the input signal AC-coupled to the junction with a 10uF capacitor.
+
+For anti-aliasing, you can use an RC low-pass filter on the input. For example, a 1k resistor in series with the biased input and a 2.2nF capacitor from the OPAMP3 input (PB13) to ground; this has a cutoff frequency of around 16kHz.
+
+### Output Configuration
 
 If you have a piezo, you can connect one terminal to the DAC output (PA4) and the other to GND. It is recommended to add a series resistor (~1k) for protection, a series capacitor (~1uF) for AC coupling (since the DAC output is DC biased), and a parallel resistor (~1M) for discharge.
+
+OPAMP2 is configured in follower mode to buffer the DAC output (useful since the DAC has limited drive capability). You can connect the DAC output (PA4) to the OPAMP2 VINP (PA7) and the OPAMP2 output (PA6) to the piezo.
 
 ## Calibration and Tuning Notes
 
