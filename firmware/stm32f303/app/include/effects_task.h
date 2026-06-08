@@ -43,6 +43,12 @@ typedef struct
     void (*report_frame_complete)(void *context);
 
     uint32_t (*ms_to_ticks)(uint32_t ms, void *context);
+
+    void (*on_frame_begin)(void *context);
+    void (*on_frame_end)(uint32_t frame_time_us, bool overrun, void *context);
+    uint32_t (*get_timestamp_us)(void *context);
+
+    void (*panic_write)(const char *text, void *context);
     void *context;
 } EffectsTaskOps;
 

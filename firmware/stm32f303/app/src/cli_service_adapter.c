@@ -343,6 +343,7 @@ static bool log_stream_queue_push(CliServiceAdapterContext *context, const char 
 
     if (context->logStreamCount >= CLI_LOG_STREAM_QUEUE_DEPTH)
     {
+        context->streamDropCount++;
         context->logStreamHead = (uint8_t)((context->logStreamHead + 1U) % CLI_LOG_STREAM_QUEUE_DEPTH);
         context->logStreamCount--;
     }
@@ -625,6 +626,32 @@ static bool service_log_read_line(char *line_out,
     return success;
 }
 
+static bool service_log_set_stream_batch(uint8_t batch_size, void *ctx)
+{
+    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    if (context == NULL || batch_size == 0)
+    {
+        return false;
+    }
+
+    lock_ctx(context);
+    context->streamBatchSize = batch_size;
+    unlock_ctx(context);
+    return true;
+}
+
+static bool service_log_reset_stats(void *ctx)
+{
+    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    if (context == NULL)
+    {
+        return false;
+    }
+
+    cli_service_adapter_reset_profiling_stats(context);
+    return true;
+}
+
 static bool service_log_get_stats(CliLogStats *stats_out, void *ctx)
 {
     CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
@@ -635,9 +662,20 @@ static bool service_log_get_stats(CliLogStats *stats_out, void *ctx)
 
     lock_ctx(context);
     stats_out->enabled = context->logEnabled;
+    stats_out->streamEnabled = context->logStreamEnabled;
     stats_out->level = context->logLevel;
     stats_out->frameCount = context->logFrameCount;
     stats_out->failureCount = context->logFailureCount;
+    stats_out->stepFailureCount = context->stepFailureCount;
+    stats_out->stepFailureStreak = context->stepFailureStreak;
+    stats_out->frameTimeMinUs = context->frameTimeMinUs;
+    stats_out->frameTimeMaxUs = context->frameTimeMaxUs;
+    stats_out->frameTimeTotalUs = context->frameTimeTotalUs;
+    stats_out->measuredFrameCount = context->measuredFrameCount;
+    stats_out->overrunCount = context->overrunCount;
+    stats_out->streamDropCount = context->streamDropCount;
+    stats_out->streamBatchSize = context->streamBatchSize;
+    stats_out->streamQueueCount = context->logStreamCount;
     unlock_ctx(context);
 
     return true;
@@ -767,6 +805,22 @@ void cli_service_adapter_init(CliServiceAdapterContext *context, EffectsState *s
     context->testFrequencyHz = 1000;
     context->testAmplitude = (uint16_t)(X_AXIS / 2U);
 
+    context->frameTimeMinUs = 0;
+    context->frameTimeMaxUs = 0;
+    context->frameTimeTotalUs = 0;
+    context->measuredFrameCount = 0;
+    context->overrunCount = 0;
+    context->streamDropCount = 0;
+    context->streamBatchSize = 1;
+    context->stepFailureCount = 0;
+    context->stepFailureStreak = 0;
+    context->streamBatchCounter = 0;
+    context->batchFrameTimeMinUs = 0;
+    context->batchFrameTimeMaxUs = 0;
+    context->batchFrameTimeTotalUs = 0;
+    context->batchFrameCount = 0;
+    context->batchOverrunCount = 0;
+
     if (ops != NULL)
     {
         context->ops = *ops;
@@ -809,8 +863,10 @@ void cli_service_adapter_bind(CliServiceAdapterContext *context, CliServices *se
     services_out->log_set_level = service_log_set_level;
     services_out->log_set_enabled = service_log_set_enabled;
     services_out->log_set_stream = service_log_set_stream;
+    services_out->log_set_stream_batch = service_log_set_stream_batch;
     services_out->log_read_line = service_log_read_line;
     services_out->log_get_stats = service_log_get_stats;
+    services_out->log_reset_stats = service_log_reset_stats;
     services_out->test_set_mode = service_test_set_mode;
     services_out->test_set_vector = service_test_set_vector;
     services_out->test_set_frequency_hz = service_test_set_frequency_hz;
@@ -888,9 +944,20 @@ bool cli_service_adapter_get_log_stats(CliServiceAdapterContext *context,
 
     lock_ctx(context);
     stats_out->enabled = context->logEnabled;
+    stats_out->streamEnabled = context->logStreamEnabled;
     stats_out->level = context->logLevel;
     stats_out->frameCount = context->logFrameCount;
     stats_out->failureCount = context->logFailureCount;
+    stats_out->stepFailureCount = context->stepFailureCount;
+    stats_out->stepFailureStreak = context->stepFailureStreak;
+    stats_out->frameTimeMinUs = context->frameTimeMinUs;
+    stats_out->frameTimeMaxUs = context->frameTimeMaxUs;
+    stats_out->frameTimeTotalUs = context->frameTimeTotalUs;
+    stats_out->measuredFrameCount = context->measuredFrameCount;
+    stats_out->overrunCount = context->overrunCount;
+    stats_out->streamDropCount = context->streamDropCount;
+    stats_out->streamBatchSize = context->streamBatchSize;
+    stats_out->streamQueueCount = context->logStreamCount;
     unlock_ctx(context);
     return true;
 }
@@ -973,5 +1040,155 @@ void cli_service_adapter_note_processing_failure(CliServiceAdapterContext *conte
     (void)snprintf(line, sizeof(line), "log failure count=%lu",
                    (unsigned long)context->logFailureCount);
     (void)log_stream_queue_push(context, line);
+    unlock_ctx(context);
+}
+
+void cli_service_adapter_note_step_result(CliServiceAdapterContext *context, bool step_succeeded)
+{
+    if (context == NULL)
+    {
+        return;
+    }
+
+    lock_ctx(context);
+    if (step_succeeded)
+    {
+        context->stepFailureStreak = 0;
+    }
+    else
+    {
+        context->stepFailureCount++;
+        context->stepFailureStreak++;
+    }
+    unlock_ctx(context);
+}
+
+void cli_service_adapter_set_stream_batch_size(CliServiceAdapterContext *context, uint8_t batch_size)
+{
+    if (context == NULL || batch_size == 0)
+    {
+        return;
+    }
+
+    lock_ctx(context);
+    context->streamBatchSize = batch_size;
+    unlock_ctx(context);
+}
+
+uint8_t cli_service_adapter_get_stream_batch_size(CliServiceAdapterContext *context)
+{
+    if (context == NULL)
+    {
+        return 0;
+    }
+
+    lock_ctx(context);
+    uint8_t size = context->streamBatchSize;
+    unlock_ctx(context);
+    return size;
+}
+
+void cli_service_adapter_reset_profiling_stats(CliServiceAdapterContext *context)
+{
+    if (context == NULL)
+    {
+        return;
+    }
+
+    lock_ctx(context);
+    context->frameTimeMinUs = 0;
+    context->frameTimeMaxUs = 0;
+    context->frameTimeTotalUs = 0;
+    context->measuredFrameCount = 0;
+    context->overrunCount = 0;
+    context->stepFailureCount = 0;
+    context->stepFailureStreak = 0;
+    context->streamDropCount = 0;
+    context->streamBatchCounter = 0;
+    context->batchFrameTimeMinUs = 0;
+    context->batchFrameTimeMaxUs = 0;
+    context->batchFrameTimeTotalUs = 0;
+    context->batchFrameCount = 0;
+    context->batchOverrunCount = 0;
+    unlock_ctx(context);
+}
+
+void cli_service_adapter_note_frame_timing(CliServiceAdapterContext *context, uint32_t frame_time_us,
+                                           bool overrun)
+{
+    if (context == NULL)
+    {
+        return;
+    }
+
+    lock_ctx(context);
+    if (context->measuredFrameCount == 0)
+    {
+        context->frameTimeMinUs = frame_time_us;
+        context->frameTimeMaxUs = frame_time_us;
+    }
+    else
+    {
+        if (frame_time_us < context->frameTimeMinUs)
+        {
+            context->frameTimeMinUs = frame_time_us;
+        }
+        if (frame_time_us > context->frameTimeMaxUs)
+        {
+            context->frameTimeMaxUs = frame_time_us;
+        }
+    }
+    context->frameTimeTotalUs += frame_time_us;
+    context->measuredFrameCount++;
+    if (overrun)
+    {
+        context->overrunCount++;
+    }
+
+    if (context->batchFrameCount == 0)
+    {
+        context->batchFrameTimeMinUs = frame_time_us;
+        context->batchFrameTimeMaxUs = frame_time_us;
+    }
+    else
+    {
+        if (frame_time_us < context->batchFrameTimeMinUs)
+        {
+            context->batchFrameTimeMinUs = frame_time_us;
+        }
+        if (frame_time_us > context->batchFrameTimeMaxUs)
+        {
+            context->batchFrameTimeMaxUs = frame_time_us;
+        }
+    }
+    context->batchFrameTimeTotalUs += frame_time_us;
+    context->batchFrameCount++;
+    if (overrun)
+    {
+        context->batchOverrunCount++;
+    }
+    context->streamBatchCounter++;
+
+    if (context->streamBatchCounter >= context->streamBatchSize && context->logStreamEnabled)
+    {
+        uint32_t avg_us = context->batchFrameTimeTotalUs / context->batchFrameCount;
+        char line[CLI_LOG_STREAM_LINE_MAX];
+        (void)snprintf(line, sizeof(line),
+                       "prof f=%lu t=%lu mn=%lu mx=%lu ov=%lu dr=%lu",
+                       (unsigned long)context->batchFrameCount, (unsigned long)avg_us,
+                       (unsigned long)context->batchFrameTimeMinUs,
+                       (unsigned long)context->batchFrameTimeMaxUs,
+                       (unsigned long)context->batchOverrunCount,
+                       (unsigned long)context->streamDropCount);
+        (void)log_stream_queue_push(context, line);
+
+        context->streamBatchCounter = 0;
+        context->batchFrameTimeMinUs = 0;
+        context->batchFrameTimeMaxUs = 0;
+        context->batchFrameTimeTotalUs = 0;
+        context->batchFrameCount = 0;
+        context->batchOverrunCount = 0;
+    }
+
     unlock_ctx(context);
 }

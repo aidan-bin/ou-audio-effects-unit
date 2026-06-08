@@ -276,6 +276,8 @@ static void test_log_stream_mode_exits_on_q(void)
     cli_session_push_bytes(&session, input, sizeof(input));
 
     expect_false(services_context.log_stream_enabled, "q disables log stream mode");
+    expect_true(strstr(ctx.output, "log stream stopped; logging disabled\r\n") != NULL,
+                "q reports stream shutdown");
     expect_true(strstr(ctx.output, "\r\n> ") != NULL, "q returns the CLI prompt");
 }
 

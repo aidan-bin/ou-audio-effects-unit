@@ -324,6 +324,7 @@ void cli_session_push_bytes(CliSession *session, const uint8_t *bytes, size_t by
                 if (session_exit_stream_mode(session))
                 {
                     (void)session_write(session, "\r\n");
+                    (void)session_write_stream_line(session, "log stream stopped");
                     (void)session_write_prompt(session);
                 }
                 continue;

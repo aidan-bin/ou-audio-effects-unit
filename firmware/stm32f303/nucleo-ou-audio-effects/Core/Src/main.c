@@ -55,7 +55,6 @@
 #define HEARTBEAT_PERIOD_MS_MIN 50U
 #define HEARTBEAT_PERIOD_MS_MAX 5000U
 #define EFFECTS_RUNTIME_LOG_EVERY_FAILURES 10U
-#define EFFECTS_RUNTIME_LOG_EVERY_FRAMES 64U
 
 /* USER CODE END PD */
 
@@ -137,6 +136,12 @@ static bool effects_task_replace_input_for_testing(uint16_t *buf, size_t count, 
 static void effects_task_report_failure(void *context);
 static void effects_task_report_frame_complete(void *context);
 static void effects_task_log_runtime_stats(const char *reason, uint8_t level);
+static uint32_t effects_task_get_timestamp_us(void *context);
+static void effects_task_on_frame_end(uint32_t frame_time_us, bool overrun, void *context);
+static void effects_task_panic_write(const char *text, void *context);
+
+static void dwt_init(void);
+static uint32_t dwt_get_timestamp_us(void);
 
 typedef enum
 {
@@ -170,8 +175,6 @@ static void init_cli_service_adapter(void);
 static void init_effects_defaults(void);
 static uint32_t compute_sampling_period_us(void);
 static uint32_t read_heartbeat_period_ms(void);
-static void configure_status_led_on_indicator(void);
-
 void startEffectsTask(void const *argument);
 void startCliTask(void const *argument);
 
@@ -291,9 +294,8 @@ static bool effects_task_wait_for_dac_buffer(uint32_t timeout_ticks, uint16_t **
                                              void *context)
 {
     (void)context;
-    (void)timeout_ticks;
 
-    return effects_task_wait_for_typed_buffer(0xFFFFFFFFU, buf_ptr, EFFECTS_BUFFER_DAC);
+    return effects_task_wait_for_typed_buffer(timeout_ticks, buf_ptr, EFFECTS_BUFFER_DAC);
 }
 
 static bool effects_task_dma_copy(const uint16_t *src, uint16_t *dst, size_t count,
@@ -371,6 +373,8 @@ static void effects_task_report_failure(void *context)
     cli_service_adapter_note_processing_failure((CliServiceAdapterContext *)context);
     HAL_GPIO_TogglePin(LED_STATUS_GPIO_Port, LED_STATUS_Pin);
 
+    effects_task_panic_write("panic: effects processing failure\n", NULL);
+
     if (effects_frames_failed % EFFECTS_RUNTIME_LOG_EVERY_FAILURES == 0U)
     {
         effects_task_log_runtime_stats("failure", LOG_LEVEL_WARN);
@@ -381,11 +385,6 @@ static void effects_task_report_frame_complete(void *context)
 {
     effects_frames_ok++;
     cli_service_adapter_note_frame_processed((CliServiceAdapterContext *)context);
-
-    if (effects_frames_ok % EFFECTS_RUNTIME_LOG_EVERY_FRAMES == 0U)
-    {
-        (void)log_write(LOG_LEVEL_DEBUG, "effects frame end");
-    }
 }
 
 static void effects_task_log_runtime_stats(const char *reason, uint8_t level)
@@ -398,6 +397,46 @@ static void effects_task_log_runtime_stats(const char *reason, uint8_t level)
                    (unsigned long)effects_frames_ok,
                    (unsigned long)effects_frames_failed);
     (void)log_write(level, line);
+}
+
+static bool dwt_ready;
+
+static void dwt_init(void)
+{
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+    DWT->CYCCNT = 0;
+    dwt_ready = (DWT->CTRL & DWT_CTRL_CYCCNTENA_Msk) != 0;
+}
+
+static uint32_t dwt_get_timestamp_us(void)
+{
+    if (!dwt_ready)
+    {
+        return 0;
+    }
+    return DWT->CYCCNT / (SystemCoreClock / 1000000U);
+}
+
+static uint32_t effects_task_get_timestamp_us(void *context)
+{
+    (void)context;
+    return dwt_get_timestamp_us();
+}
+
+static void effects_task_on_frame_end(uint32_t frame_time_us, bool overrun, void *context)
+{
+    cli_service_adapter_note_frame_timing((CliServiceAdapterContext *)context, frame_time_us,
+                                          overrun);
+}
+
+static void effects_task_panic_write(const char *text, void *context)
+{
+    (void)context;
+    if (text != NULL && (HAL_UART_GetState(&huart2) & HAL_UART_STATE_BUSY_TX) == 0U)
+    {
+        (void)HAL_UART_Transmit(&huart2, (uint8_t *)text, strlen(text), 25);
+    }
 }
 
 static bool boot_uart_write(const char *text)
@@ -655,25 +694,11 @@ static uint32_t read_heartbeat_period_ms(void)
     return period_ms;
 }
 
-static void configure_status_led_on_indicator(void)
-{
-    HAL_NVIC_DisableIRQ(STATUS_LED_EXTI_IRQn);
-    HAL_GPIO_DeInit(STATUS_LED_GPIO_Port, STATUS_LED_Pin);
-
-    GPIO_InitTypeDef gpio_init = {0};
-    gpio_init.Pin = STATUS_LED_Pin;
-    gpio_init.Mode = GPIO_MODE_OUTPUT_PP;
-    gpio_init.Pull = GPIO_NOPULL;
-    gpio_init.Speed = GPIO_SPEED_FREQ_LOW;
-    HAL_GPIO_Init(STATUS_LED_GPIO_Port, &gpio_init);
-
-    HAL_GPIO_WritePin(STATUS_LED_GPIO_Port, STATUS_LED_Pin, GPIO_PIN_SET);
-}
-
 void startEffectsTask(void const *argument)
 {
     (void)argument;
 
+    dwt_init();
     (void)log_write(LOG_LEVEL_INFO, "effects task start");
 
     EffectsPipeline effects_pipeline;
@@ -714,6 +739,10 @@ void startEffectsTask(void const *argument)
         .report_failure = effects_task_report_failure,
         .report_frame_complete = effects_task_report_frame_complete,
         .ms_to_ticks = effects_task_ms_to_ticks,
+        .on_frame_begin = NULL,
+        .on_frame_end = effects_task_on_frame_end,
+        .get_timestamp_us = effects_task_get_timestamp_us,
+        .panic_write = effects_task_panic_write,
         .context = &cli_service_adapter_context,
     };
 
@@ -731,7 +760,8 @@ void startEffectsTask(void const *argument)
 
     for (;;)
     {
-        (void)effects_task_step(&task_context, &task_ops);
+        bool step_ok = effects_task_step(&task_context, &task_ops);
+        cli_service_adapter_note_step_result(&cli_service_adapter_context, step_ok);
     }
 }
 
@@ -803,9 +833,8 @@ int main(void)
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
 
-  configure_status_led_on_indicator();
-
   boot_log_line("");
+
   boot_log_line("boot: init effects defaults");
 
   init_effects_defaults();
@@ -1197,11 +1226,11 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(LED_STATUS_GPIO_Port, LED_STATUS_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : STATUS_LED_Pin */
-  GPIO_InitStruct.Pin = STATUS_LED_Pin;
+  /*Configure GPIO pin : B1_Pin */
+  GPIO_InitStruct.Pin = B1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(STATUS_LED_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : LED_STATUS_Pin */
   GPIO_InitStruct.Pin = LED_STATUS_Pin;

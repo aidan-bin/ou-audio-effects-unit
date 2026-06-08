@@ -27,6 +27,10 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
         ops->free == NULL || ops->read_latched_state == NULL || ops->ms_to_ticks == NULL)
     {
         (void)log_write(LOG_LEVEL_ERROR, "effects task invalid context or ops");
+        if (ops != NULL && ops->panic_write != NULL)
+        {
+            ops->panic_write("panic: effects task invalid context or ops\n", ops->context);
+        }
         return false;
     }
 
@@ -41,17 +45,33 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
     EffectsState latched_effects_state;
     EffectsParams latched_effects_params;
 
+    bool profiling = ops->get_timestamp_us != NULL;
+    uint32_t frame_start_us = profiling ? ops->get_timestamp_us(ops->context) : 0;
+
+    if (ops->on_frame_begin != NULL)
+    {
+        ops->on_frame_begin(ops->context);
+    }
+
     uint32_t ticks_to_wait = compute_ticks_to_wait(task_context, ops);
 
     if (!ops->wait_for_adc_buffer(0xFFFFFFFFU, &curr_adc_buf, ops->context))
     {
         (void)log_write(LOG_LEVEL_WARN, "effects task adc wait failed");
+        if (ops->panic_write != NULL)
+        {
+            ops->panic_write("panic: adc wait failed\n", ops->context);
+        }
         return false;
     }
 
     if (curr_adc_buf != task_context->adcBufA && curr_adc_buf != task_context->adcBufB)
     {
         (void)log_write(LOG_LEVEL_ERROR, "effects task received invalid adc buffer");
+        if (ops->panic_write != NULL)
+        {
+            ops->panic_write("panic: invalid adc buffer\n", ops->context);
+        }
         return false;
     }
 
@@ -59,6 +79,10 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
         !ops->replace_input_for_testing(curr_adc_buf, task_context->sampleBufLen, ops->context))
     {
         (void)log_write(LOG_LEVEL_WARN, "effects task test input replacement failed");
+        if (ops->panic_write != NULL)
+        {
+            ops->panic_write("panic: test input replacement failed\n", ops->context);
+        }
         return false;
     }
 
@@ -69,6 +93,10 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
                            task_context->delaySamplesBuf, shift_count, ticks_to_wait, ops->context))
         {
             (void)log_write(LOG_LEVEL_ERROR, "effects task delay sample shift failed");
+            if (ops->panic_write != NULL)
+            {
+                ops->panic_write("panic: delay sample shift failed\n", ops->context);
+            }
             return false;
         }
     }
@@ -79,18 +107,41 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
             task_context->sampleBufLen, ticks_to_wait, ops->context))
     {
         (void)log_write(LOG_LEVEL_ERROR, "effects task delay sample capture failed");
+        if (ops->panic_write != NULL)
+        {
+            ops->panic_write("panic: delay sample capture failed\n", ops->context);
+        }
         return false;
     }
 
     if (!ops->wait_for_dac_buffer(ticks_to_wait, &curr_dac_buf, ops->context))
     {
         (void)log_write(LOG_LEVEL_WARN, "effects task dac wait failed");
-        return false;
+        if (curr_adc_buf == task_context->adcBufA)
+        {
+            curr_dac_buf = task_context->dacBufA;
+        }
+        else if (curr_adc_buf == task_context->adcBufB)
+        {
+            curr_dac_buf = task_context->dacBufB;
+        }
+        else
+        {
+            if (ops->panic_write != NULL)
+            {
+                ops->panic_write("panic: dac wait failed\n", ops->context);
+            }
+            return false;
+        }
     }
 
     if (curr_dac_buf != task_context->dacBufA && curr_dac_buf != task_context->dacBufB)
     {
         (void)log_write(LOG_LEVEL_ERROR, "effects task received invalid dac buffer");
+        if (ops->panic_write != NULL)
+        {
+            ops->panic_write("panic: invalid dac buffer\n", ops->context);
+        }
         return false;
     }
 
@@ -225,6 +276,19 @@ cleanup:
     if (!process_failed && ops->report_frame_complete != NULL)
     {
         ops->report_frame_complete(ops->context);
+    }
+
+    if (profiling)
+    {
+        uint32_t frame_time_us = ops->get_timestamp_us(ops->context) - frame_start_us;
+        uint32_t frame_budget_us = task_context->samplingPeriodUs * (uint32_t)task_context->sampleBufLen;
+        uint32_t slack_us = (uint32_t)task_context->processingSlackMs * 1000U;
+        uint32_t total_budget_us = frame_budget_us + slack_us;
+        bool overrun = frame_time_us > total_budget_us;
+        if (ops->on_frame_end != NULL)
+        {
+            ops->on_frame_end(frame_time_us, overrun, ops->context);
+        }
     }
 
     return !process_failed;

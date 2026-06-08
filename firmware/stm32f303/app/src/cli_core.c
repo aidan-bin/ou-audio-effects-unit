@@ -55,7 +55,7 @@ static const char *command_help_text(const char *command)
     }
     if (strcmp(command, "log") == 0)
     {
-        return "log enable <0|1> | level <0-255> | stream [0|1] (q to stop) | stats\n";
+        return "log enable <0|1> | level <0-255> | stream [0|1] [batch <N>] (q to stop) | stats [reset|timing]\n";
     }
     if (strcmp(command, "test") == 0)
     {
@@ -426,6 +426,57 @@ static CliStatus handle_log(char **tokens,
 
     if (strcmp(tokens[1], "stats") == 0)
     {
+        if (token_count == 3 && strcmp(tokens[2], "reset") == 0)
+        {
+            if (services->log_reset_stats == NULL)
+            {
+                return CLI_STATUS_UNSUPPORTED;
+            }
+            if (!services->log_reset_stats(services->context))
+            {
+                return CLI_STATUS_SERVICE_ERROR;
+            }
+            return CLI_STATUS_OK;
+        }
+
+        if (token_count == 3 && strcmp(tokens[2], "timing") == 0)
+        {
+            if (services->log_get_stats == NULL)
+            {
+                return CLI_STATUS_UNSUPPORTED;
+            }
+
+            CliLogStats stats = {0};
+            if (!services->log_get_stats(&stats, services->context))
+            {
+                return CLI_STATUS_SERVICE_ERROR;
+            }
+
+            char line[128];
+            if (stats.measuredFrameCount > 0)
+            {
+                uint32_t avg_us = stats.frameTimeTotalUs / stats.measuredFrameCount;
+                (void)snprintf(line, sizeof(line),
+                               "log timing mn=%lu mx=%lu avg=%lu meas=%lu over=%lu drop=%lu bs=%u q=%u\n",
+                               (unsigned long)stats.frameTimeMinUs,
+                               (unsigned long)stats.frameTimeMaxUs,
+                               (unsigned long)avg_us, (unsigned long)stats.measuredFrameCount,
+                               (unsigned long)stats.overrunCount,
+                               (unsigned long)stats.streamDropCount,
+                               stats.streamBatchSize,
+                               stats.streamQueueCount);
+            }
+            else
+            {
+                (void)snprintf(line, sizeof(line),
+                               "log timing drop=%lu bs=%u q=%u\n",
+                               (unsigned long)stats.streamDropCount,
+                               stats.streamBatchSize,
+                               stats.streamQueueCount);
+            }
+            return write_line(io, line) ? CLI_STATUS_OK : CLI_STATUS_SERVICE_ERROR;
+        }
+
         if (token_count != 2)
         {
             return CLI_STATUS_INVALID_ARGUMENTS;
@@ -442,11 +493,20 @@ static CliStatus handle_log(char **tokens,
             return CLI_STATUS_SERVICE_ERROR;
         }
 
-        char line[96];
-        snprintf(line, sizeof(line), "log stats enabled=%u level=%u frames=%lu failures=%lu\n",
-                 stats.enabled ? 1U : 0U, stats.level, (unsigned long)stats.frameCount,
-                 (unsigned long)stats.failureCount);
-        write_line(io, line);
+        char line[128];
+        (void)snprintf(line, sizeof(line),
+                       "log stats enabled=%u stream=%u level=%u frames=%lu failures=%lu"
+                       " stepfail=%lu streak=%lu\n",
+                       stats.enabled ? 1U : 0U, stats.streamEnabled ? 1U : 0U, stats.level,
+                       (unsigned long)stats.frameCount,
+                       (unsigned long)stats.failureCount,
+                       (unsigned long)stats.stepFailureCount,
+                       (unsigned long)stats.stepFailureStreak);
+        if (!write_line(io, line))
+        {
+            return CLI_STATUS_SERVICE_ERROR;
+        }
+
         return CLI_STATUS_OK;
     }
 
@@ -458,16 +518,38 @@ static CliStatus handle_log(char **tokens,
         }
 
         bool enabled = true;
-        if (token_count == 3)
+        size_t idx = 2;
+        if (token_count > idx)
         {
-            if (!cli_parse_bool01(tokens[2], &enabled))
+            if (strcmp(tokens[idx], "batch") != 0)
+            {
+                if (!cli_parse_bool01(tokens[idx], &enabled))
+                {
+                    return CLI_STATUS_PARSE_ERROR;
+                }
+                idx++;
+            }
+        }
+
+        if (token_count > idx)
+        {
+            if (token_count != idx + 2 || strcmp(tokens[idx], "batch") != 0)
+            {
+                return CLI_STATUS_INVALID_ARGUMENTS;
+            }
+            uint32_t batch = 0;
+            if (!cli_parse_u32(tokens[idx + 1], &batch) || batch == 0 || batch > 255)
             {
                 return CLI_STATUS_PARSE_ERROR;
             }
-        }
-        else if (token_count != 2)
-        {
-            return CLI_STATUS_INVALID_ARGUMENTS;
+            if (services->log_set_stream_batch == NULL)
+            {
+                return CLI_STATUS_UNSUPPORTED;
+            }
+            if (!services->log_set_stream_batch((uint8_t)batch, services->context))
+            {
+                return CLI_STATUS_SERVICE_ERROR;
+            }
         }
 
         if (!services->log_set_stream(enabled, services->context))
@@ -476,7 +558,7 @@ static CliStatus handle_log(char **tokens,
         }
 
         if (!write_line(io, enabled ? "log stream active (press q to stop)\n"
-                                    : "log stream stopped\n"))
+                                    : "log stream stopped; logging disabled\n"))
         {
             return CLI_STATUS_SERVICE_ERROR;
         }

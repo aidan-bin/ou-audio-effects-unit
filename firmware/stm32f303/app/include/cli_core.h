@@ -46,9 +46,20 @@ typedef struct
 typedef struct
 {
     bool enabled;
+    bool streamEnabled;
     uint8_t level;
     uint32_t frameCount;
     uint32_t failureCount;
+    uint32_t stepFailureCount;
+    uint32_t stepFailureStreak;
+    uint32_t frameTimeMinUs;
+    uint32_t frameTimeMaxUs;
+    uint32_t frameTimeTotalUs;
+    uint32_t measuredFrameCount;
+    uint32_t overrunCount;
+    uint32_t streamDropCount;
+    uint8_t streamBatchSize;
+    uint8_t streamQueueCount;
 } CliLogStats;
 
 typedef struct
@@ -72,11 +83,13 @@ typedef struct
     bool (*log_set_level)(uint8_t level, void *context);
     bool (*log_set_enabled)(bool enabled, void *context);
     bool (*log_set_stream)(bool enabled, void *context);
+    bool (*log_set_stream_batch)(uint8_t batchSize, void *context);
     bool (*log_read_line)(char *lineOut,
                           size_t lineCapacity,
                           bool *hasLineOut,
                           void *context);
     bool (*log_get_stats)(CliLogStats *statsOut, void *context);
+    bool (*log_reset_stats)(void *context);
 
     bool (*test_set_mode)(bool enabled, void *context);
     bool (*test_set_vector)(uint8_t vector, void *context);

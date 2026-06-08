@@ -69,6 +69,23 @@ typedef struct
     uint32_t *heartbeatPeriodMs;
     uint32_t heartbeatPeriodMinMs;
     uint32_t heartbeatPeriodMaxMs;
+
+    uint32_t frameTimeMinUs;
+    uint32_t frameTimeMaxUs;
+    uint32_t frameTimeTotalUs;
+    uint32_t measuredFrameCount;
+    uint32_t overrunCount;
+    uint32_t stepFailureCount;
+    uint32_t stepFailureStreak;
+    uint32_t streamDropCount;
+    uint8_t streamBatchSize;
+    uint8_t streamBatchCounter;
+
+    uint32_t batchFrameTimeMinUs;
+    uint32_t batchFrameTimeMaxUs;
+    uint32_t batchFrameTimeTotalUs;
+    uint32_t batchFrameCount;
+    uint32_t batchOverrunCount;
 } CliServiceAdapterContext;
 
 void cli_service_adapter_init(CliServiceAdapterContext *context, EffectsState *state,
@@ -98,5 +115,12 @@ bool cli_service_adapter_append_log_line(CliServiceAdapterContext *context, cons
 
 void cli_service_adapter_note_frame_processed(CliServiceAdapterContext *context);
 void cli_service_adapter_note_processing_failure(CliServiceAdapterContext *context);
+void cli_service_adapter_note_step_result(CliServiceAdapterContext *context, bool stepSucceeded);
+
+void cli_service_adapter_set_stream_batch_size(CliServiceAdapterContext *context, uint8_t batchSize);
+uint8_t cli_service_adapter_get_stream_batch_size(CliServiceAdapterContext *context);
+void cli_service_adapter_reset_profiling_stats(CliServiceAdapterContext *context);
+void cli_service_adapter_note_frame_timing(CliServiceAdapterContext *context, uint32_t frameTimeUs,
+                                           bool overrun);
 
 #endif

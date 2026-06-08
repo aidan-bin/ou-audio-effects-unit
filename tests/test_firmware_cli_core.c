@@ -28,6 +28,10 @@ typedef struct
     uint8_t logLevel;
     uint32_t frameCount;
     uint32_t failureCount;
+    uint32_t stepFailureCount;
+    uint32_t stepFailureStreak;
+    uint8_t streamBatchSize;
+    uint8_t streamQueueCount;
 
     bool testModeEnabled;
     uint8_t testVector;
@@ -167,6 +171,21 @@ static bool log_set_stream(bool enabled, void *context)
     return !ctx->failService;
 }
 
+static bool log_set_stream_batch(uint8_t batchSize, void *context)
+{
+    CliCoreTestContext *ctx = (CliCoreTestContext *)context;
+    ctx->streamBatchSize = batchSize;
+    return !ctx->failService;
+}
+
+static bool log_reset_stats(void *context)
+{
+    CliCoreTestContext *ctx = (CliCoreTestContext *)context;
+    ctx->frameCount = 0;
+    ctx->failureCount = 0;
+    return !ctx->failService;
+}
+
 static bool log_get_stats(CliLogStats *statsOut, void *context)
 {
     CliCoreTestContext *ctx = (CliCoreTestContext *)context;
@@ -176,9 +195,20 @@ static bool log_get_stats(CliLogStats *statsOut, void *context)
     }
 
     statsOut->enabled = ctx->logEnabled;
+    statsOut->streamEnabled = ctx->logStreamEnabled;
     statsOut->level = ctx->logLevel;
     statsOut->frameCount = ctx->frameCount;
     statsOut->failureCount = ctx->failureCount;
+    statsOut->stepFailureCount = ctx->stepFailureCount;
+    statsOut->stepFailureStreak = ctx->stepFailureStreak;
+    statsOut->frameTimeMinUs = 0;
+    statsOut->frameTimeMaxUs = 0;
+    statsOut->frameTimeTotalUs = 0;
+    statsOut->measuredFrameCount = 0;
+    statsOut->overrunCount = 0;
+    statsOut->streamDropCount = 0;
+    statsOut->streamBatchSize = ctx->streamBatchSize;
+    statsOut->streamQueueCount = ctx->streamQueueCount;
     return !ctx->failService;
 }
 
@@ -242,7 +272,9 @@ static CliServices make_services(CliCoreTestContext *ctx)
         .log_set_level = log_set_level,
         .log_set_enabled = log_set_enabled,
         .log_set_stream = log_set_stream,
+        .log_set_stream_batch = log_set_stream_batch,
         .log_get_stats = log_get_stats,
+        .log_reset_stats = log_reset_stats,
         .test_set_mode = test_set_mode,
         .test_set_vector = test_set_vector,
         .test_set_frequency_hz = test_set_frequency_hz,
@@ -351,10 +383,24 @@ static void test_rom_and_log_commands(void)
     ctx.logLevel = 3;
     ctx.frameCount = 11;
     ctx.failureCount = 2;
+    ctx.logStreamEnabled = false;
+    ctx.stepFailureCount = 0;
+    ctx.stepFailureStreak = 0;
+    ctx.streamBatchSize = 1;
+    ctx.streamQueueCount = 0;
     expect_eq_u32(CLI_STATUS_OK,
                   cli_core_process_line("log stats", &services, &io),
                   "log stats succeeds");
     expect_true(strstr(ctx.output, "frames=11") != NULL, "log stats includes frame count");
+    expect_true(strstr(ctx.output, "stream=0") != NULL, "log stats includes stream state");
+
+    ctx.outputUsed = 0;
+    ctx.output[0] = '\0';
+    expect_eq_u32(CLI_STATUS_OK,
+                  cli_core_process_line("log stats timing", &services, &io),
+                  "log stats timing succeeds");
+    expect_true(strstr(ctx.output, "log timing") != NULL,
+                "log stats timing emits timing line");
 }
 
 static void test_test_mode_commands(void)
@@ -392,6 +438,64 @@ static void test_test_mode_commands(void)
     expect_true(strstr(ctx.output, "vector=lut") != NULL, "test status prints vector");
 }
 
+static void test_log_stream_batch_command(void)
+{
+    CliCoreTestContext ctx = {0};
+    CliServices services = make_services(&ctx);
+    CliIo io = make_io(&ctx);
+
+    expect_eq_u32(CLI_STATUS_OK,
+                  cli_core_process_line("log stream 1 batch 5", &services, &io),
+                  "log stream batch 5 succeeds");
+    expect_true(ctx.logStreamEnabled, "log stream enabled with batch");
+    expect_eq_u8(5, ctx.streamBatchSize, "batch size 5 parsed");
+
+    ctx.outputUsed = 0;
+    ctx.output[0] = '\0';
+    expect_eq_u32(CLI_STATUS_OK,
+                  cli_core_process_line("log stream 1 batch 1", &services, &io),
+                  "log stream batch 1 succeeds");
+    expect_eq_u8(1, ctx.streamBatchSize, "batch size 1 parsed");
+
+    ctx.outputUsed = 0;
+    ctx.output[0] = '\0';
+    expect_eq_u32(CLI_STATUS_OK,
+                  cli_core_process_line("log stream batch 10", &services, &io),
+                  "log stream batch 10 without bool prefix succeeds");
+    expect_true(ctx.logStreamEnabled, "log stream enabled without bool prefix");
+    expect_eq_u8(10, ctx.streamBatchSize, "batch size 10 parsed");
+
+    ctx.outputUsed = 0;
+    ctx.output[0] = '\0';
+    expect_eq_u32(CLI_STATUS_PARSE_ERROR,
+                  cli_core_process_line("log stream 1 batch 0", &services, &io),
+                  "log stream batch 0 rejected as invalid");
+
+    ctx.outputUsed = 0;
+    ctx.output[0] = '\0';
+    expect_eq_u32(CLI_STATUS_OK,
+                  cli_core_process_line("log stream 0", &services, &io),
+                  "log stream off works independently");
+    expect_false(ctx.logStreamEnabled, "log stream disabled");
+    expect_true(strstr(ctx.output, "logging disabled") != NULL,
+                "log stream off explains logging is disabled");
+}
+
+static void test_log_stats_reset(void)
+{
+    CliCoreTestContext ctx = {0};
+    CliServices services = make_services(&ctx);
+    CliIo io = make_io(&ctx);
+    ctx.frameCount = 42;
+    ctx.failureCount = 5;
+
+    expect_eq_u32(CLI_STATUS_OK,
+                  cli_core_process_line("log stats reset", &services, &io),
+                  "log stats reset succeeds");
+    expect_eq_u32(0, ctx.frameCount, "frame count reset");
+    expect_eq_u32(0, ctx.failureCount, "failure count reset");
+}
+
 static void test_error_paths(void)
 {
     CliCoreTestContext ctx = {0};
@@ -423,6 +527,8 @@ int main(void)
     test_ping_and_help();
     test_override_and_config_commands();
     test_rom_and_log_commands();
+    test_log_stream_batch_command();
+    test_log_stats_reset();
     test_test_mode_commands();
     test_error_paths();
 
