@@ -144,7 +144,7 @@ static PeripheralDispatchContext peripheral_dispatch_context;
 static PeripheralDispatchOps peripheral_dispatch_ops;
 static RomTaskSupportConfig rom_task_support_config;
 static RomTaskSupportOps rom_task_support_ops;
-static CliServiceAdapterContext cli_service_adapter_context;
+static CliServiceAdapter cli_service_adapter_context;
 
 /* DMA buffer for ADC samples (note: samples are in order of decreasing age) */
 static volatile uint16_t adc_buf[ADC_BUF_LEN] = {0};
@@ -473,7 +473,7 @@ static void pot_task_apply_sample(Effect active_effect, uint8_t pot_index, uint3
 {
     (void)adc_max;
 
-    CliServiceAdapterContext *adapter_context = (CliServiceAdapterContext *)context;
+    CliServiceAdapter *adapter_context = (CliServiceAdapter *)context;
     if (adapter_context != NULL)
     {
         (void)cli_service_adapter_apply_pot_sample(adapter_context, active_effect, pot_index, adc_value);
@@ -546,7 +546,7 @@ static bool switch_task_write_state(const EffectsState *state, void *context)
         return false;
     }
 
-    CliServiceAdapterContext *adapter_context = (CliServiceAdapterContext *)context;
+    CliServiceAdapter *adapter_context = (CliServiceAdapter *)context;
     if (adapter_context != NULL)
     {
         const bool switch_a_enabled = state->isEnabled[state->ordered[0]];
@@ -635,14 +635,14 @@ static void set_rom_write_disable_adapter(bool disable_writes, void *context)
 static bool log_is_enabled(void *context)
 {
     bool enabled = false;
-    return cli_service_adapter_get_log_enabled((CliServiceAdapterContext *)context, &enabled) &&
+    return cli_service_adapter_get_log_enabled((CliServiceAdapter *)context, &enabled) &&
            enabled;
 }
 
 static uint8_t log_get_level(void *context)
 {
     uint8_t level = 0;
-    if (!cli_service_adapter_get_log_level((CliServiceAdapterContext *)context, &level))
+    if (!cli_service_adapter_get_log_level((CliServiceAdapter *)context, &level))
     {
         return 0;
     }
@@ -652,7 +652,7 @@ static uint8_t log_get_level(void *context)
 
 static bool log_write_line(const char *line, void *context)
 {
-    return cli_service_adapter_append_log_line((CliServiceAdapterContext *)context, line);
+    return cli_service_adapter_append_log_line((CliServiceAdapter *)context, line);
 }
 
 static void cli_service_lock(void *context)

@@ -102,7 +102,7 @@ static volatile uint32_t heartbeat_period_ms = HEARTBEAT_PERIOD_MS_DEFAULT;
 static uint32_t effects_frames_ok = 0U;
 static uint32_t effects_frames_failed = 0U;
 
-static CliServiceAdapterContext cli_service_adapter_context;
+static CliServiceAdapter cli_service_adapter_context;
 static CliServices cli_services;
 static CliSession cli_session;
 static TestVectorSource test_vector_source;
@@ -350,7 +350,7 @@ static bool effects_task_read_latched_state(EffectsState *state, EffectsParams *
 
 static bool effects_task_replace_input_for_testing(uint16_t *buf, size_t count, void *context)
 {
-    CliServiceAdapterContext *adapter_context = (CliServiceAdapterContext *)context;
+    CliServiceAdapter *adapter_context = (CliServiceAdapter *)context;
     CliTestModeStatus status = {0};
 
     if (buf == NULL || adapter_context == NULL)
@@ -373,7 +373,7 @@ static bool effects_task_replace_input_for_testing(uint16_t *buf, size_t count, 
 
 static bool effects_task_replace_output_for_testing(uint16_t *buf, size_t count, void *context)
 {
-    CliServiceAdapterContext *adapter_context = (CliServiceAdapterContext *)context;
+    CliServiceAdapter *adapter_context = (CliServiceAdapter *)context;
     CliTestModeStatus status = {0};
 
     if (buf == NULL || adapter_context == NULL)
@@ -397,7 +397,7 @@ static bool effects_task_replace_output_for_testing(uint16_t *buf, size_t count,
 static void effects_task_report_failure(void *context)
 {
     effects_frames_failed++;
-    cli_service_adapter_note_processing_failure((CliServiceAdapterContext *)context);
+    cli_service_adapter_note_processing_failure((CliServiceAdapter *)context);
     HAL_GPIO_TogglePin(LED_STATUS_GPIO_Port, LED_STATUS_Pin);
 
     effects_task_panic_write("panic: effects processing failure\n", NULL);
@@ -411,7 +411,7 @@ static void effects_task_report_failure(void *context)
 static void effects_task_report_frame_complete(void *context)
 {
     effects_frames_ok++;
-    cli_service_adapter_note_frame_processed((CliServiceAdapterContext *)context);
+    cli_service_adapter_note_frame_processed((CliServiceAdapter *)context);
 }
 
 static void effects_task_log_runtime_stats(const char *reason, uint8_t level)
@@ -453,7 +453,7 @@ static uint32_t effects_task_get_timestamp_us(void *context)
 
 static void effects_task_on_frame_end(uint32_t frame_time_us, bool overrun, void *context)
 {
-    cli_service_adapter_note_frame_timing((CliServiceAdapterContext *)context, frame_time_us,
+    cli_service_adapter_note_frame_timing((CliServiceAdapter *)context, frame_time_us,
                                           overrun);
 }
 
@@ -564,14 +564,14 @@ static void cli_service_unlock(void *context)
 static bool log_is_enabled(void *context)
 {
     bool enabled = false;
-    return cli_service_adapter_get_log_enabled((CliServiceAdapterContext *)context, &enabled) &&
+    return cli_service_adapter_get_log_enabled((CliServiceAdapter *)context, &enabled) &&
            enabled;
 }
 
 static uint8_t log_get_level(void *context)
 {
     uint8_t level = 0;
-    if (!cli_service_adapter_get_log_level((CliServiceAdapterContext *)context, &level))
+    if (!cli_service_adapter_get_log_level((CliServiceAdapter *)context, &level))
     {
         return 0;
     }
@@ -581,7 +581,7 @@ static uint8_t log_get_level(void *context)
 
 static bool log_write_line(const char *line, void *context)
 {
-    return cli_service_adapter_append_log_line((CliServiceAdapterContext *)context, line);
+    return cli_service_adapter_append_log_line((CliServiceAdapter *)context, line);
 }
 
 static void cli_uart_recover_rx_errors(void)

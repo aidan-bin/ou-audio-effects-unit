@@ -11,7 +11,7 @@
 #define ROM_RAW_MIN_ADDRESS 0x0000
 #define ROM_RAW_MAX_ADDRESS 0x01FF
 
-static void lock_ctx(CliServiceAdapterContext *context)
+static void lock_ctx(CliServiceAdapter *context)
 {
     if (context != NULL && context->ops.lock != NULL)
     {
@@ -19,7 +19,7 @@ static void lock_ctx(CliServiceAdapterContext *context)
     }
 }
 
-static void unlock_ctx(CliServiceAdapterContext *context)
+static void unlock_ctx(CliServiceAdapter *context)
 {
     if (context != NULL && context->ops.unlock != NULL)
     {
@@ -260,7 +260,7 @@ static bool get_state_value(const EffectsState *state, const char *key, int32_t 
     return false;
 }
 
-static bool set_runtime_value(CliServiceAdapterContext *context, const char *key, int32_t value)
+static bool set_runtime_value(CliServiceAdapter *context, const char *key, int32_t value)
 {
     if (context == NULL || key == NULL || value < 0)
     {
@@ -273,22 +273,22 @@ static bool set_runtime_value(CliServiceAdapterContext *context, const char *key
         return false;
     }
 
-    if (context->heartbeatPeriodMs == NULL)
+    if (context->heartbeat.periodMs == NULL)
     {
         return false;
     }
 
     uint32_t period_ms = (uint32_t)value;
-    if (period_ms < context->heartbeatPeriodMinMs || period_ms > context->heartbeatPeriodMaxMs)
+    if (period_ms < context->heartbeat.periodMinMs || period_ms > context->heartbeat.periodMaxMs)
     {
         return false;
     }
 
-    *context->heartbeatPeriodMs = period_ms;
+    *context->heartbeat.periodMs = period_ms;
     return true;
 }
 
-static bool get_runtime_value(const CliServiceAdapterContext *context,
+static bool get_runtime_value(const CliServiceAdapter *context,
                               const char *key,
                               int32_t *value_out)
 {
@@ -303,67 +303,67 @@ static bool get_runtime_value(const CliServiceAdapterContext *context,
         return false;
     }
 
-    if (context->heartbeatPeriodMs == NULL ||
-        *context->heartbeatPeriodMs > (uint32_t)INT32_MAX)
+    if (context->heartbeat.periodMs == NULL ||
+        *context->heartbeat.periodMs > (uint32_t)INT32_MAX)
     {
         return false;
     }
 
-    *value_out = (int32_t)(*context->heartbeatPeriodMs);
+    *value_out = (int32_t)(*context->heartbeat.periodMs);
     return true;
 }
 
-static bool in_rom_window(const CliServiceAdapterContext *context, uint16_t address, uint16_t length)
+static bool in_rom_window(const CliServiceAdapter *context, uint16_t address, uint16_t length)
 {
-    if (context == NULL || length == 0 || length > context->romRawMaxLength)
+    if (context == NULL || length == 0 || length > context->romWindow.maxLength)
     {
         return false;
     }
 
-    if (address < context->romRawMinAddress || address > context->romRawMaxAddress)
+    if (address < context->romWindow.minAddress || address > context->romWindow.maxAddress)
     {
         return false;
     }
 
     uint32_t end = (uint32_t)address + (uint32_t)length - 1U;
-    return end <= context->romRawMaxAddress;
+    return end <= context->romWindow.maxAddress;
 }
 
-static void log_stream_queue_clear(CliServiceAdapterContext *context)
+static void log_stream_queue_clear(CliServiceAdapter *context)
 {
     if (context == NULL)
     {
         return;
     }
 
-    context->logStreamHead = 0;
-    context->logStreamTail = 0;
-    context->logStreamCount = 0;
+    context->logStream.head = 0;
+    context->logStream.tail = 0;
+    context->logStream.count = 0;
 }
 
-static bool log_stream_queue_push(CliServiceAdapterContext *context, const char *line)
+static bool log_stream_queue_push(CliServiceAdapter *context, const char *line)
 {
     if (context == NULL || line == NULL)
     {
         return false;
     }
 
-    if (context->logStreamCount >= CLI_LOG_STREAM_QUEUE_DEPTH)
+    if (context->logStream.count >= CLI_LOG_STREAM_QUEUE_DEPTH)
     {
-        context->streamDropCount++;
-        context->logStreamHead = (uint8_t)((context->logStreamHead + 1U) % CLI_LOG_STREAM_QUEUE_DEPTH);
-        context->logStreamCount--;
+        context->logStream.dropCount++;
+        context->logStream.head = (uint8_t)((context->logStream.head + 1U) % CLI_LOG_STREAM_QUEUE_DEPTH);
+        context->logStream.count--;
     }
 
-    (void)strncpy(context->logStreamQueue[context->logStreamTail], line,
+    (void)strncpy(context->logStream.lines[context->logStream.tail], line,
                   CLI_LOG_STREAM_LINE_MAX - 1U);
-    context->logStreamQueue[context->logStreamTail][CLI_LOG_STREAM_LINE_MAX - 1U] = '\0';
-    context->logStreamTail = (uint8_t)((context->logStreamTail + 1U) % CLI_LOG_STREAM_QUEUE_DEPTH);
-    context->logStreamCount++;
+    context->logStream.lines[context->logStream.tail][CLI_LOG_STREAM_LINE_MAX - 1U] = '\0';
+    context->logStream.tail = (uint8_t)((context->logStream.tail + 1U) % CLI_LOG_STREAM_QUEUE_DEPTH);
+    context->logStream.count++;
     return true;
 }
 
-static bool log_stream_queue_pop(CliServiceAdapterContext *context,
+static bool log_stream_queue_pop(CliServiceAdapter *context,
                                  char *line_out,
                                  size_t line_capacity,
                                  bool *has_line_out)
@@ -373,98 +373,98 @@ static bool log_stream_queue_pop(CliServiceAdapterContext *context,
         return false;
     }
 
-    if (context->logStreamCount == 0)
+    if (context->logStream.count == 0)
     {
         *has_line_out = false;
         line_out[0] = '\0';
         return true;
     }
 
-    (void)strncpy(line_out, context->logStreamQueue[context->logStreamHead], line_capacity - 1U);
+    (void)strncpy(line_out, context->logStream.lines[context->logStream.head], line_capacity - 1U);
     line_out[line_capacity - 1U] = '\0';
 
-    context->logStreamHead = (uint8_t)((context->logStreamHead + 1U) % CLI_LOG_STREAM_QUEUE_DEPTH);
-    context->logStreamCount--;
+    context->logStream.head = (uint8_t)((context->logStream.head + 1U) % CLI_LOG_STREAM_QUEUE_DEPTH);
+    context->logStream.count--;
     *has_line_out = true;
     return true;
 }
 
 static bool service_set_pot_override(uint8_t pot_index, uint32_t value, void *ctx)
 {
-    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
     if (context == NULL || pot_index >= CLI_POT_COUNT)
     {
         return false;
     }
 
     lock_ctx(context);
-    context->potOverrideEnabled[pot_index] = true;
-    context->potOverrideValue[pot_index] = value;
+    context->overrides.potEnabled[pot_index] = true;
+    context->overrides.potValue[pot_index] = value;
     unlock_ctx(context);
     return true;
 }
 
 static bool service_clear_pot_override(uint8_t pot_index, void *ctx)
 {
-    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
     if (context == NULL || pot_index >= CLI_POT_COUNT)
     {
         return false;
     }
 
     lock_ctx(context);
-    context->potOverrideEnabled[pot_index] = false;
+    context->overrides.potEnabled[pot_index] = false;
     unlock_ctx(context);
     return true;
 }
 
 static bool service_set_switch_override(uint8_t switch_index, bool enabled, void *ctx)
 {
-    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
     if (context == NULL || switch_index >= CLI_SWITCH_COUNT)
     {
         return false;
     }
 
     lock_ctx(context);
-    context->switchOverrideEnabled[switch_index] = true;
-    context->switchOverrideValue[switch_index] = enabled;
+    context->overrides.switchEnabled[switch_index] = true;
+    context->overrides.switchValue[switch_index] = enabled;
     unlock_ctx(context);
     return true;
 }
 
 static bool service_clear_switch_override(uint8_t switch_index, void *ctx)
 {
-    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
     if (context == NULL || switch_index >= CLI_SWITCH_COUNT)
     {
         return false;
     }
 
     lock_ctx(context);
-    context->switchOverrideEnabled[switch_index] = false;
+    context->overrides.switchEnabled[switch_index] = false;
     unlock_ctx(context);
     return true;
 }
 
 static bool service_clear_all_overrides(void *ctx)
 {
-    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
     if (context == NULL)
     {
         return false;
     }
 
     lock_ctx(context);
-    memset(context->potOverrideEnabled, 0, sizeof(context->potOverrideEnabled));
-    memset(context->switchOverrideEnabled, 0, sizeof(context->switchOverrideEnabled));
+    memset(context->overrides.potEnabled, 0, sizeof(context->overrides.potEnabled));
+    memset(context->overrides.switchEnabled, 0, sizeof(context->overrides.switchEnabled));
     unlock_ctx(context);
     return true;
 }
 
 static bool service_config_set(const char *key, int32_t value, void *ctx)
 {
-    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
     bool success = false;
 
     if (context == NULL || context->state == NULL || context->params == NULL)
@@ -487,7 +487,7 @@ static bool service_config_set(const char *key, int32_t value, void *ctx)
 
 static bool service_config_get(const char *key, int32_t *value_out, void *ctx)
 {
-    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
     bool success = false;
 
     if (context == NULL || context->state == NULL || context->params == NULL)
@@ -506,14 +506,14 @@ static bool service_config_get(const char *key, int32_t *value_out, void *ctx)
 
 static bool service_rom_save_state(void *ctx)
 {
-    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
     return context != NULL && context->ops.rom_save_state != NULL &&
            context->ops.rom_save_state(context->ops.context);
 }
 
 static bool service_rom_load_state(void *ctx)
 {
-    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
     return context != NULL && context->ops.rom_load_state != NULL &&
            context->ops.rom_load_state(context->ops.context);
 }
@@ -521,7 +521,7 @@ static bool service_rom_load_state(void *ctx)
 static bool service_rom_read_raw(uint16_t address, uint16_t length, uint8_t *payload_out,
                                  size_t payload_capacity, size_t *payload_size_out, void *ctx)
 {
-    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
 
     if (context == NULL || context->ops.rom_read_raw == NULL || !in_rom_window(context, address, length))
     {
@@ -535,7 +535,7 @@ static bool service_rom_read_raw(uint16_t address, uint16_t length, uint8_t *pay
 static bool service_rom_write_raw(uint16_t address, const uint8_t *payload, size_t payload_size,
                                   void *ctx)
 {
-    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
 
     if (context == NULL || context->ops.rom_write_raw == NULL || payload_size > UINT16_MAX)
     {
@@ -552,14 +552,14 @@ static bool service_rom_write_raw(uint16_t address, const uint8_t *payload, size
 
 static bool service_log_set_level(uint8_t level, void *ctx)
 {
-    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
     if (context == NULL)
     {
         return false;
     }
 
     lock_ctx(context);
-    context->logLevel = level;
+    context->log.level = level;
     unlock_ctx(context);
 
     if (context->ops.log_set_level != NULL)
@@ -572,14 +572,14 @@ static bool service_log_set_level(uint8_t level, void *ctx)
 
 static bool service_log_set_enabled(bool enabled, void *ctx)
 {
-    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
     if (context == NULL)
     {
         return false;
     }
 
     lock_ctx(context);
-    context->logEnabled = enabled;
+    context->log.enabled = enabled;
     unlock_ctx(context);
 
     if (context->ops.log_set_enabled != NULL)
@@ -592,15 +592,15 @@ static bool service_log_set_enabled(bool enabled, void *ctx)
 
 static bool service_log_set_stream(bool enabled, void *ctx)
 {
-    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
     if (context == NULL)
     {
         return false;
     }
 
     lock_ctx(context);
-    context->logEnabled = enabled;
-    context->logStreamEnabled = enabled;
+    context->log.enabled = enabled;
+    context->log.streamEnabled = enabled;
     if (!enabled)
     {
         log_stream_queue_clear(context);
@@ -620,7 +620,7 @@ static bool service_log_read_line(char *line_out,
                                   bool *has_line_out,
                                   void *ctx)
 {
-    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
     if (context == NULL || line_out == NULL || line_capacity == 0 || has_line_out == NULL)
     {
         return false;
@@ -635,7 +635,7 @@ static bool service_log_read_line(char *line_out,
 
 static bool service_log_set_stream_batch(uint8_t batch_size, void *ctx)
 {
-    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
     if (context == NULL || batch_size == 0)
     {
         return false;
@@ -649,7 +649,7 @@ static bool service_log_set_stream_batch(uint8_t batch_size, void *ctx)
 
 static bool service_log_reset_stats(void *ctx)
 {
-    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
     if (context == NULL)
     {
         return false;
@@ -661,28 +661,28 @@ static bool service_log_reset_stats(void *ctx)
 
 static bool service_log_get_stats(CliLogStats *stats_out, void *ctx)
 {
-    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
     if (context == NULL || stats_out == NULL)
     {
         return false;
     }
 
     lock_ctx(context);
-    stats_out->enabled = context->logEnabled;
-    stats_out->streamEnabled = context->logStreamEnabled;
-    stats_out->level = context->logLevel;
-    stats_out->frameCount = context->logFrameCount;
-    stats_out->failureCount = context->logFailureCount;
+    stats_out->enabled = context->log.enabled;
+    stats_out->streamEnabled = context->log.streamEnabled;
+    stats_out->level = context->log.level;
+    stats_out->frameCount = context->log.frameCount;
+    stats_out->failureCount = context->log.failureCount;
     stats_out->stepFailureCount = context->stepFailureCount;
     stats_out->stepFailureStreak = context->stepFailureStreak;
-    stats_out->frameTimeMinUs = context->frameTimeMinUs;
-    stats_out->frameTimeMaxUs = context->frameTimeMaxUs;
-    stats_out->frameTimeTotalUs = context->frameTimeTotalUs;
-    stats_out->measuredFrameCount = context->measuredFrameCount;
-    stats_out->overrunCount = context->overrunCount;
-    stats_out->streamDropCount = context->streamDropCount;
+    stats_out->frameTimeMinUs = context->profile.frameTimeMinUs;
+    stats_out->frameTimeMaxUs = context->profile.frameTimeMaxUs;
+    stats_out->frameTimeTotalUs = context->profile.frameTimeTotalUs;
+    stats_out->measuredFrameCount = context->profile.frameCount;
+    stats_out->overrunCount = context->profile.overrunCount;
+    stats_out->streamDropCount = context->logStream.dropCount;
     stats_out->streamBatchSize = context->streamBatchSize;
-    stats_out->streamQueueCount = context->logStreamCount;
+    stats_out->streamQueueCount = context->logStream.count;
     unlock_ctx(context);
 
     return true;
@@ -690,14 +690,14 @@ static bool service_log_get_stats(CliLogStats *stats_out, void *ctx)
 
 static bool service_test_set_input_mode(bool enabled, void *ctx)
 {
-    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
     if (context == NULL)
     {
         return false;
     }
 
     lock_ctx(context);
-    context->testInputModeEnabled = enabled;
+    context->testInput.enabled = enabled;
     unlock_ctx(context);
 
     if (context->ops.test_set_input_mode != NULL)
@@ -710,14 +710,14 @@ static bool service_test_set_input_mode(bool enabled, void *ctx)
 
 static bool service_test_set_input_vector(uint8_t vector, void *ctx)
 {
-    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
     if (context == NULL || vector > MAX_TEST_VECTOR_INDEX)
     {
         return false;
     }
 
     lock_ctx(context);
-    context->testInputVector = vector;
+    context->testInput.vector = vector;
     unlock_ctx(context);
 
     if (context->ops.test_set_input_vector != NULL)
@@ -730,14 +730,14 @@ static bool service_test_set_input_vector(uint8_t vector, void *ctx)
 
 static bool service_test_set_input_frequency_hz(uint16_t frequency_hz, void *ctx)
 {
-    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
     if (context == NULL || frequency_hz < TEST_FREQ_MIN_HZ || frequency_hz > TEST_FREQ_MAX_HZ)
     {
         return false;
     }
 
     lock_ctx(context);
-    context->testInputFrequencyHz = frequency_hz;
+    context->testInput.frequencyHz = frequency_hz;
     unlock_ctx(context);
 
     if (context->ops.test_set_input_frequency_hz != NULL)
@@ -750,14 +750,14 @@ static bool service_test_set_input_frequency_hz(uint16_t frequency_hz, void *ctx
 
 static bool service_test_set_input_amplitude(uint16_t amplitude, void *ctx)
 {
-    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
     if (context == NULL || amplitude > X_AXIS)
     {
         return false;
     }
 
     lock_ctx(context);
-    context->testInputAmplitude = amplitude;
+    context->testInput.amplitude = amplitude;
     unlock_ctx(context);
 
     if (context->ops.test_set_input_amplitude != NULL)
@@ -770,17 +770,17 @@ static bool service_test_set_input_amplitude(uint16_t amplitude, void *ctx)
 
 static bool service_test_get_input_status(CliTestModeStatus *status_out, void *ctx)
 {
-    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
     if (context == NULL || status_out == NULL)
     {
         return false;
     }
 
     lock_ctx(context);
-    status_out->enabled = context->testInputModeEnabled;
-    status_out->vector = context->testInputVector;
-    status_out->frequencyHz = context->testInputFrequencyHz;
-    status_out->amplitude = context->testInputAmplitude;
+    status_out->enabled = context->testInput.enabled;
+    status_out->vector = context->testInput.vector;
+    status_out->frequencyHz = context->testInput.frequencyHz;
+    status_out->amplitude = context->testInput.amplitude;
     unlock_ctx(context);
 
     return true;
@@ -788,14 +788,14 @@ static bool service_test_get_input_status(CliTestModeStatus *status_out, void *c
 
 static bool service_test_set_output_mode(bool enabled, void *ctx)
 {
-    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
     if (context == NULL)
     {
         return false;
     }
 
     lock_ctx(context);
-    context->testOutputModeEnabled = enabled;
+    context->testOutput.enabled = enabled;
     unlock_ctx(context);
 
     if (context->ops.test_set_output_mode != NULL)
@@ -808,14 +808,14 @@ static bool service_test_set_output_mode(bool enabled, void *ctx)
 
 static bool service_test_set_output_vector(uint8_t vector, void *ctx)
 {
-    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
     if (context == NULL || vector > MAX_TEST_VECTOR_INDEX)
     {
         return false;
     }
 
     lock_ctx(context);
-    context->testOutputVector = vector;
+    context->testOutput.vector = vector;
     unlock_ctx(context);
 
     if (context->ops.test_set_output_vector != NULL)
@@ -828,14 +828,14 @@ static bool service_test_set_output_vector(uint8_t vector, void *ctx)
 
 static bool service_test_set_output_frequency_hz(uint16_t frequency_hz, void *ctx)
 {
-    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
     if (context == NULL || frequency_hz < TEST_FREQ_MIN_HZ || frequency_hz > TEST_FREQ_MAX_HZ)
     {
         return false;
     }
 
     lock_ctx(context);
-    context->testOutputFrequencyHz = frequency_hz;
+    context->testOutput.frequencyHz = frequency_hz;
     unlock_ctx(context);
 
     if (context->ops.test_set_output_frequency_hz != NULL)
@@ -848,14 +848,14 @@ static bool service_test_set_output_frequency_hz(uint16_t frequency_hz, void *ct
 
 static bool service_test_set_output_amplitude(uint16_t amplitude, void *ctx)
 {
-    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
     if (context == NULL || amplitude > X_AXIS)
     {
         return false;
     }
 
     lock_ctx(context);
-    context->testOutputAmplitude = amplitude;
+    context->testOutput.amplitude = amplitude;
     unlock_ctx(context);
 
     if (context->ops.test_set_output_amplitude != NULL)
@@ -868,23 +868,23 @@ static bool service_test_set_output_amplitude(uint16_t amplitude, void *ctx)
 
 static bool service_test_get_output_status(CliTestModeStatus *status_out, void *ctx)
 {
-    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
     if (context == NULL || status_out == NULL)
     {
         return false;
     }
 
     lock_ctx(context);
-    status_out->enabled = context->testOutputModeEnabled;
-    status_out->vector = context->testOutputVector;
-    status_out->frequencyHz = context->testOutputFrequencyHz;
-    status_out->amplitude = context->testOutputAmplitude;
+    status_out->enabled = context->testOutput.enabled;
+    status_out->vector = context->testOutput.vector;
+    status_out->frequencyHz = context->testOutput.frequencyHz;
+    status_out->amplitude = context->testOutput.amplitude;
     unlock_ctx(context);
 
     return true;
 }
 
-void cli_service_adapter_init(CliServiceAdapterContext *context, EffectsState *state,
+void cli_service_adapter_init(CliServiceAdapter *context, EffectsState *state,
                               EffectsParams *params, const CliServiceAdapterOps *ops,
                               uint32_t adc_max)
 {
@@ -897,39 +897,39 @@ void cli_service_adapter_init(CliServiceAdapterContext *context, EffectsState *s
     context->state = state;
     context->params = params;
     context->adcMax = adc_max;
-    context->romRawMinAddress = ROM_RAW_MIN_ADDRESS;
-    context->romRawMaxAddress = ROM_RAW_MAX_ADDRESS;
-    context->romRawMaxLength = CLI_MAX_ROM_BYTES;
-    context->logEnabled = false;
-    context->logStreamEnabled = false;
-    context->logLevel = 0;
-    context->logFrameCount = 0;
-    context->logFailureCount = 0;
-    context->testInputModeEnabled = false;
-    context->testInputVector = 0;
-    context->testInputFrequencyHz = TEST_DEFAULT_FREQ_HZ;
-    context->testInputAmplitude = (uint16_t)(X_AXIS / 2U);
+    context->romWindow.minAddress = ROM_RAW_MIN_ADDRESS;
+    context->romWindow.maxAddress = ROM_RAW_MAX_ADDRESS;
+    context->romWindow.maxLength = CLI_MAX_ROM_BYTES;
+    context->log.enabled = false;
+    context->log.streamEnabled = false;
+    context->log.level = 0;
+    context->log.frameCount = 0;
+    context->log.failureCount = 0;
+    context->testInput.enabled = false;
+    context->testInput.vector = 0;
+    context->testInput.frequencyHz = TEST_DEFAULT_FREQ_HZ;
+    context->testInput.amplitude = (uint16_t)(X_AXIS / 2U);
 
-    context->testOutputModeEnabled = false;
-    context->testOutputVector = 0;
-    context->testOutputFrequencyHz = TEST_DEFAULT_FREQ_HZ;
-    context->testOutputAmplitude = (uint16_t)(X_AXIS / 2U);
+    context->testOutput.enabled = false;
+    context->testOutput.vector = 0;
+    context->testOutput.frequencyHz = TEST_DEFAULT_FREQ_HZ;
+    context->testOutput.amplitude = (uint16_t)(X_AXIS / 2U);
 
-    context->frameTimeMinUs = 0;
-    context->frameTimeMaxUs = 0;
-    context->frameTimeTotalUs = 0;
-    context->measuredFrameCount = 0;
-    context->overrunCount = 0;
-    context->streamDropCount = 0;
+    context->profile.frameTimeMinUs = 0;
+    context->profile.frameTimeMaxUs = 0;
+    context->profile.frameTimeTotalUs = 0;
+    context->profile.frameCount = 0;
+    context->profile.overrunCount = 0;
+    context->logStream.dropCount = 0;
     context->streamBatchSize = 1;
     context->stepFailureCount = 0;
     context->stepFailureStreak = 0;
     context->streamBatchCounter = 0;
-    context->batchFrameTimeMinUs = 0;
-    context->batchFrameTimeMaxUs = 0;
-    context->batchFrameTimeTotalUs = 0;
-    context->batchFrameCount = 0;
-    context->batchOverrunCount = 0;
+    context->profileBatch.frameTimeMinUs = 0;
+    context->profileBatch.frameTimeMaxUs = 0;
+    context->profileBatch.frameTimeTotalUs = 0;
+    context->profileBatch.frameCount = 0;
+    context->profileBatch.overrunCount = 0;
 
     if (ops != NULL)
     {
@@ -937,7 +937,7 @@ void cli_service_adapter_init(CliServiceAdapterContext *context, EffectsState *s
     }
 }
 
-void cli_service_adapter_bind_heartbeat_period(CliServiceAdapterContext *context,
+void cli_service_adapter_bind_heartbeat_period(CliServiceAdapter *context,
                                                uint32_t *period_ms,
                                                uint32_t min_ms,
                                                uint32_t max_ms)
@@ -947,12 +947,12 @@ void cli_service_adapter_bind_heartbeat_period(CliServiceAdapterContext *context
         return;
     }
 
-    context->heartbeatPeriodMs = period_ms;
-    context->heartbeatPeriodMinMs = min_ms;
-    context->heartbeatPeriodMaxMs = max_ms;
+    context->heartbeat.periodMs = period_ms;
+    context->heartbeat.periodMinMs = min_ms;
+    context->heartbeat.periodMaxMs = max_ms;
 }
 
-void cli_service_adapter_bind(CliServiceAdapterContext *context, CliServices *services_out)
+void cli_service_adapter_bind(CliServiceAdapter *context, CliServices *services_out)
 {
     if (context == NULL || services_out == NULL)
     {
@@ -991,7 +991,7 @@ void cli_service_adapter_bind(CliServiceAdapterContext *context, CliServices *se
     services_out->context = context;
 }
 
-bool cli_service_adapter_apply_pot_sample(CliServiceAdapterContext *context, Effect active_effect,
+bool cli_service_adapter_apply_pot_sample(CliServiceAdapter *context, Effect active_effect,
                                           uint8_t pot_index, uint32_t adc_value)
 {
     if (context == NULL || context->params == NULL || pot_index >= CLI_POT_COUNT)
@@ -1001,9 +1001,9 @@ bool cli_service_adapter_apply_pot_sample(CliServiceAdapterContext *context, Eff
 
     lock_ctx(context);
     uint32_t effective_adc = adc_value;
-    if (context->potOverrideEnabled[pot_index])
+    if (context->overrides.potEnabled[pot_index])
     {
-        effective_adc = context->potOverrideValue[pot_index];
+        effective_adc = context->overrides.potValue[pot_index];
     }
 
     bool success = effects_params_apply_pot_sample(context->params, active_effect, pot_index,
@@ -1012,7 +1012,7 @@ bool cli_service_adapter_apply_pot_sample(CliServiceAdapterContext *context, Eff
     return success;
 }
 
-bool cli_service_adapter_apply_switches(CliServiceAdapterContext *context, bool switch_a_enabled,
+bool cli_service_adapter_apply_switches(CliServiceAdapter *context, bool switch_a_enabled,
                                         bool switch_b_enabled, bool switch_c_enabled)
 {
     if (context == NULL || context->state == NULL)
@@ -1021,19 +1021,17 @@ bool cli_service_adapter_apply_switches(CliServiceAdapterContext *context, bool 
     }
 
     lock_ctx(context);
-    bool effective_a = context->switchOverrideEnabled[0] ? context->switchOverrideValue[0]
-                                                         : switch_a_enabled;
-    bool effective_b = context->switchOverrideEnabled[1] ? context->switchOverrideValue[1]
-                                                         : switch_b_enabled;
-    bool effective_c = context->switchOverrideEnabled[2] ? context->switchOverrideValue[2]
-                                                         : switch_c_enabled;
+    const CliOverrideState *ov = &context->overrides;
+    bool effective_a = ov->switchEnabled[0] ? ov->switchValue[0] : switch_a_enabled;
+    bool effective_b = ov->switchEnabled[1] ? ov->switchValue[1] : switch_b_enabled;
+    bool effective_c = ov->switchEnabled[2] ? ov->switchValue[2] : switch_c_enabled;
 
     effects_state_apply_switches(context->state, effective_a, effective_b, effective_c);
     unlock_ctx(context);
     return true;
 }
 
-bool cli_service_adapter_get_test_input_mode_status(CliServiceAdapterContext *context,
+bool cli_service_adapter_get_test_input_mode_status(CliServiceAdapter *context,
                                                     CliTestModeStatus *status_out)
 {
     if (context == NULL || status_out == NULL)
@@ -1042,15 +1040,15 @@ bool cli_service_adapter_get_test_input_mode_status(CliServiceAdapterContext *co
     }
 
     lock_ctx(context);
-    status_out->enabled = context->testInputModeEnabled;
-    status_out->vector = context->testInputVector;
-    status_out->frequencyHz = context->testInputFrequencyHz;
-    status_out->amplitude = context->testInputAmplitude;
+    status_out->enabled = context->testInput.enabled;
+    status_out->vector = context->testInput.vector;
+    status_out->frequencyHz = context->testInput.frequencyHz;
+    status_out->amplitude = context->testInput.amplitude;
     unlock_ctx(context);
     return true;
 }
 
-bool cli_service_adapter_get_test_output_mode_status(CliServiceAdapterContext *context,
+bool cli_service_adapter_get_test_output_mode_status(CliServiceAdapter *context,
                                                      CliTestModeStatus *status_out)
 {
     if (context == NULL || status_out == NULL)
@@ -1059,15 +1057,15 @@ bool cli_service_adapter_get_test_output_mode_status(CliServiceAdapterContext *c
     }
 
     lock_ctx(context);
-    status_out->enabled = context->testOutputModeEnabled;
-    status_out->vector = context->testOutputVector;
-    status_out->frequencyHz = context->testOutputFrequencyHz;
-    status_out->amplitude = context->testOutputAmplitude;
+    status_out->enabled = context->testOutput.enabled;
+    status_out->vector = context->testOutput.vector;
+    status_out->frequencyHz = context->testOutput.frequencyHz;
+    status_out->amplitude = context->testOutput.amplitude;
     unlock_ctx(context);
     return true;
 }
 
-bool cli_service_adapter_get_log_stats(CliServiceAdapterContext *context,
+bool cli_service_adapter_get_log_stats(CliServiceAdapter *context,
                                        CliLogStats *stats_out)
 {
     if (context == NULL || stats_out == NULL)
@@ -1076,26 +1074,26 @@ bool cli_service_adapter_get_log_stats(CliServiceAdapterContext *context,
     }
 
     lock_ctx(context);
-    stats_out->enabled = context->logEnabled;
-    stats_out->streamEnabled = context->logStreamEnabled;
-    stats_out->level = context->logLevel;
-    stats_out->frameCount = context->logFrameCount;
-    stats_out->failureCount = context->logFailureCount;
+    stats_out->enabled = context->log.enabled;
+    stats_out->streamEnabled = context->log.streamEnabled;
+    stats_out->level = context->log.level;
+    stats_out->frameCount = context->log.frameCount;
+    stats_out->failureCount = context->log.failureCount;
     stats_out->stepFailureCount = context->stepFailureCount;
     stats_out->stepFailureStreak = context->stepFailureStreak;
-    stats_out->frameTimeMinUs = context->frameTimeMinUs;
-    stats_out->frameTimeMaxUs = context->frameTimeMaxUs;
-    stats_out->frameTimeTotalUs = context->frameTimeTotalUs;
-    stats_out->measuredFrameCount = context->measuredFrameCount;
-    stats_out->overrunCount = context->overrunCount;
-    stats_out->streamDropCount = context->streamDropCount;
+    stats_out->frameTimeMinUs = context->profile.frameTimeMinUs;
+    stats_out->frameTimeMaxUs = context->profile.frameTimeMaxUs;
+    stats_out->frameTimeTotalUs = context->profile.frameTimeTotalUs;
+    stats_out->measuredFrameCount = context->profile.frameCount;
+    stats_out->overrunCount = context->profile.overrunCount;
+    stats_out->streamDropCount = context->logStream.dropCount;
     stats_out->streamBatchSize = context->streamBatchSize;
-    stats_out->streamQueueCount = context->logStreamCount;
+    stats_out->streamQueueCount = context->logStream.count;
     unlock_ctx(context);
     return true;
 }
 
-bool cli_service_adapter_get_log_stream_enabled(CliServiceAdapterContext *context,
+bool cli_service_adapter_get_log_stream_enabled(CliServiceAdapter *context,
                                                 bool *enabled_out)
 {
     if (context == NULL || enabled_out == NULL)
@@ -1104,12 +1102,12 @@ bool cli_service_adapter_get_log_stream_enabled(CliServiceAdapterContext *contex
     }
 
     lock_ctx(context);
-    *enabled_out = context->logStreamEnabled;
+    *enabled_out = context->log.streamEnabled;
     unlock_ctx(context);
     return true;
 }
 
-bool cli_service_adapter_get_log_enabled(CliServiceAdapterContext *context, bool *enabled_out)
+bool cli_service_adapter_get_log_enabled(CliServiceAdapter *context, bool *enabled_out)
 {
     if (context == NULL || enabled_out == NULL)
     {
@@ -1117,12 +1115,12 @@ bool cli_service_adapter_get_log_enabled(CliServiceAdapterContext *context, bool
     }
 
     lock_ctx(context);
-    *enabled_out = context->logEnabled;
+    *enabled_out = context->log.enabled;
     unlock_ctx(context);
     return true;
 }
 
-bool cli_service_adapter_get_log_level(CliServiceAdapterContext *context, uint8_t *level_out)
+bool cli_service_adapter_get_log_level(CliServiceAdapter *context, uint8_t *level_out)
 {
     if (context == NULL || level_out == NULL)
     {
@@ -1130,12 +1128,12 @@ bool cli_service_adapter_get_log_level(CliServiceAdapterContext *context, uint8_
     }
 
     lock_ctx(context);
-    *level_out = context->logLevel;
+    *level_out = context->log.level;
     unlock_ctx(context);
     return true;
 }
 
-bool cli_service_adapter_append_log_line(CliServiceAdapterContext *context, const char *line)
+bool cli_service_adapter_append_log_line(CliServiceAdapter *context, const char *line)
 {
     if (context == NULL || line == NULL)
     {
@@ -1148,7 +1146,7 @@ bool cli_service_adapter_append_log_line(CliServiceAdapterContext *context, cons
     return success;
 }
 
-void cli_service_adapter_note_frame_processed(CliServiceAdapterContext *context)
+void cli_service_adapter_note_frame_processed(CliServiceAdapter *context)
 {
     if (context == NULL)
     {
@@ -1156,11 +1154,11 @@ void cli_service_adapter_note_frame_processed(CliServiceAdapterContext *context)
     }
 
     lock_ctx(context);
-    context->logFrameCount++;
+    context->log.frameCount++;
     unlock_ctx(context);
 }
 
-void cli_service_adapter_note_processing_failure(CliServiceAdapterContext *context)
+void cli_service_adapter_note_processing_failure(CliServiceAdapter *context)
 {
     if (context == NULL)
     {
@@ -1168,15 +1166,15 @@ void cli_service_adapter_note_processing_failure(CliServiceAdapterContext *conte
     }
 
     lock_ctx(context);
-    context->logFailureCount++;
+    context->log.failureCount++;
     char line[CLI_LOG_STREAM_LINE_MAX] = {0};
     (void)snprintf(line, sizeof(line), "log failure count=%lu",
-                   (unsigned long)context->logFailureCount);
+                   (unsigned long)context->log.failureCount);
     (void)log_stream_queue_push(context, line);
     unlock_ctx(context);
 }
 
-void cli_service_adapter_note_step_result(CliServiceAdapterContext *context, bool step_succeeded)
+void cli_service_adapter_note_step_result(CliServiceAdapter *context, bool step_succeeded)
 {
     if (context == NULL)
     {
@@ -1196,7 +1194,7 @@ void cli_service_adapter_note_step_result(CliServiceAdapterContext *context, boo
     unlock_ctx(context);
 }
 
-void cli_service_adapter_set_stream_batch_size(CliServiceAdapterContext *context, uint8_t batch_size)
+void cli_service_adapter_set_stream_batch_size(CliServiceAdapter *context, uint8_t batch_size)
 {
     if (context == NULL || batch_size == 0)
     {
@@ -1208,7 +1206,7 @@ void cli_service_adapter_set_stream_batch_size(CliServiceAdapterContext *context
     unlock_ctx(context);
 }
 
-uint8_t cli_service_adapter_get_stream_batch_size(CliServiceAdapterContext *context)
+uint8_t cli_service_adapter_get_stream_batch_size(CliServiceAdapter *context)
 {
     if (context == NULL)
     {
@@ -1221,7 +1219,7 @@ uint8_t cli_service_adapter_get_stream_batch_size(CliServiceAdapterContext *cont
     return size;
 }
 
-void cli_service_adapter_reset_profiling_stats(CliServiceAdapterContext *context)
+void cli_service_adapter_reset_profiling_stats(CliServiceAdapter *context)
 {
     if (context == NULL)
     {
@@ -1229,24 +1227,24 @@ void cli_service_adapter_reset_profiling_stats(CliServiceAdapterContext *context
     }
 
     lock_ctx(context);
-    context->frameTimeMinUs = 0;
-    context->frameTimeMaxUs = 0;
-    context->frameTimeTotalUs = 0;
-    context->measuredFrameCount = 0;
-    context->overrunCount = 0;
+    context->profile.frameTimeMinUs = 0;
+    context->profile.frameTimeMaxUs = 0;
+    context->profile.frameTimeTotalUs = 0;
+    context->profile.frameCount = 0;
+    context->profile.overrunCount = 0;
     context->stepFailureCount = 0;
     context->stepFailureStreak = 0;
-    context->streamDropCount = 0;
+    context->logStream.dropCount = 0;
     context->streamBatchCounter = 0;
-    context->batchFrameTimeMinUs = 0;
-    context->batchFrameTimeMaxUs = 0;
-    context->batchFrameTimeTotalUs = 0;
-    context->batchFrameCount = 0;
-    context->batchOverrunCount = 0;
+    context->profileBatch.frameTimeMinUs = 0;
+    context->profileBatch.frameTimeMaxUs = 0;
+    context->profileBatch.frameTimeTotalUs = 0;
+    context->profileBatch.frameCount = 0;
+    context->profileBatch.overrunCount = 0;
     unlock_ctx(context);
 }
 
-void cli_service_adapter_note_frame_timing(CliServiceAdapterContext *context, uint32_t frame_time_us,
+void cli_service_adapter_note_frame_timing(CliServiceAdapter *context, uint32_t frame_time_us,
                                            bool overrun)
 {
     if (context == NULL)
@@ -1255,72 +1253,72 @@ void cli_service_adapter_note_frame_timing(CliServiceAdapterContext *context, ui
     }
 
     lock_ctx(context);
-    if (context->measuredFrameCount == 0)
+    if (context->profile.frameCount == 0)
     {
-        context->frameTimeMinUs = frame_time_us;
-        context->frameTimeMaxUs = frame_time_us;
+        context->profile.frameTimeMinUs = frame_time_us;
+        context->profile.frameTimeMaxUs = frame_time_us;
     }
     else
     {
-        if (frame_time_us < context->frameTimeMinUs)
+        if (frame_time_us < context->profile.frameTimeMinUs)
         {
-            context->frameTimeMinUs = frame_time_us;
+            context->profile.frameTimeMinUs = frame_time_us;
         }
-        if (frame_time_us > context->frameTimeMaxUs)
+        if (frame_time_us > context->profile.frameTimeMaxUs)
         {
-            context->frameTimeMaxUs = frame_time_us;
+            context->profile.frameTimeMaxUs = frame_time_us;
         }
     }
-    context->frameTimeTotalUs += frame_time_us;
-    context->measuredFrameCount++;
+    context->profile.frameTimeTotalUs += frame_time_us;
+    context->profile.frameCount++;
     if (overrun)
     {
-        context->overrunCount++;
+        context->profile.overrunCount++;
     }
 
-    if (context->batchFrameCount == 0)
+    if (context->profileBatch.frameCount == 0)
     {
-        context->batchFrameTimeMinUs = frame_time_us;
-        context->batchFrameTimeMaxUs = frame_time_us;
+        context->profileBatch.frameTimeMinUs = frame_time_us;
+        context->profileBatch.frameTimeMaxUs = frame_time_us;
     }
     else
     {
-        if (frame_time_us < context->batchFrameTimeMinUs)
+        if (frame_time_us < context->profileBatch.frameTimeMinUs)
         {
-            context->batchFrameTimeMinUs = frame_time_us;
+            context->profileBatch.frameTimeMinUs = frame_time_us;
         }
-        if (frame_time_us > context->batchFrameTimeMaxUs)
+        if (frame_time_us > context->profileBatch.frameTimeMaxUs)
         {
-            context->batchFrameTimeMaxUs = frame_time_us;
+            context->profileBatch.frameTimeMaxUs = frame_time_us;
         }
     }
-    context->batchFrameTimeTotalUs += frame_time_us;
-    context->batchFrameCount++;
+    context->profileBatch.frameTimeTotalUs += frame_time_us;
+    context->profileBatch.frameCount++;
     if (overrun)
     {
-        context->batchOverrunCount++;
+        context->profileBatch.overrunCount++;
     }
     context->streamBatchCounter++;
 
-    if (context->streamBatchCounter >= context->streamBatchSize && context->logStreamEnabled)
+    if (context->streamBatchCounter >= context->streamBatchSize && context->log.streamEnabled)
     {
-        uint32_t avg_us = context->batchFrameTimeTotalUs / context->batchFrameCount;
+        uint32_t avg_us = context->profileBatch.frameTimeTotalUs / context->profileBatch.frameCount;
         char line[CLI_LOG_STREAM_LINE_MAX];
         (void)snprintf(line, sizeof(line),
                        "prof f=%lu t=%lu mn=%lu mx=%lu ov=%lu dr=%lu",
-                       (unsigned long)context->batchFrameCount, (unsigned long)avg_us,
-                       (unsigned long)context->batchFrameTimeMinUs,
-                       (unsigned long)context->batchFrameTimeMaxUs,
-                       (unsigned long)context->batchOverrunCount,
-                       (unsigned long)context->streamDropCount);
+                       (unsigned long)context->profileBatch.frameCount, (unsigned long)avg_us,
+                       (unsigned long)context->profileBatch.frameTimeMinUs,
+                       (unsigned long)context->profileBatch.frameTimeMaxUs,
+                       (unsigned long)context->profileBatch.overrunCount,
+                       (unsigned long)context->logStream.dropCount);
         (void)log_stream_queue_push(context, line);
 
         context->streamBatchCounter = 0;
-        context->batchFrameTimeMinUs = 0;
-        context->batchFrameTimeMaxUs = 0;
-        context->batchFrameTimeTotalUs = 0;
-        context->batchFrameCount = 0;
-        context->batchOverrunCount = 0;
+        context->profileBatch.frameTimeMinUs = 0;
+        context->profileBatch.frameTimeMaxUs = 0;
+        context->profileBatch.frameTimeTotalUs = 0;
+        context->profileBatch.frameCount = 0;
+        context->profileBatch.overrunCount = 0;
     }
 
     unlock_ctx(context);

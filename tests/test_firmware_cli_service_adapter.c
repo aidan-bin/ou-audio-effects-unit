@@ -87,7 +87,7 @@ static void test_pot_override_precedence(void)
     set_default_effects_state(&state);
     set_default_effects_params(&params);
 
-    CliServiceAdapterContext context;
+    CliServiceAdapter context;
     cli_service_adapter_init(&context, &state, &params, NULL, 255);
 
     CliServices services = {0};
@@ -115,7 +115,7 @@ static void test_switch_override_precedence(void)
     set_default_effects_state(&state);
     set_default_effects_params(&params);
 
-    CliServiceAdapterContext context;
+    CliServiceAdapter context;
     cli_service_adapter_init(&context, &state, &params, NULL, 255);
 
     CliServices services = {0};
@@ -139,7 +139,7 @@ static void test_config_bounds_and_state_updates(void)
     set_default_effects_state(&state);
     set_default_effects_params(&params);
 
-    CliServiceAdapterContext context;
+    CliServiceAdapter context;
     cli_service_adapter_init(&context, &state, &params, NULL, 255);
     uint32_t heartbeat_period_ms = 500;
     cli_service_adapter_bind_heartbeat_period(&context, &heartbeat_period_ms, 50, 5000);
@@ -190,11 +190,11 @@ static void test_rom_raw_guardrails(void)
         .context = &ops_context,
     };
 
-    CliServiceAdapterContext context;
+    CliServiceAdapter context;
     cli_service_adapter_init(&context, &state, &params, &ops, 255);
-    context.romRawMinAddress = 0x0040;
-    context.romRawMaxAddress = 0x00FF;
-    context.romRawMaxLength = 8;
+    context.romWindow.minAddress = 0x0040;
+    context.romWindow.maxAddress = 0x00FF;
+    context.romWindow.maxLength = 8;
 
     CliServices services = {0};
     cli_service_adapter_bind(&context, &services);
@@ -226,7 +226,7 @@ static void test_test_input_mode_status_and_validation(void)
     set_default_effects_state(&state);
     set_default_effects_params(&params);
 
-    CliServiceAdapterContext context;
+    CliServiceAdapter context;
     cli_service_adapter_init(&context, &state, &params, NULL, 255);
 
     CliServices services = {0};
@@ -266,7 +266,7 @@ static void test_test_output_mode_status_and_validation(void)
     set_default_effects_state(&state);
     set_default_effects_params(&params);
 
-    CliServiceAdapterContext context;
+    CliServiceAdapter context;
     cli_service_adapter_init(&context, &state, &params, NULL, 255);
 
     CliServices services = {0};
@@ -306,7 +306,7 @@ static void test_log_stats_counters(void)
     set_default_effects_state(&state);
     set_default_effects_params(&params);
 
-    CliServiceAdapterContext context;
+    CliServiceAdapter context;
     cli_service_adapter_init(&context, &state, &params, NULL, 255);
 
     CliServices services = {0};
@@ -354,26 +354,26 @@ static void test_profiling_accumulation_and_reset(void)
     set_default_effects_state(&state);
     set_default_effects_params(&params);
 
-    CliServiceAdapterContext context;
+    CliServiceAdapter context;
     cli_service_adapter_init(&context, &state, &params, NULL, 255);
     context.streamBatchSize = 5;
-    context.logStreamEnabled = true;
+    context.log.streamEnabled = true;
 
     cli_service_adapter_note_frame_timing(&context, 1000, false);
-    expect_eq_u32(1000, context.frameTimeMinUs, "min tracks first frame");
-    expect_eq_u32(1000, context.frameTimeMaxUs, "max tracks first frame");
-    expect_eq_u32(1, context.measuredFrameCount, "frame count incremented");
+    expect_eq_u32(1000, context.profile.frameTimeMinUs, "min tracks first frame");
+    expect_eq_u32(1000, context.profile.frameTimeMaxUs, "max tracks first frame");
+    expect_eq_u32(1, context.profile.frameCount, "frame count incremented");
 
     cli_service_adapter_note_frame_timing(&context, 2000, false);
-    expect_eq_u32(1000, context.frameTimeMinUs, "min unchanged");
-    expect_eq_u32(2000, context.frameTimeMaxUs, "max updated");
-    expect_eq_u32(2, context.measuredFrameCount, "frame count 2");
+    expect_eq_u32(1000, context.profile.frameTimeMinUs, "min unchanged");
+    expect_eq_u32(2000, context.profile.frameTimeMaxUs, "max updated");
+    expect_eq_u32(2, context.profile.frameCount, "frame count 2");
 
     cli_service_adapter_note_frame_timing(&context, 500, true);
-    expect_eq_u32(500, context.frameTimeMinUs, "min updated");
-    expect_eq_u32(2000, context.frameTimeMaxUs, "max unchanged");
-    expect_eq_u32(3, context.measuredFrameCount, "frame count 3");
-    expect_eq_u32(1, context.overrunCount, "overrun counted");
+    expect_eq_u32(500, context.profile.frameTimeMinUs, "min updated");
+    expect_eq_u32(2000, context.profile.frameTimeMaxUs, "max unchanged");
+    expect_eq_u32(3, context.profile.frameCount, "frame count 3");
+    expect_eq_u32(1, context.profile.overrunCount, "overrun counted");
 
     cli_service_adapter_note_step_result(&context, false);
     cli_service_adapter_note_step_result(&context, false);
@@ -385,11 +385,11 @@ static void test_profiling_accumulation_and_reset(void)
     expect_eq_u32(0, context.stepFailureStreak, "step failure streak reset after success");
 
     cli_service_adapter_reset_profiling_stats(&context);
-    expect_eq_u32(0, context.measuredFrameCount, "frame count reset");
-    expect_eq_u32(0, context.overrunCount, "overrun reset");
-    expect_eq_u32(0, context.frameTimeMinUs, "min reset");
-    expect_eq_u32(0, context.frameTimeMaxUs, "max reset");
-    expect_eq_u32(0, context.frameTimeTotalUs, "total reset");
+    expect_eq_u32(0, context.profile.frameCount, "frame count reset");
+    expect_eq_u32(0, context.profile.overrunCount, "overrun reset");
+    expect_eq_u32(0, context.profile.frameTimeMinUs, "min reset");
+    expect_eq_u32(0, context.profile.frameTimeMaxUs, "max reset");
+    expect_eq_u32(0, context.profile.frameTimeTotalUs, "total reset");
     expect_eq_u32(0, context.stepFailureCount, "step failure count reset");
     expect_eq_u32(0, context.stepFailureStreak, "step failure streak reset");
 }
@@ -401,10 +401,10 @@ static void test_profiling_batch_emission(void)
     set_default_effects_state(&state);
     set_default_effects_params(&params);
 
-    CliServiceAdapterContext context;
+    CliServiceAdapter context;
     cli_service_adapter_init(&context, &state, &params, NULL, 255);
     context.streamBatchSize = 3;
-    context.logStreamEnabled = true;
+    context.log.streamEnabled = true;
 
     CliServices services = {0};
     cli_service_adapter_bind(&context, &services);
@@ -444,10 +444,10 @@ static void test_profiling_batch_size_one(void)
     set_default_effects_state(&state);
     set_default_effects_params(&params);
 
-    CliServiceAdapterContext context;
+    CliServiceAdapter context;
     cli_service_adapter_init(&context, &state, &params, NULL, 255);
     context.streamBatchSize = 1;
-    context.logStreamEnabled = true;
+    context.log.streamEnabled = true;
 
     CliServices services = {0};
     cli_service_adapter_bind(&context, &services);
@@ -471,9 +471,9 @@ static void test_queue_overflow_drop_tracking(void)
     set_default_effects_state(&state);
     set_default_effects_params(&params);
 
-    CliServiceAdapterContext context;
+    CliServiceAdapter context;
     cli_service_adapter_init(&context, &state, &params, NULL, 255);
-    context.logStreamEnabled = true;
+    context.log.streamEnabled = true;
     context.streamBatchSize = 1;
 
     // Fill queue with profiling frames until it overflows
@@ -482,7 +482,7 @@ static void test_queue_overflow_drop_tracking(void)
         cli_service_adapter_note_frame_timing(&context, 1000, false);
     }
 
-    expect_eq_u32(5, context.streamDropCount, "5 stream lines dropped");
+    expect_eq_u32(5, context.logStream.dropCount, "5 stream lines dropped");
 }
 
 static void test_log_stream_line_queue(void)
@@ -492,7 +492,7 @@ static void test_log_stream_line_queue(void)
     set_default_effects_state(&state);
     set_default_effects_params(&params);
 
-    CliServiceAdapterContext context;
+    CliServiceAdapter context;
     cli_service_adapter_init(&context, &state, &params, NULL, 255);
 
     CliServices services = {0};
