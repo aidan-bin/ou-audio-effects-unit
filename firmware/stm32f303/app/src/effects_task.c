@@ -145,6 +145,39 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
         return false;
     }
 
+    if (!ops->read_latched_state(&latched_effects_state, &latched_effects_params, ops->context))
+    {
+        process_failed = true;
+        goto cleanup;
+    }
+
+    effects_state_normalize(&latched_effects_state);
+
+    bool any_enabled = false;
+    for (int i = 0; i < NUM_EFFECTS; i++)
+    {
+        if (latched_effects_state.isEnabled[latched_effects_state.ordered[i]])
+        {
+            any_enabled = true;
+            break;
+        }
+    }
+
+    if (!any_enabled)
+    {
+        if (!ops->dma_copy(curr_adc_buf, curr_dac_buf, task_context->sampleBufLen,
+                           ticks_to_wait, ops->context))
+        {
+            (void)log_write(LOG_LEVEL_ERROR, "effects task pass-through copy failed");
+            if (ops->panic_write != NULL)
+            {
+                ops->panic_write("panic: pass-through copy failed\n", ops->context);
+            }
+            process_failed = true;
+        }
+        goto cleanup;
+    }
+
     echo_delay_samples_buf =
         (uint16_t *)ops->alloc(task_context->delaySamplesLen * sizeof(uint16_t), ops->context);
     if (echo_delay_samples_buf == NULL)
@@ -160,13 +193,6 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
         goto cleanup;
     }
 
-    if (!ops->read_latched_state(&latched_effects_state, &latched_effects_params, ops->context))
-    {
-        process_failed = true;
-        goto cleanup;
-    }
-
-    effects_state_normalize(&latched_effects_state);
     if (effects_pipeline_sync_params(task_context->pipeline, &latched_effects_params) != 0)
     {
         process_failed = true;
