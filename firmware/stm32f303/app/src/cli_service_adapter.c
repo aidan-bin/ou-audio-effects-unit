@@ -4,6 +4,13 @@
 #include <stdio.h>
 #include <string.h>
 
+#define TEST_FREQ_MIN_HZ 20U
+#define TEST_FREQ_MAX_HZ 8000U
+#define TEST_DEFAULT_FREQ_HZ 1000
+#define MAX_TEST_VECTOR_INDEX 2U
+#define ROM_RAW_MIN_ADDRESS 0x0000
+#define ROM_RAW_MAX_ADDRESS 0x01FF
+
 static void lock_ctx(CliServiceAdapterContext *context)
 {
     if (context != NULL && context->ops.lock != NULL)
@@ -704,7 +711,7 @@ static bool service_test_set_input_mode(bool enabled, void *ctx)
 static bool service_test_set_input_vector(uint8_t vector, void *ctx)
 {
     CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
-    if (context == NULL || vector > 2U)
+    if (context == NULL || vector > MAX_TEST_VECTOR_INDEX)
     {
         return false;
     }
@@ -724,7 +731,7 @@ static bool service_test_set_input_vector(uint8_t vector, void *ctx)
 static bool service_test_set_input_frequency_hz(uint16_t frequency_hz, void *ctx)
 {
     CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
-    if (context == NULL || frequency_hz < 20U || frequency_hz > 8000U)
+    if (context == NULL || frequency_hz < TEST_FREQ_MIN_HZ || frequency_hz > TEST_FREQ_MAX_HZ)
     {
         return false;
     }
@@ -802,7 +809,7 @@ static bool service_test_set_output_mode(bool enabled, void *ctx)
 static bool service_test_set_output_vector(uint8_t vector, void *ctx)
 {
     CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
-    if (context == NULL || vector > 2U)
+    if (context == NULL || vector > MAX_TEST_VECTOR_INDEX)
     {
         return false;
     }
@@ -822,7 +829,7 @@ static bool service_test_set_output_vector(uint8_t vector, void *ctx)
 static bool service_test_set_output_frequency_hz(uint16_t frequency_hz, void *ctx)
 {
     CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
-    if (context == NULL || frequency_hz < 20U || frequency_hz > 8000U)
+    if (context == NULL || frequency_hz < TEST_FREQ_MIN_HZ || frequency_hz > TEST_FREQ_MAX_HZ)
     {
         return false;
     }
@@ -890,8 +897,8 @@ void cli_service_adapter_init(CliServiceAdapterContext *context, EffectsState *s
     context->state = state;
     context->params = params;
     context->adcMax = adc_max;
-    context->romRawMinAddress = 0x0000;
-    context->romRawMaxAddress = 0x01FF;
+    context->romRawMinAddress = ROM_RAW_MIN_ADDRESS;
+    context->romRawMaxAddress = ROM_RAW_MAX_ADDRESS;
     context->romRawMaxLength = CLI_MAX_ROM_BYTES;
     context->logEnabled = false;
     context->logStreamEnabled = false;
@@ -900,12 +907,12 @@ void cli_service_adapter_init(CliServiceAdapterContext *context, EffectsState *s
     context->logFailureCount = 0;
     context->testInputModeEnabled = false;
     context->testInputVector = 0;
-    context->testInputFrequencyHz = 1000;
+    context->testInputFrequencyHz = TEST_DEFAULT_FREQ_HZ;
     context->testInputAmplitude = (uint16_t)(X_AXIS / 2U);
 
     context->testOutputModeEnabled = false;
     context->testOutputVector = 0;
-    context->testOutputFrequencyHz = 1000;
+    context->testOutputFrequencyHz = TEST_DEFAULT_FREQ_HZ;
     context->testOutputAmplitude = (uint16_t)(X_AXIS / 2U);
 
     context->frameTimeMinUs = 0;

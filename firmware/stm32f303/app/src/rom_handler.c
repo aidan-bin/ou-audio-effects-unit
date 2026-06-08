@@ -2,7 +2,9 @@
 
 #include <string.h>
 
-#define ROM_HANDLER_ADDRESS_BYTES 2
+#define ADDRESS_HIGH_BYTE_MASK 0xFF00U
+#define ADDRESS_LOW_BYTE_MASK 0x00FFU
+#define ADDRESS_HIGH_BYTE_SHIFT 8U
 
 size_t rom_handler_read_payload_size(void)
 {
@@ -21,8 +23,8 @@ bool rom_handler_encode_address(uint16_t address, uint8_t *payload, size_t paylo
         return false;
     }
 
-    payload[0] = (uint8_t)((address & 0xFF00U) >> 8U);
-    payload[1] = (uint8_t)(address & 0x00FFU);
+    payload[0] = (uint8_t)((address & ADDRESS_HIGH_BYTE_MASK) >> ADDRESS_HIGH_BYTE_SHIFT);
+    payload[1] = (uint8_t)(address & ADDRESS_LOW_BYTE_MASK);
     return true;
 }
 

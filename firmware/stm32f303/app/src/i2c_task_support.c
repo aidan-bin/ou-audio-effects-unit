@@ -3,6 +3,11 @@
 
 #include "cmsis_os.h"
 
+#define I2C_DEFAULT_TRIALS 5
+#define I2C_DEFAULT_BLOCKING_TIMEOUT_MS 100
+#define I2C_DEFAULT_TRY_AGAIN_DELAY_MS 100
+#define I2C_DEFAULT_DROP_BUDGET_MS 5000
+
 static bool semaphore_take_adapter(void *semaphore_handle, uint32_t timeout_ticks, void *context)
 {
     (void)context;
@@ -59,10 +64,10 @@ void i2c_task_support_init(I2CTaskSupportContext *support_context, I2CHandlerCon
     support_context->i2cFailedDisplaySemaphoreHandle = i2c_failed_display_semaphore_handle;
     support_context->i2cTransferFailed = i2c_transfer_failed;
 
-    handler_config->trials = 5;
-    handler_config->blockingTimeoutMs = 100;
-    handler_config->tryAgainDelayMs = 100;
-    handler_config->dropBudgetMs = 5000;
+    handler_config->trials = I2C_DEFAULT_TRIALS;
+    handler_config->blockingTimeoutMs = I2C_DEFAULT_BLOCKING_TIMEOUT_MS;
+    handler_config->tryAgainDelayMs = I2C_DEFAULT_TRY_AGAIN_DELAY_MS;
+    handler_config->dropBudgetMs = I2C_DEFAULT_DROP_BUDGET_MS;
 
     handler_ops->is_source_valid = i2c_task_source_is_valid;
     handler_ops->signal_source_completion = i2c_task_signal_source_completion;

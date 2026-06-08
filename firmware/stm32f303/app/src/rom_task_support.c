@@ -4,6 +4,8 @@
 #include "i2c_handler.h"
 #include "rom_handler.h"
 
+#define I2C_READ_FLAG 1U
+
 void rom_task_support_init(RomTaskSupportConfig *config, RomTaskSupportOps *ops, void *source_task,
                            void *i2c_queue_handle, void *i2c_failed_rom_semaphore_handle,
                            uint16_t device_address, uint16_t read_address, uint16_t write_address,
@@ -89,7 +91,7 @@ bool rom_task_bootstrap_effects(const RomTaskSupportConfig *config, const RomTas
 
     (void)log_write(LOG_LEVEL_INFO, "rom bootstrap start");
 
-    const size_t address_payload_size_bytes = 2;
+    const size_t address_payload_size_bytes = ROM_HANDLER_ADDRESS_BYTES;
     const size_t payload_size_bytes = rom_handler_read_payload_size();
 
     bool failed = true;
@@ -135,7 +137,7 @@ bool rom_task_bootstrap_effects(const RomTaskSupportConfig *config, const RomTas
     }
 
     message.rxTxBar = true;
-    message.address = config->deviceAddress | 1U;
+    message.address = config->deviceAddress | I2C_READ_FLAG;
     message.items = (uint16_t)payload_size_bytes;
 
     if (!queue_message(config, ops, &message, message.pFailed, config->bootstrapTimeoutTicks))

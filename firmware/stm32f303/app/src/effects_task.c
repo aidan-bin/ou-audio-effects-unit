@@ -2,6 +2,9 @@
 
 #include "log.h"
 
+#define US_PER_MS 1000U
+#define INFINITE_TIMEOUT_TICKS 0xFFFFFFFFU
+
 static uint32_t compute_ticks_to_wait(const EffectsTaskContext *task_context,
                                       const EffectsTaskOps *ops)
 {
@@ -12,7 +15,7 @@ static uint32_t compute_ticks_to_wait(const EffectsTaskContext *task_context,
     }
 
     uint32_t frame_duration_us = task_context->samplingPeriodUs * (uint32_t)task_context->sampleBufLen;
-    uint32_t frame_duration_ms = frame_duration_us / 1000U;
+    uint32_t frame_duration_ms = frame_duration_us / US_PER_MS;
     uint32_t frame_ticks = ops->ms_to_ticks(frame_duration_ms, ops->context);
     uint32_t slack_ticks = ops->ms_to_ticks(task_context->processingSlackMs, ops->context);
 
@@ -55,7 +58,7 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
 
     uint32_t ticks_to_wait = compute_ticks_to_wait(task_context, ops);
 
-    if (!ops->wait_for_adc_buffer(0xFFFFFFFFU, &curr_adc_buf, ops->context))
+    if (!ops->wait_for_adc_buffer(INFINITE_TIMEOUT_TICKS, &curr_adc_buf, ops->context))
     {
         (void)log_write(LOG_LEVEL_WARN, "effects task adc wait failed");
         if (ops->panic_write != NULL)
@@ -319,7 +322,7 @@ cleanup:
     {
         uint32_t frame_time_us = ops->get_timestamp_us(ops->context) - frame_start_us;
         uint32_t frame_budget_us = task_context->samplingPeriodUs * (uint32_t)task_context->sampleBufLen;
-        uint32_t slack_us = (uint32_t)task_context->processingSlackMs * 1000U;
+        uint32_t slack_us = (uint32_t)task_context->processingSlackMs * US_PER_MS;
         uint32_t total_budget_us = frame_budget_us + slack_us;
         bool overrun = frame_time_us > total_budget_us;
         if (ops->on_frame_end != NULL)

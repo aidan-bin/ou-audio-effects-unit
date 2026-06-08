@@ -5,6 +5,15 @@
 #define CLI_SESSION_BANNER_TITLE "OU Audio Effects CLI"
 #define CLI_SESSION_BANNER_HELP "Type help for commands"
 
+#define SESSION_CHUNK_SIZE 64
+#define STREAM_MAX_LINES_PER_POLL 4
+#define ASCII_PRINTABLE_MIN 0x20U
+#define ASCII_PRINTABLE_MAX 0x7EU
+#define ASCII_ESC 0x1BU
+#define ASCII_DEL 0x7FU
+#define CSI_FINAL_BYTE_MIN 0x40U
+#define CSI_FINAL_BYTE_MAX 0x7EU
+
 static bool session_write(CliSession *session, const char *text)
 {
     if (session == NULL || text == NULL || session->transport.write == NULL)
@@ -22,7 +31,7 @@ static bool session_write_core_text_normalized(CliSession *session, const char *
         return false;
     }
 
-    char chunk[64] = {0};
+    char chunk[SESSION_CHUNK_SIZE] = {0};
     size_t used = 0;
 
     for (size_t i = 0; text[i] != '\0'; i++)
@@ -141,7 +150,7 @@ static bool session_write_stream_line(CliSession *session, const char *line)
 
 static bool is_printable_ascii(uint8_t value)
 {
-    return value >= 0x20U && value <= 0x7EU;
+    return value >= ASCII_PRINTABLE_MIN && value <= ASCII_PRINTABLE_MAX;
 }
 
 static bool session_handle_escape_byte(CliSession *session,
@@ -155,7 +164,7 @@ static bool session_handle_escape_byte(CliSession *session,
 
     if (!session->escape_sequence_active)
     {
-        if (value != 0x1BU)
+        if (value != ASCII_ESC)
         {
             return false;
         }
@@ -178,7 +187,7 @@ static bool session_handle_escape_byte(CliSession *session,
         return consume_non_csi_byte;
     }
 
-    if (value >= 0x40U && value <= 0x7EU)
+    if (value >= CSI_FINAL_BYTE_MIN && value <= CSI_FINAL_BYTE_MAX)
     {
         session->escape_sequence_active = false;
         session->escape_sequence_csi = false;
@@ -275,7 +284,7 @@ void cli_session_poll(CliSession *session)
         return;
     }
 
-    for (size_t i = 0; i < 4; i++)
+    for (size_t i = 0; i < STREAM_MAX_LINES_PER_POLL; i++)
     {
         char line[CLI_MAX_LINE_LENGTH + 1] = {0};
         bool has_line = false;
@@ -357,7 +366,7 @@ void cli_session_push_bytes(CliSession *session, const uint8_t *bytes, size_t by
 
         session->last_byte_was_cr = false;
 
-        if (value == '\b' || value == 0x7FU)
+        if (value == '\b' || value == ASCII_DEL)
         {
             if (session->current_length > 0 && !session->drop_current_line)
             {

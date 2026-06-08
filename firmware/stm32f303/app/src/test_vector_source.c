@@ -9,6 +9,8 @@
 #define TEST_VECTOR_SWEEP_MIN_HZ 20U
 #define TEST_VECTOR_SWEEP_MAX_HZ 8000U
 
+#define Q16_ONE (1UL << 16)
+
 static const int16_t sine_lut[] = {
     0,
     12539,
@@ -91,7 +93,7 @@ bool test_vector_source_fill_buffer(TestVectorSource *source, const CliTestModeS
     uint32_t freq_hz = status->vector == 2U ? source->sweep_freq_hz : (uint32_t)status->frequencyHz;
 
     uint32_t phase_step =
-        (uint32_t)(((uint64_t)freq_hz * (uint64_t)lut_size * 65536ULL) /
+        (uint32_t)(((uint64_t)freq_hz * (uint64_t)lut_size * Q16_ONE) /
                    (uint64_t)sample_rate_hz);
     if (phase_step == 0U)
     {
@@ -101,7 +103,7 @@ bool test_vector_source_fill_buffer(TestVectorSource *source, const CliTestModeS
     for (size_t i = 0; i < count; i++)
     {
         uint32_t lut_index = (source->phase_q16 >> 16) % (uint32_t)lut_size;
-        int32_t scaled = (int32_t)(((int32_t)lut[lut_index] * (int32_t)status->amplitude) / 32767);
+        int32_t scaled = (int32_t)(((int32_t)lut[lut_index] * (int32_t)status->amplitude) / INT16_MAX);
         buf[i] = clamp_u16_from_i32((int32_t)X_AXIS + scaled);
         source->phase_q16 += phase_step;
     }

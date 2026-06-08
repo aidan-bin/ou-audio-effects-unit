@@ -7,6 +7,8 @@
 
 #include "effects_model.h"
 
+#define ROM_HANDLER_ADDRESS_BYTES 2
+
 size_t rom_handler_read_payload_size(void);
 size_t rom_handler_write_payload_size(void);
 

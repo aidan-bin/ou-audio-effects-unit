@@ -4,6 +4,11 @@
 #include <stdio.h>
 #include <string.h>
 
+#define CONFIG_LINE_BUF_SIZE 48
+#define LOG_LINE_BUF_SIZE 128
+#define LOG_STREAM_BATCH_MAX 255
+#define TEST_STATUS_LINE_BUF_SIZE 112
+
 typedef CliStatus (*CliCommandHandler)(char **tokens,
                                        size_t token_count,
                                        const CliServices *services,
@@ -23,8 +28,10 @@ static bool write_line(const CliIo *io, const char *line)
 
 static const char *test_vector_name(uint8_t vector)
 {
-    if (vector == 1U) return "lut";
-    if (vector == 2U) return "sweep";
+    if (vector == 1U)
+        return "lut";
+    if (vector == 2U)
+        return "sweep";
     return "sine";
 }
 
@@ -294,7 +301,7 @@ static CliStatus handle_config(char **tokens,
             return CLI_STATUS_SERVICE_ERROR;
         }
 
-        char line[48];
+        char line[CONFIG_LINE_BUF_SIZE];
         snprintf(line, sizeof(line), "config %ld\n", (long)value);
         write_line(io, line);
         return CLI_STATUS_OK;
@@ -454,7 +461,7 @@ static CliStatus handle_log(char **tokens,
                 return CLI_STATUS_SERVICE_ERROR;
             }
 
-            char line[128];
+            char line[LOG_LINE_BUF_SIZE];
             if (stats.measuredFrameCount > 0)
             {
                 uint32_t avg_us = stats.frameTimeTotalUs / stats.measuredFrameCount;
@@ -495,7 +502,7 @@ static CliStatus handle_log(char **tokens,
             return CLI_STATUS_SERVICE_ERROR;
         }
 
-        char line[128];
+        char line[LOG_LINE_BUF_SIZE];
         (void)snprintf(line, sizeof(line),
                        "log stats enabled=%u stream=%u level=%u frames=%lu failures=%lu"
                        " stepfail=%lu streak=%lu\n",
@@ -540,7 +547,7 @@ static CliStatus handle_log(char **tokens,
                 return CLI_STATUS_INVALID_ARGUMENTS;
             }
             uint32_t batch = 0;
-            if (!cli_parse_u32(tokens[idx + 1], &batch) || batch == 0 || batch > 255)
+            if (!cli_parse_u32(tokens[idx + 1], &batch) || batch == 0 || batch > LOG_STREAM_BATCH_MAX)
             {
                 return CLI_STATUS_PARSE_ERROR;
             }
@@ -646,7 +653,7 @@ static CliStatus handle_test_mode(char **tokens,
             return CLI_STATUS_SERVICE_ERROR;
         }
 
-        char line[112];
+        char line[TEST_STATUS_LINE_BUF_SIZE];
         snprintf(line, sizeof(line),
                  "mode=%u vector=%s freq_hz=%u amp=%u\n",
                  status.enabled ? 1U : 0U, test_vector_name(status.vector), status.frequencyHz,
