@@ -28,10 +28,15 @@ typedef struct
     bool (*log_set_level)(uint8_t level, void *context);
     bool (*log_set_enabled)(bool enabled, void *context);
     bool (*log_set_stream)(bool enabled, void *context);
-    bool (*test_set_mode)(bool enabled, void *context);
-    bool (*test_set_vector)(uint8_t vector, void *context);
-    bool (*test_set_frequency_hz)(uint16_t frequencyHz, void *context);
-    bool (*test_set_amplitude)(uint16_t amplitude, void *context);
+    bool (*test_set_input_mode)(bool enabled, void *context);
+    bool (*test_set_input_vector)(uint8_t vector, void *context);
+    bool (*test_set_input_frequency_hz)(uint16_t frequencyHz, void *context);
+    bool (*test_set_input_amplitude)(uint16_t amplitude, void *context);
+
+    bool (*test_set_output_mode)(bool enabled, void *context);
+    bool (*test_set_output_vector)(uint8_t vector, void *context);
+    bool (*test_set_output_frequency_hz)(uint16_t frequencyHz, void *context);
+    bool (*test_set_output_amplitude)(uint16_t amplitude, void *context);
     void *context;
 } CliServiceAdapterOps;
 
@@ -61,10 +66,15 @@ typedef struct
     uint8_t logStreamTail;
     uint8_t logStreamCount;
 
-    bool testModeEnabled;
-    uint8_t testVector;
-    uint16_t testFrequencyHz;
-    uint16_t testAmplitude;
+    bool testInputModeEnabled;
+    uint8_t testInputVector;
+    uint16_t testInputFrequencyHz;
+    uint16_t testInputAmplitude;
+
+    bool testOutputModeEnabled;
+    uint8_t testOutputVector;
+    uint16_t testOutputFrequencyHz;
+    uint16_t testOutputAmplitude;
 
     uint32_t *heartbeatPeriodMs;
     uint32_t heartbeatPeriodMinMs;
@@ -102,8 +112,10 @@ bool cli_service_adapter_apply_pot_sample(CliServiceAdapterContext *context, Eff
 bool cli_service_adapter_apply_switches(CliServiceAdapterContext *context, bool switchAEnabled,
                                         bool switchBEnabled, bool switchCEnabled);
 
-bool cli_service_adapter_get_test_mode_status(CliServiceAdapterContext *context,
-                                              CliTestModeStatus *statusOut);
+bool cli_service_adapter_get_test_input_mode_status(CliServiceAdapterContext *context,
+                                                    CliTestModeStatus *statusOut);
+bool cli_service_adapter_get_test_output_mode_status(CliServiceAdapterContext *context,
+                                                     CliTestModeStatus *statusOut);
 
 bool cli_service_adapter_get_log_stats(CliServiceAdapterContext *context,
                                        CliLogStats *statsOut);

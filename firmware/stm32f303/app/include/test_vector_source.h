@@ -11,6 +11,7 @@ typedef struct
 {
     uint32_t sample_rate_hz;
     uint32_t phase_q16;
+    uint32_t sweep_freq_hz;
 } TestVectorSource;
 
 void test_vector_source_init(TestVectorSource *source, uint32_t sample_rate_hz);

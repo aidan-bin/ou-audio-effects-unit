@@ -267,6 +267,17 @@ cleanup:
         ops->free(echo_delay_samples_buf, ops->context);
     }
 
+    if (!process_failed && ops->replace_output_for_testing != NULL &&
+        !ops->replace_output_for_testing(curr_dac_buf, task_context->sampleBufLen, ops->context))
+    {
+        (void)log_write(LOG_LEVEL_WARN, "effects task test output replacement failed");
+        if (ops->panic_write != NULL)
+        {
+            ops->panic_write("panic: test output replacement failed\n", ops->context);
+        }
+        process_failed = true;
+    }
+
     if (process_failed && ops->report_failure != NULL)
     {
         (void)log_write(LOG_LEVEL_ERROR, "effects task frame processing failed");

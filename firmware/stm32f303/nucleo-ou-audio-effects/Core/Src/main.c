@@ -105,6 +105,7 @@ static CliServiceAdapterContext cli_service_adapter_context;
 static CliServices cli_services;
 static CliSession cli_session;
 static TestVectorSource test_vector_source;
+static TestVectorSource test_vector_source_output;
 
 /* USER CODE END PV */
 
@@ -133,6 +134,7 @@ static void effects_task_free(void *ptr, void *context);
 static bool effects_task_read_latched_state(EffectsState *state, EffectsParams *params,
                                             void *context);
 static bool effects_task_replace_input_for_testing(uint16_t *buf, size_t count, void *context);
+static bool effects_task_replace_output_for_testing(uint16_t *buf, size_t count, void *context);
 static void effects_task_report_failure(void *context);
 static void effects_task_report_frame_complete(void *context);
 static void effects_task_log_runtime_stats(const char *reason, uint8_t level);
@@ -354,7 +356,7 @@ static bool effects_task_replace_input_for_testing(uint16_t *buf, size_t count, 
         return false;
     }
 
-    if (!cli_service_adapter_get_test_mode_status(adapter_context, &status))
+    if (!cli_service_adapter_get_test_input_mode_status(adapter_context, &status))
     {
         return false;
     }
@@ -365,6 +367,29 @@ static bool effects_task_replace_input_for_testing(uint16_t *buf, size_t count, 
     }
 
     return test_vector_source_fill_buffer(&test_vector_source, &status, buf, count);
+}
+
+static bool effects_task_replace_output_for_testing(uint16_t *buf, size_t count, void *context)
+{
+    CliServiceAdapterContext *adapter_context = (CliServiceAdapterContext *)context;
+    CliTestModeStatus status = {0};
+
+    if (buf == NULL || adapter_context == NULL)
+    {
+        return false;
+    }
+
+    if (!cli_service_adapter_get_test_output_mode_status(adapter_context, &status))
+    {
+        return false;
+    }
+
+    if (!status.enabled)
+    {
+        return true;
+    }
+
+    return test_vector_source_fill_buffer(&test_vector_source_output, &status, buf, count);
 }
 
 static void effects_task_report_failure(void *context)
@@ -727,6 +752,10 @@ void startEffectsTask(void const *argument)
                             task_context.samplingPeriodUs == 0U
                                 ? 40500U
                                 : (1000000U / task_context.samplingPeriodUs));
+    test_vector_source_init(&test_vector_source_output,
+                            task_context.samplingPeriodUs == 0U
+                                ? 40500U
+                                : (1000000U / task_context.samplingPeriodUs));
 
     EffectsTaskOps task_ops = {
         .wait_for_adc_buffer = effects_task_wait_for_adc_buffer,
@@ -736,6 +765,7 @@ void startEffectsTask(void const *argument)
         .free = effects_task_free,
         .read_latched_state = effects_task_read_latched_state,
         .replace_input_for_testing = effects_task_replace_input_for_testing,
+        .replace_output_for_testing = effects_task_replace_output_for_testing,
         .report_failure = effects_task_report_failure,
         .report_frame_complete = effects_task_report_frame_complete,
         .ms_to_ticks = effects_task_ms_to_ticks,

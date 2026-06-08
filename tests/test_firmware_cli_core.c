@@ -33,10 +33,15 @@ typedef struct
     uint8_t streamBatchSize;
     uint8_t streamQueueCount;
 
-    bool testModeEnabled;
-    uint8_t testVector;
-    uint16_t testFrequencyHz;
-    uint16_t testAmplitude;
+    bool testInputModeEnabled;
+    uint8_t testInputVector;
+    uint16_t testInputFrequencyHz;
+    uint16_t testInputAmplitude;
+
+    bool testOutputModeEnabled;
+    uint8_t testOutputVector;
+    uint16_t testOutputFrequencyHz;
+    uint16_t testOutputAmplitude;
 } CliCoreTestContext;
 
 static bool test_write(const char *text, void *context)
@@ -212,35 +217,35 @@ static bool log_get_stats(CliLogStats *statsOut, void *context)
     return !ctx->failService;
 }
 
-static bool test_set_mode(bool enabled, void *context)
+static bool test_set_input_mode(bool enabled, void *context)
 {
     CliCoreTestContext *ctx = (CliCoreTestContext *)context;
-    ctx->testModeEnabled = enabled;
+    ctx->testInputModeEnabled = enabled;
     return !ctx->failService;
 }
 
-static bool test_set_vector(uint8_t vector, void *context)
+static bool test_set_input_vector(uint8_t vector, void *context)
 {
     CliCoreTestContext *ctx = (CliCoreTestContext *)context;
-    ctx->testVector = vector;
+    ctx->testInputVector = vector;
     return !ctx->failService;
 }
 
-static bool test_set_frequency_hz(uint16_t frequencyHz, void *context)
+static bool test_set_input_frequency_hz(uint16_t frequencyHz, void *context)
 {
     CliCoreTestContext *ctx = (CliCoreTestContext *)context;
-    ctx->testFrequencyHz = frequencyHz;
+    ctx->testInputFrequencyHz = frequencyHz;
     return !ctx->failService;
 }
 
-static bool test_set_amplitude(uint16_t amplitude, void *context)
+static bool test_set_input_amplitude(uint16_t amplitude, void *context)
 {
     CliCoreTestContext *ctx = (CliCoreTestContext *)context;
-    ctx->testAmplitude = amplitude;
+    ctx->testInputAmplitude = amplitude;
     return !ctx->failService;
 }
 
-static bool test_get_status(CliTestModeStatus *statusOut, void *context)
+static bool test_get_input_status(CliTestModeStatus *statusOut, void *context)
 {
     CliCoreTestContext *ctx = (CliCoreTestContext *)context;
     if (statusOut == NULL)
@@ -248,10 +253,53 @@ static bool test_get_status(CliTestModeStatus *statusOut, void *context)
         return false;
     }
 
-    statusOut->enabled = ctx->testModeEnabled;
-    statusOut->vector = ctx->testVector;
-    statusOut->frequencyHz = ctx->testFrequencyHz;
-    statusOut->amplitude = ctx->testAmplitude;
+    statusOut->enabled = ctx->testInputModeEnabled;
+    statusOut->vector = ctx->testInputVector;
+    statusOut->frequencyHz = ctx->testInputFrequencyHz;
+    statusOut->amplitude = ctx->testInputAmplitude;
+    return !ctx->failService;
+}
+
+static bool test_set_output_mode(bool enabled, void *context)
+{
+    CliCoreTestContext *ctx = (CliCoreTestContext *)context;
+    ctx->testOutputModeEnabled = enabled;
+    return !ctx->failService;
+}
+
+static bool test_set_output_vector(uint8_t vector, void *context)
+{
+    CliCoreTestContext *ctx = (CliCoreTestContext *)context;
+    ctx->testOutputVector = vector;
+    return !ctx->failService;
+}
+
+static bool test_set_output_frequency_hz(uint16_t frequencyHz, void *context)
+{
+    CliCoreTestContext *ctx = (CliCoreTestContext *)context;
+    ctx->testOutputFrequencyHz = frequencyHz;
+    return !ctx->failService;
+}
+
+static bool test_set_output_amplitude(uint16_t amplitude, void *context)
+{
+    CliCoreTestContext *ctx = (CliCoreTestContext *)context;
+    ctx->testOutputAmplitude = amplitude;
+    return !ctx->failService;
+}
+
+static bool test_get_output_status(CliTestModeStatus *statusOut, void *context)
+{
+    CliCoreTestContext *ctx = (CliCoreTestContext *)context;
+    if (statusOut == NULL)
+    {
+        return false;
+    }
+
+    statusOut->enabled = ctx->testOutputModeEnabled;
+    statusOut->vector = ctx->testOutputVector;
+    statusOut->frequencyHz = ctx->testOutputFrequencyHz;
+    statusOut->amplitude = ctx->testOutputAmplitude;
     return !ctx->failService;
 }
 
@@ -275,11 +323,17 @@ static CliServices make_services(CliCoreTestContext *ctx)
         .log_set_stream_batch = log_set_stream_batch,
         .log_get_stats = log_get_stats,
         .log_reset_stats = log_reset_stats,
-        .test_set_mode = test_set_mode,
-        .test_set_vector = test_set_vector,
-        .test_set_frequency_hz = test_set_frequency_hz,
-        .test_set_amplitude = test_set_amplitude,
-        .test_get_status = test_get_status,
+        .test_set_input_mode = test_set_input_mode,
+        .test_set_input_vector = test_set_input_vector,
+        .test_set_input_frequency_hz = test_set_input_frequency_hz,
+        .test_set_input_amplitude = test_set_input_amplitude,
+        .test_get_input_status = test_get_input_status,
+
+        .test_set_output_mode = test_set_output_mode,
+        .test_set_output_vector = test_set_output_vector,
+        .test_set_output_frequency_hz = test_set_output_frequency_hz,
+        .test_set_output_amplitude = test_set_output_amplitude,
+        .test_get_output_status = test_get_output_status,
         .context = ctx,
     };
     return services;
@@ -403,39 +457,87 @@ static void test_rom_and_log_commands(void)
                 "log stats timing emits timing line");
 }
 
-static void test_test_mode_commands(void)
+static void test_test_input_mode_commands(void)
 {
     CliCoreTestContext ctx = {0};
     CliServices services = make_services(&ctx);
     CliIo io = make_io(&ctx);
 
     expect_eq_u32(CLI_STATUS_OK,
-                  cli_core_process_line("test mode 1", &services, &io),
-                  "test mode command succeeds");
-    expect_true(ctx.testModeEnabled, "test mode enabled state stored");
-    expect_true(ctx.outputUsed == 0, "test mode emits no success output");
+                  cli_core_process_line("test input mode 1", &services, &io),
+                  "test input mode command succeeds");
+    expect_true(ctx.testInputModeEnabled, "test input mode enabled state stored");
+    expect_true(ctx.outputUsed == 0, "test input mode emits no success output");
 
     expect_eq_u32(CLI_STATUS_OK,
-                  cli_core_process_line("test vector lut", &services, &io),
-                  "test vector command succeeds");
-    expect_eq_u8(1, ctx.testVector, "test vector parsed");
+                  cli_core_process_line("test input vector lut", &services, &io),
+                  "test input vector command succeeds");
+    expect_eq_u8(1, ctx.testInputVector, "test input vector parsed");
 
     expect_eq_u32(CLI_STATUS_OK,
-                  cli_core_process_line("test freq 1234", &services, &io),
-                  "test freq command succeeds");
-    expect_eq_u16(1234, ctx.testFrequencyHz, "test frequency parsed");
+                  cli_core_process_line("test input vector sweep", &services, &io),
+                  "test input sweep vector command succeeds");
+    expect_eq_u8(2, ctx.testInputVector, "test input sweep vector parsed");
 
     expect_eq_u32(CLI_STATUS_OK,
-                  cli_core_process_line("test amp 4000", &services, &io),
-                  "test amp command succeeds");
-    expect_eq_u16(4000, ctx.testAmplitude, "test amplitude parsed");
+                  cli_core_process_line("test input freq 1234", &services, &io),
+                  "test input freq command succeeds");
+    expect_eq_u16(1234, ctx.testInputFrequencyHz, "test input frequency parsed");
+
+    expect_eq_u32(CLI_STATUS_OK,
+                  cli_core_process_line("test input amp 4000", &services, &io),
+                  "test input amp command succeeds");
+    expect_eq_u16(4000, ctx.testInputAmplitude, "test input amplitude parsed");
 
     ctx.outputUsed = 0;
     ctx.output[0] = '\0';
     expect_eq_u32(CLI_STATUS_OK,
-                  cli_core_process_line("test status", &services, &io),
-                  "test status command succeeds");
-    expect_true(strstr(ctx.output, "vector=lut") != NULL, "test status prints vector");
+                  cli_core_process_line("test input status", &services, &io),
+                  "test input status command succeeds");
+    expect_true(strstr(ctx.output, "vector=sweep") != NULL, "test input status prints sweep vector");
+}
+
+static void test_test_output_mode_commands(void)
+{
+    CliCoreTestContext ctx = {0};
+    CliServices services = make_services(&ctx);
+    CliIo io = make_io(&ctx);
+
+    expect_eq_u32(CLI_STATUS_OK,
+                  cli_core_process_line("test output mode 1", &services, &io),
+                  "test output mode command succeeds");
+    expect_true(ctx.testOutputModeEnabled, "test output mode enabled state stored");
+    expect_true(ctx.outputUsed == 0, "test output mode emits no success output");
+
+    expect_eq_u32(CLI_STATUS_OK,
+                  cli_core_process_line("test output vector lut", &services, &io),
+                  "test output vector command succeeds");
+    expect_eq_u8(1, ctx.testOutputVector, "test output vector parsed");
+
+    expect_eq_u32(CLI_STATUS_OK,
+                  cli_core_process_line("test output vector sweep", &services, &io),
+                  "test output sweep vector command succeeds");
+    expect_eq_u8(2, ctx.testOutputVector, "test output sweep vector parsed");
+
+    expect_eq_u32(CLI_STATUS_OK,
+                  cli_core_process_line("test output freq 5678", &services, &io),
+                  "test output freq command succeeds");
+    expect_eq_u16(5678, ctx.testOutputFrequencyHz, "test output frequency parsed");
+
+    expect_eq_u32(CLI_STATUS_OK,
+                  cli_core_process_line("test output amp 8000", &services, &io),
+                  "test output amp command succeeds");
+    expect_eq_u16(8000, ctx.testOutputAmplitude, "test output amplitude parsed");
+
+    ctx.outputUsed = 0;
+    ctx.output[0] = '\0';
+    expect_eq_u32(CLI_STATUS_OK,
+                  cli_core_process_line("test output status", &services, &io),
+                  "test output status command succeeds");
+    expect_true(strstr(ctx.output, "mode=1") != NULL, "test output status prints mode");
+    expect_true(strstr(ctx.output, "vector=sweep") != NULL, "test output status prints sweep vector");
+    expect_true(strstr(ctx.output, "freq_hz=5678") != NULL, "test output status prints freq");
+    expect_true(strstr(ctx.output, "amp=8000") != NULL, "test output status prints amp");
 }
 
 static void test_log_stream_batch_command(void)
@@ -529,7 +631,8 @@ int main(void)
     test_rom_and_log_commands();
     test_log_stream_batch_command();
     test_log_stats_reset();
-    test_test_mode_commands();
+    test_test_input_mode_commands();
+    test_test_output_mode_commands();
     test_error_paths();
 
     if (failures != 0)

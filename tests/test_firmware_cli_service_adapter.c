@@ -219,7 +219,7 @@ static void test_rom_raw_guardrails(void)
     expect_eq_u32(1, ops_context.romWriteCalls, "rom write not delegated when rejected");
 }
 
-static void test_test_mode_status_and_validation(void)
+static void test_test_input_mode_status_and_validation(void)
 {
     EffectsState state;
     EffectsParams params;
@@ -233,26 +233,70 @@ static void test_test_mode_status_and_validation(void)
     cli_service_adapter_bind(&context, &services);
 
     CliTestModeStatus status = {0};
-    expect_true(services.test_get_status(&status, services.context), "read default test status");
-    expect_false(status.enabled, "test mode disabled by default");
+    expect_true(services.test_get_input_status(&status, services.context),
+                "read default input test status");
+    expect_false(status.enabled, "input test mode disabled by default");
 
-    expect_true(services.test_set_mode(true, services.context), "enable test mode");
-    expect_true(services.test_set_vector(1, services.context), "set test vector");
-    expect_true(services.test_set_frequency_hz(2000, services.context), "set test frequency");
-    expect_true(services.test_set_amplitude((uint16_t)(X_AXIS / 2U), services.context),
-                "set test amplitude");
+    expect_true(services.test_set_input_mode(true, services.context), "enable input test mode");
+    expect_true(services.test_set_input_vector(1, services.context), "set input test vector");
+    expect_true(services.test_set_input_vector(2, services.context), "set input sweep vector");
+    expect_true(services.test_set_input_frequency_hz(2000, services.context),
+                "set input test frequency");
+    expect_true(services.test_set_input_amplitude((uint16_t)(X_AXIS / 2U), services.context),
+                "set input test amplitude");
 
-    expect_false(services.test_set_vector(3, services.context), "reject invalid test vector");
-    expect_false(services.test_set_frequency_hz(10, services.context),
-                 "reject too-low frequency");
-    expect_false(services.test_set_amplitude((uint16_t)(X_AXIS + 1U), services.context),
-                 "reject out-of-range amplitude");
+    expect_false(services.test_set_input_vector(3, services.context),
+                 "reject invalid input test vector");
+    expect_false(services.test_set_input_frequency_hz(10, services.context),
+                 "reject too-low input frequency");
+    expect_false(services.test_set_input_amplitude((uint16_t)(X_AXIS + 1U), services.context),
+                 "reject out-of-range input amplitude");
 
-    expect_true(cli_service_adapter_get_test_mode_status(&context, &status),
-                "read test status through adapter helper");
-    expect_true(status.enabled, "test mode remains enabled");
-    expect_eq_u8(1, status.vector, "test vector persisted");
-    expect_eq_u16(2000, status.frequencyHz, "test frequency persisted");
+    expect_true(cli_service_adapter_get_test_input_mode_status(&context, &status),
+                "read input test status through adapter helper");
+    expect_true(status.enabled, "input test mode remains enabled");
+    expect_eq_u8(2, status.vector, "input test vector persisted");
+    expect_eq_u16(2000, status.frequencyHz, "input test frequency persisted");
+}
+
+static void test_test_output_mode_status_and_validation(void)
+{
+    EffectsState state;
+    EffectsParams params;
+    set_default_effects_state(&state);
+    set_default_effects_params(&params);
+
+    CliServiceAdapterContext context;
+    cli_service_adapter_init(&context, &state, &params, NULL, 255);
+
+    CliServices services = {0};
+    cli_service_adapter_bind(&context, &services);
+
+    CliTestModeStatus status = {0};
+    expect_true(services.test_get_output_status(&status, services.context),
+                "read default output test status");
+    expect_false(status.enabled, "output test mode disabled by default");
+
+    expect_true(services.test_set_output_mode(true, services.context), "enable output test mode");
+    expect_true(services.test_set_output_vector(1, services.context), "set output test vector");
+    expect_true(services.test_set_output_vector(2, services.context), "set output sweep vector");
+    expect_true(services.test_set_output_frequency_hz(2000, services.context),
+                "set output test frequency");
+    expect_true(services.test_set_output_amplitude((uint16_t)(X_AXIS / 2U), services.context),
+                "set output test amplitude");
+
+    expect_false(services.test_set_output_vector(3, services.context),
+                 "reject invalid output test vector");
+    expect_false(services.test_set_output_frequency_hz(10, services.context),
+                 "reject too-low output frequency");
+    expect_false(services.test_set_output_amplitude((uint16_t)(X_AXIS + 1U), services.context),
+                 "reject out-of-range output amplitude");
+
+    expect_true(cli_service_adapter_get_test_output_mode_status(&context, &status),
+                "read output test status through adapter helper");
+    expect_true(status.enabled, "output test mode remains enabled");
+    expect_eq_u8(2, status.vector, "output test vector persisted");
+    expect_eq_u16(2000, status.frequencyHz, "output test frequency persisted");
 }
 
 static void test_log_stats_counters(void)
@@ -477,7 +521,8 @@ int main(void)
     test_switch_override_precedence();
     test_config_bounds_and_state_updates();
     test_rom_raw_guardrails();
-    test_test_mode_status_and_validation();
+    test_test_input_mode_status_and_validation();
+    test_test_output_mode_status_and_validation();
     test_log_stats_counters();
     test_profiling_accumulation_and_reset();
     test_profiling_batch_emission();

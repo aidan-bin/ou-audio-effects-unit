@@ -91,11 +91,17 @@ typedef struct
     bool (*log_get_stats)(CliLogStats *statsOut, void *context);
     bool (*log_reset_stats)(void *context);
 
-    bool (*test_set_mode)(bool enabled, void *context);
-    bool (*test_set_vector)(uint8_t vector, void *context);
-    bool (*test_set_frequency_hz)(uint16_t frequencyHz, void *context);
-    bool (*test_set_amplitude)(uint16_t amplitude, void *context);
-    bool (*test_get_status)(CliTestModeStatus *statusOut, void *context);
+    bool (*test_set_input_mode)(bool enabled, void *context);
+    bool (*test_set_input_vector)(uint8_t vector, void *context);
+    bool (*test_set_input_frequency_hz)(uint16_t frequencyHz, void *context);
+    bool (*test_set_input_amplitude)(uint16_t amplitude, void *context);
+    bool (*test_get_input_status)(CliTestModeStatus *statusOut, void *context);
+
+    bool (*test_set_output_mode)(bool enabled, void *context);
+    bool (*test_set_output_vector)(uint8_t vector, void *context);
+    bool (*test_set_output_frequency_hz)(uint16_t frequencyHz, void *context);
+    bool (*test_set_output_amplitude)(uint16_t amplitude, void *context);
+    bool (*test_get_output_status)(CliTestModeStatus *statusOut, void *context);
     void *context;
 } CliServices;
 

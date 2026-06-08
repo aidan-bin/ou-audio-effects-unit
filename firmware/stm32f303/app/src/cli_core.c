@@ -23,7 +23,9 @@ static bool write_line(const CliIo *io, const char *line)
 
 static const char *test_vector_name(uint8_t vector)
 {
-    return vector == 1U ? "lut" : "sine";
+    if (vector == 1U) return "lut";
+    if (vector == 2U) return "sweep";
+    return "sine";
 }
 
 static const char *command_help_text(const char *command)
@@ -611,14 +613,16 @@ static CliStatus handle_log(char **tokens,
     return CLI_STATUS_UNKNOWN_COMMAND;
 }
 
-static CliStatus handle_test(char **tokens,
-                             size_t token_count,
-                             const CliServices *services,
-                             const CliIo *io,
-                             CliCommandResult *result)
+static CliStatus handle_test_mode(char **tokens,
+                                  size_t token_count,
+                                  bool (*set_mode)(bool, void *),
+                                  bool (*set_vector)(uint8_t, void *),
+                                  bool (*set_freq)(uint16_t, void *),
+                                  bool (*set_amp)(uint16_t, void *),
+                                  bool (*get_status)(CliTestModeStatus *, void *),
+                                  void *context,
+                                  const CliIo *io)
 {
-    (void)result;
-
     if (token_count < 2)
     {
         return CLI_STATUS_INVALID_ARGUMENTS;
@@ -631,20 +635,20 @@ static CliStatus handle_test(char **tokens,
             return CLI_STATUS_INVALID_ARGUMENTS;
         }
 
-        if (services->test_get_status == NULL)
+        if (get_status == NULL)
         {
             return CLI_STATUS_UNSUPPORTED;
         }
 
         CliTestModeStatus status = {0};
-        if (!services->test_get_status(&status, services->context))
+        if (!get_status(&status, context))
         {
             return CLI_STATUS_SERVICE_ERROR;
         }
 
         char line[112];
         snprintf(line, sizeof(line),
-                 "test status mode=%u vector=%s freq_hz=%u amp=%u\n",
+                 "mode=%u vector=%s freq_hz=%u amp=%u\n",
                  status.enabled ? 1U : 0U, test_vector_name(status.vector), status.frequencyHz,
                  status.amplitude);
         write_line(io, line);
@@ -658,14 +662,13 @@ static CliStatus handle_test(char **tokens,
 
     if (strcmp(tokens[1], "mode") == 0)
     {
-        if (services->test_set_mode == NULL)
+        if (set_mode == NULL)
         {
             return CLI_STATUS_UNSUPPORTED;
         }
 
         bool enabled = false;
-        if (!cli_parse_bool01(tokens[2], &enabled) ||
-            !services->test_set_mode(enabled, services->context))
+        if (!cli_parse_bool01(tokens[2], &enabled) || !set_mode(enabled, context))
         {
             return CLI_STATUS_SERVICE_ERROR;
         }
@@ -675,7 +678,7 @@ static CliStatus handle_test(char **tokens,
 
     if (strcmp(tokens[1], "vector") == 0)
     {
-        if (services->test_set_vector == NULL)
+        if (set_vector == NULL)
         {
             return CLI_STATUS_UNSUPPORTED;
         }
@@ -689,12 +692,16 @@ static CliStatus handle_test(char **tokens,
         {
             vector = 1;
         }
+        else if (strcmp(tokens[2], "sweep") == 0)
+        {
+            vector = 2;
+        }
         else
         {
             return CLI_STATUS_PARSE_ERROR;
         }
 
-        if (!services->test_set_vector(vector, services->context))
+        if (!set_vector(vector, context))
         {
             return CLI_STATUS_SERVICE_ERROR;
         }
@@ -704,14 +711,14 @@ static CliStatus handle_test(char **tokens,
 
     if (strcmp(tokens[1], "freq") == 0)
     {
-        if (services->test_set_frequency_hz == NULL)
+        if (set_freq == NULL)
         {
             return CLI_STATUS_UNSUPPORTED;
         }
 
         uint32_t frequency_hz = 0;
         if (!cli_parse_u32(tokens[2], &frequency_hz) || frequency_hz > UINT16_MAX ||
-            !services->test_set_frequency_hz((uint16_t)frequency_hz, services->context))
+            !set_freq((uint16_t)frequency_hz, context))
         {
             return CLI_STATUS_SERVICE_ERROR;
         }
@@ -721,14 +728,14 @@ static CliStatus handle_test(char **tokens,
 
     if (strcmp(tokens[1], "amp") == 0)
     {
-        if (services->test_set_amplitude == NULL)
+        if (set_amp == NULL)
         {
             return CLI_STATUS_UNSUPPORTED;
         }
 
         uint32_t amplitude = 0;
         if (!cli_parse_u32(tokens[2], &amplitude) || amplitude > UINT16_MAX ||
-            !services->test_set_amplitude((uint16_t)amplitude, services->context))
+            !set_amp((uint16_t)amplitude, context))
         {
             return CLI_STATUS_SERVICE_ERROR;
         }
@@ -737,6 +744,80 @@ static CliStatus handle_test(char **tokens,
     }
 
     return CLI_STATUS_UNKNOWN_COMMAND;
+}
+
+static CliStatus handle_test(char **tokens,
+                             size_t token_count,
+                             const CliServices *services,
+                             const CliIo *io,
+                             CliCommandResult *result)
+{
+    (void)result;
+
+    if (token_count < 2)
+    {
+        return CLI_STATUS_INVALID_ARGUMENTS;
+    }
+
+    if (strcmp(tokens[1], "input") == 0)
+    {
+        return handle_test_mode(tokens + 1, token_count - 1,
+                                services->test_set_input_mode,
+                                services->test_set_input_vector,
+                                services->test_set_input_frequency_hz,
+                                services->test_set_input_amplitude,
+                                services->test_get_input_status,
+                                services->context, io);
+    }
+
+    if (strcmp(tokens[1], "output") == 0)
+    {
+        return handle_test_mode(tokens + 1, token_count - 1,
+                                services->test_set_output_mode,
+                                services->test_set_output_vector,
+                                services->test_set_output_frequency_hz,
+                                services->test_set_output_amplitude,
+                                services->test_get_output_status,
+                                services->context, io);
+    }
+
+    if (strcmp(tokens[1], "status") == 0)
+    {
+        if (token_count != 2)
+        {
+            return CLI_STATUS_INVALID_ARGUMENTS;
+        }
+
+        write_line(io, "test input ");
+        CliStatus input_status = handle_test_mode(tokens, token_count,
+                                                  services->test_set_input_mode,
+                                                  services->test_set_input_vector,
+                                                  services->test_set_input_frequency_hz,
+                                                  services->test_set_input_amplitude,
+                                                  services->test_get_input_status,
+                                                  services->context, io);
+        if (input_status != CLI_STATUS_OK)
+        {
+            return input_status;
+        }
+
+        write_line(io, "test output ");
+        return handle_test_mode(tokens, token_count,
+                                services->test_set_output_mode,
+                                services->test_set_output_vector,
+                                services->test_set_output_frequency_hz,
+                                services->test_set_output_amplitude,
+                                services->test_get_output_status,
+                                services->context, io);
+    }
+
+    return handle_test_mode(tokens, token_count,
+                            services->test_set_input_mode,
+                            services->test_set_input_vector,
+                            services->test_set_input_frequency_hz,
+                            services->test_set_input_amplitude,
+                            services->test_get_input_status,
+                            services->context, io);
 }
 
 CliStatus cli_core_process_line(const char *line, const CliServices *services, const CliIo *io)

@@ -681,7 +681,7 @@ static bool service_log_get_stats(CliLogStats *stats_out, void *ctx)
     return true;
 }
 
-static bool service_test_set_mode(bool enabled, void *ctx)
+static bool service_test_set_input_mode(bool enabled, void *ctx)
 {
     CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
     if (context == NULL)
@@ -690,38 +690,38 @@ static bool service_test_set_mode(bool enabled, void *ctx)
     }
 
     lock_ctx(context);
-    context->testModeEnabled = enabled;
+    context->testInputModeEnabled = enabled;
     unlock_ctx(context);
 
-    if (context->ops.test_set_mode != NULL)
+    if (context->ops.test_set_input_mode != NULL)
     {
-        return context->ops.test_set_mode(enabled, context->ops.context);
+        return context->ops.test_set_input_mode(enabled, context->ops.context);
     }
 
     return true;
 }
 
-static bool service_test_set_vector(uint8_t vector, void *ctx)
+static bool service_test_set_input_vector(uint8_t vector, void *ctx)
 {
     CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
-    if (context == NULL || vector > 1U)
+    if (context == NULL || vector > 2U)
     {
         return false;
     }
 
     lock_ctx(context);
-    context->testVector = vector;
+    context->testInputVector = vector;
     unlock_ctx(context);
 
-    if (context->ops.test_set_vector != NULL)
+    if (context->ops.test_set_input_vector != NULL)
     {
-        return context->ops.test_set_vector(vector, context->ops.context);
+        return context->ops.test_set_input_vector(vector, context->ops.context);
     }
 
     return true;
 }
 
-static bool service_test_set_frequency_hz(uint16_t frequency_hz, void *ctx)
+static bool service_test_set_input_frequency_hz(uint16_t frequency_hz, void *ctx)
 {
     CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
     if (context == NULL || frequency_hz < 20U || frequency_hz > 8000U)
@@ -730,18 +730,18 @@ static bool service_test_set_frequency_hz(uint16_t frequency_hz, void *ctx)
     }
 
     lock_ctx(context);
-    context->testFrequencyHz = frequency_hz;
+    context->testInputFrequencyHz = frequency_hz;
     unlock_ctx(context);
 
-    if (context->ops.test_set_frequency_hz != NULL)
+    if (context->ops.test_set_input_frequency_hz != NULL)
     {
-        return context->ops.test_set_frequency_hz(frequency_hz, context->ops.context);
+        return context->ops.test_set_input_frequency_hz(frequency_hz, context->ops.context);
     }
 
     return true;
 }
 
-static bool service_test_set_amplitude(uint16_t amplitude, void *ctx)
+static bool service_test_set_input_amplitude(uint16_t amplitude, void *ctx)
 {
     CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
     if (context == NULL || amplitude > X_AXIS)
@@ -750,18 +750,18 @@ static bool service_test_set_amplitude(uint16_t amplitude, void *ctx)
     }
 
     lock_ctx(context);
-    context->testAmplitude = amplitude;
+    context->testInputAmplitude = amplitude;
     unlock_ctx(context);
 
-    if (context->ops.test_set_amplitude != NULL)
+    if (context->ops.test_set_input_amplitude != NULL)
     {
-        return context->ops.test_set_amplitude(amplitude, context->ops.context);
+        return context->ops.test_set_input_amplitude(amplitude, context->ops.context);
     }
 
     return true;
 }
 
-static bool service_test_get_status(CliTestModeStatus *status_out, void *ctx)
+static bool service_test_get_input_status(CliTestModeStatus *status_out, void *ctx)
 {
     CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
     if (context == NULL || status_out == NULL)
@@ -770,10 +770,108 @@ static bool service_test_get_status(CliTestModeStatus *status_out, void *ctx)
     }
 
     lock_ctx(context);
-    status_out->enabled = context->testModeEnabled;
-    status_out->vector = context->testVector;
-    status_out->frequencyHz = context->testFrequencyHz;
-    status_out->amplitude = context->testAmplitude;
+    status_out->enabled = context->testInputModeEnabled;
+    status_out->vector = context->testInputVector;
+    status_out->frequencyHz = context->testInputFrequencyHz;
+    status_out->amplitude = context->testInputAmplitude;
+    unlock_ctx(context);
+
+    return true;
+}
+
+static bool service_test_set_output_mode(bool enabled, void *ctx)
+{
+    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    if (context == NULL)
+    {
+        return false;
+    }
+
+    lock_ctx(context);
+    context->testOutputModeEnabled = enabled;
+    unlock_ctx(context);
+
+    if (context->ops.test_set_output_mode != NULL)
+    {
+        return context->ops.test_set_output_mode(enabled, context->ops.context);
+    }
+
+    return true;
+}
+
+static bool service_test_set_output_vector(uint8_t vector, void *ctx)
+{
+    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    if (context == NULL || vector > 2U)
+    {
+        return false;
+    }
+
+    lock_ctx(context);
+    context->testOutputVector = vector;
+    unlock_ctx(context);
+
+    if (context->ops.test_set_output_vector != NULL)
+    {
+        return context->ops.test_set_output_vector(vector, context->ops.context);
+    }
+
+    return true;
+}
+
+static bool service_test_set_output_frequency_hz(uint16_t frequency_hz, void *ctx)
+{
+    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    if (context == NULL || frequency_hz < 20U || frequency_hz > 8000U)
+    {
+        return false;
+    }
+
+    lock_ctx(context);
+    context->testOutputFrequencyHz = frequency_hz;
+    unlock_ctx(context);
+
+    if (context->ops.test_set_output_frequency_hz != NULL)
+    {
+        return context->ops.test_set_output_frequency_hz(frequency_hz, context->ops.context);
+    }
+
+    return true;
+}
+
+static bool service_test_set_output_amplitude(uint16_t amplitude, void *ctx)
+{
+    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    if (context == NULL || amplitude > X_AXIS)
+    {
+        return false;
+    }
+
+    lock_ctx(context);
+    context->testOutputAmplitude = amplitude;
+    unlock_ctx(context);
+
+    if (context->ops.test_set_output_amplitude != NULL)
+    {
+        return context->ops.test_set_output_amplitude(amplitude, context->ops.context);
+    }
+
+    return true;
+}
+
+static bool service_test_get_output_status(CliTestModeStatus *status_out, void *ctx)
+{
+    CliServiceAdapterContext *context = (CliServiceAdapterContext *)ctx;
+    if (context == NULL || status_out == NULL)
+    {
+        return false;
+    }
+
+    lock_ctx(context);
+    status_out->enabled = context->testOutputModeEnabled;
+    status_out->vector = context->testOutputVector;
+    status_out->frequencyHz = context->testOutputFrequencyHz;
+    status_out->amplitude = context->testOutputAmplitude;
     unlock_ctx(context);
 
     return true;
@@ -800,10 +898,15 @@ void cli_service_adapter_init(CliServiceAdapterContext *context, EffectsState *s
     context->logLevel = 0;
     context->logFrameCount = 0;
     context->logFailureCount = 0;
-    context->testModeEnabled = false;
-    context->testVector = 0;
-    context->testFrequencyHz = 1000;
-    context->testAmplitude = (uint16_t)(X_AXIS / 2U);
+    context->testInputModeEnabled = false;
+    context->testInputVector = 0;
+    context->testInputFrequencyHz = 1000;
+    context->testInputAmplitude = (uint16_t)(X_AXIS / 2U);
+
+    context->testOutputModeEnabled = false;
+    context->testOutputVector = 0;
+    context->testOutputFrequencyHz = 1000;
+    context->testOutputAmplitude = (uint16_t)(X_AXIS / 2U);
 
     context->frameTimeMinUs = 0;
     context->frameTimeMaxUs = 0;
@@ -867,11 +970,17 @@ void cli_service_adapter_bind(CliServiceAdapterContext *context, CliServices *se
     services_out->log_read_line = service_log_read_line;
     services_out->log_get_stats = service_log_get_stats;
     services_out->log_reset_stats = service_log_reset_stats;
-    services_out->test_set_mode = service_test_set_mode;
-    services_out->test_set_vector = service_test_set_vector;
-    services_out->test_set_frequency_hz = service_test_set_frequency_hz;
-    services_out->test_set_amplitude = service_test_set_amplitude;
-    services_out->test_get_status = service_test_get_status;
+    services_out->test_set_input_mode = service_test_set_input_mode;
+    services_out->test_set_input_vector = service_test_set_input_vector;
+    services_out->test_set_input_frequency_hz = service_test_set_input_frequency_hz;
+    services_out->test_set_input_amplitude = service_test_set_input_amplitude;
+    services_out->test_get_input_status = service_test_get_input_status;
+
+    services_out->test_set_output_mode = service_test_set_output_mode;
+    services_out->test_set_output_vector = service_test_set_output_vector;
+    services_out->test_set_output_frequency_hz = service_test_set_output_frequency_hz;
+    services_out->test_set_output_amplitude = service_test_set_output_amplitude;
+    services_out->test_get_output_status = service_test_get_output_status;
     services_out->context = context;
 }
 
@@ -917,8 +1026,8 @@ bool cli_service_adapter_apply_switches(CliServiceAdapterContext *context, bool 
     return true;
 }
 
-bool cli_service_adapter_get_test_mode_status(CliServiceAdapterContext *context,
-                                              CliTestModeStatus *status_out)
+bool cli_service_adapter_get_test_input_mode_status(CliServiceAdapterContext *context,
+                                                    CliTestModeStatus *status_out)
 {
     if (context == NULL || status_out == NULL)
     {
@@ -926,10 +1035,27 @@ bool cli_service_adapter_get_test_mode_status(CliServiceAdapterContext *context,
     }
 
     lock_ctx(context);
-    status_out->enabled = context->testModeEnabled;
-    status_out->vector = context->testVector;
-    status_out->frequencyHz = context->testFrequencyHz;
-    status_out->amplitude = context->testAmplitude;
+    status_out->enabled = context->testInputModeEnabled;
+    status_out->vector = context->testInputVector;
+    status_out->frequencyHz = context->testInputFrequencyHz;
+    status_out->amplitude = context->testInputAmplitude;
+    unlock_ctx(context);
+    return true;
+}
+
+bool cli_service_adapter_get_test_output_mode_status(CliServiceAdapterContext *context,
+                                                     CliTestModeStatus *status_out)
+{
+    if (context == NULL || status_out == NULL)
+    {
+        return false;
+    }
+
+    lock_ctx(context);
+    status_out->enabled = context->testOutputModeEnabled;
+    status_out->vector = context->testOutputVector;
+    status_out->frequencyHz = context->testOutputFrequencyHz;
+    status_out->amplitude = context->testOutputAmplitude;
     unlock_ctx(context);
     return true;
 }

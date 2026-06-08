@@ -39,6 +39,7 @@ typedef struct
 
     bool (*read_latched_state)(EffectsState *state, EffectsParams *params, void *context);
     bool (*replace_input_for_testing)(uint16_t *buf, size_t count, void *context);
+    bool (*replace_output_for_testing)(uint16_t *buf, size_t count, void *context);
     void (*report_failure)(void *context);
     void (*report_frame_complete)(void *context);
 
