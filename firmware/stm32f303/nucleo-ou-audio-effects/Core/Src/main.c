@@ -108,6 +108,8 @@ static CliSession cli_session;
 static TestVectorSource test_vector_source;
 static TestVectorSource test_vector_source_output;
 
+static volatile bool b1_pressed = false;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -182,6 +184,8 @@ static uint32_t compute_sampling_period_us(void);
 static uint32_t read_heartbeat_period_ms(void);
 void startEffectsTask(void const *argument);
 void startCliTask(void const *argument);
+
+static void effects_task_on_frame_begin(void *context);
 
 /* USER CODE END PFP */
 
@@ -773,7 +777,7 @@ void startEffectsTask(void const *argument)
         .report_failure = effects_task_report_failure,
         .report_frame_complete = effects_task_report_frame_complete,
         .ms_to_ticks = effects_task_ms_to_ticks,
-        .on_frame_begin = NULL,
+        .on_frame_begin = effects_task_on_frame_begin,
         .on_frame_end = effects_task_on_frame_end,
         .get_timestamp_us = effects_task_get_timestamp_us,
         .panic_write = effects_task_panic_write,
@@ -827,6 +831,30 @@ void startCliTask(void const *argument)
 
         osDelay(1);
     }
+}
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+    if (GPIO_Pin == B1_Pin)
+    {
+        b1_pressed = true;
+    }
+}
+
+static void effects_task_on_frame_begin(void *context)
+{
+    CliServiceAdapter *adapter = (CliServiceAdapter *)context;
+
+    if (!b1_pressed || adapter == NULL)
+    {
+        return;
+    }
+
+    b1_pressed = false;
+
+    taskENTER_CRITICAL();
+    adapter->testInput.enabled = !adapter->testInput.enabled;
+    taskEXIT_CRITICAL();
 }
 
 static void cli_system_reboot(void *context)
