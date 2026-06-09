@@ -4,14 +4,14 @@ bool pot_task_step(const PotTaskContext *task_context, const PotTaskOps *ops)
 {
     if (task_context == NULL || ops == NULL || ops->start_adc == NULL ||
         ops->wait_for_sample == NULL || ops->read_active_effect == NULL ||
-        ops->apply_pot_sample == NULL || task_context->potCount == 0)
+        ops->apply_pot_sample == NULL || task_context->pot_count == 0)
     {
         return false;
     }
 
-    uint32_t ticks_to_wait = task_context->samplingFrequencyTicks + task_context->timeoutSlackTicks;
+    uint32_t ticks_to_wait = task_context->sampling_frequency_ticks + task_context->timeout_slack_ticks;
 
-    for (uint8_t pot = 0; pot < task_context->potCount; pot++)
+    for (uint8_t pot = 0; pot < task_context->pot_count; pot++)
     {
         uint32_t adc_value = 0;
         Effect active_effect;
@@ -31,7 +31,7 @@ bool pot_task_step(const PotTaskContext *task_context, const PotTaskOps *ops)
             continue;
         }
 
-        ops->apply_pot_sample(active_effect, pot, adc_value, task_context->adcMax, ops->context);
+        ops->apply_pot_sample(active_effect, pot, adc_value, task_context->adc_max, ops->context);
     }
 
     return true;

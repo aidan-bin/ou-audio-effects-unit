@@ -53,61 +53,61 @@ static bool set_param_value(EffectsParams *params, const char *key, int32_t valu
 
     if (strcmp(key, "overdrive.gain") == 0)
     {
-        return assign_bounded_size_t(value, params->overdriveMin.gain, params->overdriveMax.gain,
+        return assign_bounded_size_t(value, params->overdrive_min.gain, params->overdrive_max.gain,
                                      &params->overdrive.gain);
     }
     if (strcmp(key, "overdrive.level") == 0)
     {
-        return assign_bounded_size_t(value, params->overdriveMin.level, params->overdriveMax.level,
+        return assign_bounded_size_t(value, params->overdrive_min.level, params->overdrive_max.level,
                                      &params->overdrive.level);
     }
     if (strcmp(key, "overdrive.tone") == 0)
     {
-        return assign_bounded_size_t(value, params->overdriveMin.tone, params->overdriveMax.tone,
+        return assign_bounded_size_t(value, params->overdrive_min.tone, params->overdrive_max.tone,
                                      &params->overdrive.tone);
     }
     if (strcmp(key, "overdrive.mix") == 0)
     {
-        return assign_bounded_size_t(value, params->overdriveMin.mix, params->overdriveMax.mix,
+        return assign_bounded_size_t(value, params->overdrive_min.mix, params->overdrive_max.mix,
                                      &params->overdrive.mix);
     }
 
     if (strcmp(key, "echo.delay_samples") == 0)
     {
-        return assign_bounded_size_t(value, params->echoMin.delay_samples,
-                                     params->echoMax.delay_samples, &params->echo.delay_samples);
+        return assign_bounded_size_t(value, params->echo_min.delay_samples,
+                                     params->echo_max.delay_samples, &params->echo.delay_samples);
     }
     if (strcmp(key, "echo.pre_delay") == 0)
     {
-        return assign_bounded_size_t(value, params->echoMin.pre_delay, params->echoMax.pre_delay,
+        return assign_bounded_size_t(value, params->echo_min.pre_delay, params->echo_max.pre_delay,
                                      &params->echo.pre_delay);
     }
     if (strcmp(key, "echo.density") == 0)
     {
-        return assign_bounded_size_t(value, params->echoMin.density, params->echoMax.density,
+        return assign_bounded_size_t(value, params->echo_min.density, params->echo_max.density,
                                      &params->echo.density);
     }
     if (strcmp(key, "echo.attack") == 0)
     {
-        return assign_bounded_size_t(value, params->echoMin.attack, params->echoMax.attack,
+        return assign_bounded_size_t(value, params->echo_min.attack, params->echo_max.attack,
                                      &params->echo.attack);
     }
     if (strcmp(key, "echo.decay") == 0)
     {
-        return assign_bounded_size_t(value, params->echoMin.decay, params->echoMax.decay,
+        return assign_bounded_size_t(value, params->echo_min.decay, params->echo_max.decay,
                                      &params->echo.decay);
     }
 
     if (strcmp(key, "compression.threshold") == 0)
     {
-        return assign_bounded_size_t(value, params->compressionMin.threshold,
-                                     params->compressionMax.threshold,
+        return assign_bounded_size_t(value, params->compression_min.threshold,
+                                     params->compression_max.threshold,
                                      &params->compression.threshold);
     }
     if (strcmp(key, "compression.ratio") == 0)
     {
-        return assign_bounded_size_t(value, params->compressionMin.ratio,
-                                     params->compressionMax.ratio, &params->compression.ratio);
+        return assign_bounded_size_t(value, params->compression_min.ratio,
+                                     params->compression_max.ratio, &params->compression.ratio);
     }
 
     return false;
@@ -193,7 +193,7 @@ static bool set_state_value(EffectsState *state, const char *key, int32_t value)
         {
             return false;
         }
-        state->activeEffectSelection = (uint8_t)value;
+        state->active_effect_selection = (uint8_t)value;
         return true;
     }
 
@@ -203,7 +203,7 @@ static bool set_state_value(EffectsState *state, const char *key, int32_t value)
         {
             return false;
         }
-        state->isEnabled[OVERDRIVE] = value == 1;
+        state->is_enabled[OVERDRIVE] = value == 1;
         return true;
     }
     if (strcmp(key, "state.enable.echo") == 0)
@@ -212,7 +212,7 @@ static bool set_state_value(EffectsState *state, const char *key, int32_t value)
         {
             return false;
         }
-        state->isEnabled[ECHO] = value == 1;
+        state->is_enabled[ECHO] = value == 1;
         return true;
     }
     if (strcmp(key, "state.enable.compression") == 0)
@@ -221,7 +221,7 @@ static bool set_state_value(EffectsState *state, const char *key, int32_t value)
         {
             return false;
         }
-        state->isEnabled[COMPRESSION] = value == 1;
+        state->is_enabled[COMPRESSION] = value == 1;
         return true;
     }
 
@@ -237,23 +237,23 @@ static bool get_state_value(const EffectsState *state, const char *key, int32_t 
 
     if (strcmp(key, "state.active_effect") == 0)
     {
-        *value_out = state->activeEffectSelection;
+        *value_out = state->active_effect_selection;
         return true;
     }
 
     if (strcmp(key, "state.enable.overdrive") == 0)
     {
-        *value_out = state->isEnabled[OVERDRIVE] ? 1 : 0;
+        *value_out = state->is_enabled[OVERDRIVE] ? 1 : 0;
         return true;
     }
     if (strcmp(key, "state.enable.echo") == 0)
     {
-        *value_out = state->isEnabled[ECHO] ? 1 : 0;
+        *value_out = state->is_enabled[ECHO] ? 1 : 0;
         return true;
     }
     if (strcmp(key, "state.enable.compression") == 0)
     {
-        *value_out = state->isEnabled[COMPRESSION] ? 1 : 0;
+        *value_out = state->is_enabled[COMPRESSION] ? 1 : 0;
         return true;
     }
 
@@ -273,18 +273,18 @@ static bool set_runtime_value(CliServiceAdapter *context, const char *key, int32
         return false;
     }
 
-    if (context->heartbeat.periodMs == NULL)
+    if (context->heartbeat.period_ms == NULL)
     {
         return false;
     }
 
     uint32_t period_ms = (uint32_t)value;
-    if (period_ms < context->heartbeat.periodMinMs || period_ms > context->heartbeat.periodMaxMs)
+    if (period_ms < context->heartbeat.period_min_ms || period_ms > context->heartbeat.period_max_ms)
     {
         return false;
     }
 
-    *context->heartbeat.periodMs = period_ms;
+    *context->heartbeat.period_ms = period_ms;
     return true;
 }
 
@@ -303,30 +303,30 @@ static bool get_runtime_value(const CliServiceAdapter *context,
         return false;
     }
 
-    if (context->heartbeat.periodMs == NULL ||
-        *context->heartbeat.periodMs > (uint32_t)INT32_MAX)
+    if (context->heartbeat.period_ms == NULL ||
+        *context->heartbeat.period_ms > (uint32_t)INT32_MAX)
     {
         return false;
     }
 
-    *value_out = (int32_t)(*context->heartbeat.periodMs);
+    *value_out = (int32_t)(*context->heartbeat.period_ms);
     return true;
 }
 
 static bool in_rom_window(const CliServiceAdapter *context, uint16_t address, uint16_t length)
 {
-    if (context == NULL || length == 0 || length > context->romWindow.maxLength)
+    if (context == NULL || length == 0 || length > context->rom_window.max_length)
     {
         return false;
     }
 
-    if (address < context->romWindow.minAddress || address > context->romWindow.maxAddress)
+    if (address < context->rom_window.min_address || address > context->rom_window.max_address)
     {
         return false;
     }
 
     uint32_t end = (uint32_t)address + (uint32_t)length - 1U;
-    return end <= context->romWindow.maxAddress;
+    return end <= context->rom_window.max_address;
 }
 
 static void log_stream_queue_clear(CliServiceAdapter *context)
@@ -336,9 +336,9 @@ static void log_stream_queue_clear(CliServiceAdapter *context)
         return;
     }
 
-    context->logStream.head = 0;
-    context->logStream.tail = 0;
-    context->logStream.count = 0;
+    context->log_stream.head = 0;
+    context->log_stream.tail = 0;
+    context->log_stream.count = 0;
 }
 
 static bool log_stream_queue_push(CliServiceAdapter *context, const char *line)
@@ -348,18 +348,18 @@ static bool log_stream_queue_push(CliServiceAdapter *context, const char *line)
         return false;
     }
 
-    if (context->logStream.count >= CLI_LOG_STREAM_QUEUE_DEPTH)
+    if (context->log_stream.count >= CLI_LOG_STREAM_QUEUE_DEPTH)
     {
-        context->logStream.dropCount++;
-        context->logStream.head = (uint8_t)((context->logStream.head + 1U) % CLI_LOG_STREAM_QUEUE_DEPTH);
-        context->logStream.count--;
+        context->log_stream.drop_count++;
+        context->log_stream.head = (uint8_t)((context->log_stream.head + 1U) % CLI_LOG_STREAM_QUEUE_DEPTH);
+        context->log_stream.count--;
     }
 
-    (void)strncpy(context->logStream.lines[context->logStream.tail], line,
+    (void)strncpy(context->log_stream.lines[context->log_stream.tail], line,
                   CLI_LOG_STREAM_LINE_MAX - 1U);
-    context->logStream.lines[context->logStream.tail][CLI_LOG_STREAM_LINE_MAX - 1U] = '\0';
-    context->logStream.tail = (uint8_t)((context->logStream.tail + 1U) % CLI_LOG_STREAM_QUEUE_DEPTH);
-    context->logStream.count++;
+    context->log_stream.lines[context->log_stream.tail][CLI_LOG_STREAM_LINE_MAX - 1U] = '\0';
+    context->log_stream.tail = (uint8_t)((context->log_stream.tail + 1U) % CLI_LOG_STREAM_QUEUE_DEPTH);
+    context->log_stream.count++;
     return true;
 }
 
@@ -373,18 +373,18 @@ static bool log_stream_queue_pop(CliServiceAdapter *context,
         return false;
     }
 
-    if (context->logStream.count == 0)
+    if (context->log_stream.count == 0)
     {
         *has_line_out = false;
         line_out[0] = '\0';
         return true;
     }
 
-    (void)strncpy(line_out, context->logStream.lines[context->logStream.head], line_capacity - 1U);
+    (void)strncpy(line_out, context->log_stream.lines[context->log_stream.head], line_capacity - 1U);
     line_out[line_capacity - 1U] = '\0';
 
-    context->logStream.head = (uint8_t)((context->logStream.head + 1U) % CLI_LOG_STREAM_QUEUE_DEPTH);
-    context->logStream.count--;
+    context->log_stream.head = (uint8_t)((context->log_stream.head + 1U) % CLI_LOG_STREAM_QUEUE_DEPTH);
+    context->log_stream.count--;
     *has_line_out = true;
     return true;
 }
@@ -398,8 +398,8 @@ static bool service_set_pot_override(uint8_t pot_index, uint32_t value, void *ct
     }
 
     lock_ctx(context);
-    context->overrides.potEnabled[pot_index] = true;
-    context->overrides.potValue[pot_index] = value;
+    context->overrides.pot_enabled[pot_index] = true;
+    context->overrides.pot_value[pot_index] = value;
     unlock_ctx(context);
     return true;
 }
@@ -413,7 +413,7 @@ static bool service_clear_pot_override(uint8_t pot_index, void *ctx)
     }
 
     lock_ctx(context);
-    context->overrides.potEnabled[pot_index] = false;
+    context->overrides.pot_enabled[pot_index] = false;
     unlock_ctx(context);
     return true;
 }
@@ -427,8 +427,8 @@ static bool service_set_switch_override(uint8_t switch_index, bool enabled, void
     }
 
     lock_ctx(context);
-    context->overrides.switchEnabled[switch_index] = true;
-    context->overrides.switchValue[switch_index] = enabled;
+    context->overrides.switch_enabled[switch_index] = true;
+    context->overrides.switch_value[switch_index] = enabled;
     unlock_ctx(context);
     return true;
 }
@@ -442,7 +442,7 @@ static bool service_clear_switch_override(uint8_t switch_index, void *ctx)
     }
 
     lock_ctx(context);
-    context->overrides.switchEnabled[switch_index] = false;
+    context->overrides.switch_enabled[switch_index] = false;
     unlock_ctx(context);
     return true;
 }
@@ -456,8 +456,8 @@ static bool service_clear_all_overrides(void *ctx)
     }
 
     lock_ctx(context);
-    memset(context->overrides.potEnabled, 0, sizeof(context->overrides.potEnabled));
-    memset(context->overrides.switchEnabled, 0, sizeof(context->overrides.switchEnabled));
+    memset(context->overrides.pot_enabled, 0, sizeof(context->overrides.pot_enabled));
+    memset(context->overrides.switch_enabled, 0, sizeof(context->overrides.switch_enabled));
     unlock_ctx(context);
     return true;
 }
@@ -600,7 +600,7 @@ static bool service_log_set_stream(bool enabled, void *ctx)
 
     lock_ctx(context);
     context->log.enabled = enabled;
-    context->log.streamEnabled = enabled;
+    context->log.stream_enabled = enabled;
     if (!enabled)
     {
         log_stream_queue_clear(context);
@@ -642,7 +642,7 @@ static bool service_log_set_stream_batch(uint8_t batch_size, void *ctx)
     }
 
     lock_ctx(context);
-    context->streamBatchSize = batch_size;
+    context->stream_batch_size = batch_size;
     unlock_ctx(context);
     return true;
 }
@@ -669,20 +669,20 @@ static bool service_log_get_stats(CliLogStats *stats_out, void *ctx)
 
     lock_ctx(context);
     stats_out->enabled = context->log.enabled;
-    stats_out->streamEnabled = context->log.streamEnabled;
+    stats_out->stream_enabled = context->log.stream_enabled;
     stats_out->level = context->log.level;
-    stats_out->frameCount = context->log.frameCount;
-    stats_out->failureCount = context->log.failureCount;
-    stats_out->stepFailureCount = context->stepFailureCount;
-    stats_out->stepFailureStreak = context->stepFailureStreak;
-    stats_out->frameTimeMinUs = context->profile.frameTimeMinUs;
-    stats_out->frameTimeMaxUs = context->profile.frameTimeMaxUs;
-    stats_out->frameTimeTotalUs = context->profile.frameTimeTotalUs;
-    stats_out->measuredFrameCount = context->profile.frameCount;
-    stats_out->overrunCount = context->profile.overrunCount;
-    stats_out->streamDropCount = context->logStream.dropCount;
-    stats_out->streamBatchSize = context->streamBatchSize;
-    stats_out->streamQueueCount = context->logStream.count;
+    stats_out->frame_count = context->log.frame_count;
+    stats_out->failure_count = context->log.failure_count;
+    stats_out->step_failure_count = context->step_failure_count;
+    stats_out->step_failure_streak = context->step_failure_streak;
+    stats_out->frame_time_min_us = context->profile.frame_time_min_us;
+    stats_out->frame_time_max_us = context->profile.frame_time_max_us;
+    stats_out->frame_time_total_us = context->profile.frame_time_total_us;
+    stats_out->measured_frame_count = context->profile.frame_count;
+    stats_out->overrun_count = context->profile.overrun_count;
+    stats_out->stream_drop_count = context->log_stream.drop_count;
+    stats_out->stream_batch_size = context->stream_batch_size;
+    stats_out->stream_queue_count = context->log_stream.count;
     unlock_ctx(context);
 
     return true;
@@ -697,7 +697,7 @@ static bool service_test_set_input_mode(bool enabled, void *ctx)
     }
 
     lock_ctx(context);
-    context->testInput.enabled = enabled;
+    context->test_input.enabled = enabled;
     unlock_ctx(context);
 
     if (context->ops.test_set_input_mode != NULL)
@@ -717,7 +717,7 @@ static bool service_test_set_input_vector(uint8_t vector, void *ctx)
     }
 
     lock_ctx(context);
-    context->testInput.vector = vector;
+    context->test_input.vector = vector;
     unlock_ctx(context);
 
     if (context->ops.test_set_input_vector != NULL)
@@ -737,7 +737,7 @@ static bool service_test_set_input_frequency_hz(uint16_t frequency_hz, void *ctx
     }
 
     lock_ctx(context);
-    context->testInput.frequencyHz = frequency_hz;
+    context->test_input.frequency_hz = frequency_hz;
     unlock_ctx(context);
 
     if (context->ops.test_set_input_frequency_hz != NULL)
@@ -757,7 +757,7 @@ static bool service_test_set_input_amplitude(uint16_t amplitude, void *ctx)
     }
 
     lock_ctx(context);
-    context->testInput.amplitude = amplitude;
+    context->test_input.amplitude = amplitude;
     unlock_ctx(context);
 
     if (context->ops.test_set_input_amplitude != NULL)
@@ -777,10 +777,10 @@ static bool service_test_get_input_status(CliTestModeStatus *status_out, void *c
     }
 
     lock_ctx(context);
-    status_out->enabled = context->testInput.enabled;
-    status_out->vector = context->testInput.vector;
-    status_out->frequencyHz = context->testInput.frequencyHz;
-    status_out->amplitude = context->testInput.amplitude;
+    status_out->enabled = context->test_input.enabled;
+    status_out->vector = context->test_input.vector;
+    status_out->frequency_hz = context->test_input.frequency_hz;
+    status_out->amplitude = context->test_input.amplitude;
     unlock_ctx(context);
 
     return true;
@@ -795,7 +795,7 @@ static bool service_test_set_output_mode(bool enabled, void *ctx)
     }
 
     lock_ctx(context);
-    context->testOutput.enabled = enabled;
+    context->test_output.enabled = enabled;
     unlock_ctx(context);
 
     if (context->ops.test_set_output_mode != NULL)
@@ -815,7 +815,7 @@ static bool service_test_set_output_vector(uint8_t vector, void *ctx)
     }
 
     lock_ctx(context);
-    context->testOutput.vector = vector;
+    context->test_output.vector = vector;
     unlock_ctx(context);
 
     if (context->ops.test_set_output_vector != NULL)
@@ -835,7 +835,7 @@ static bool service_test_set_output_frequency_hz(uint16_t frequency_hz, void *ct
     }
 
     lock_ctx(context);
-    context->testOutput.frequencyHz = frequency_hz;
+    context->test_output.frequency_hz = frequency_hz;
     unlock_ctx(context);
 
     if (context->ops.test_set_output_frequency_hz != NULL)
@@ -855,7 +855,7 @@ static bool service_test_set_output_amplitude(uint16_t amplitude, void *ctx)
     }
 
     lock_ctx(context);
-    context->testOutput.amplitude = amplitude;
+    context->test_output.amplitude = amplitude;
     unlock_ctx(context);
 
     if (context->ops.test_set_output_amplitude != NULL)
@@ -875,10 +875,10 @@ static bool service_test_get_output_status(CliTestModeStatus *status_out, void *
     }
 
     lock_ctx(context);
-    status_out->enabled = context->testOutput.enabled;
-    status_out->vector = context->testOutput.vector;
-    status_out->frequencyHz = context->testOutput.frequencyHz;
-    status_out->amplitude = context->testOutput.amplitude;
+    status_out->enabled = context->test_output.enabled;
+    status_out->vector = context->test_output.vector;
+    status_out->frequency_hz = context->test_output.frequency_hz;
+    status_out->amplitude = context->test_output.amplitude;
     unlock_ctx(context);
 
     return true;
@@ -905,11 +905,11 @@ static bool service_audio_get_info(CliAudioStatus *status_out, void *ctx)
     }
 
     lock_ctx(context);
-    status_out->sampleRateHz = context->sampleRateHz;
-    status_out->sampleBufLen = context->sampleBufLen;
-    status_out->samplingPeriodUs = context->samplingPeriodUs;
-    status_out->delaySamplesLen = context->delaySamplesLen;
-    status_out->processingSlackMs = context->processingSlackMs;
+    status_out->sample_rate_hz = context->sample_rate_hz;
+    status_out->sample_buf_len = context->sample_buf_len;
+    status_out->sampling_period_us = context->sampling_period_us;
+    status_out->delay_samples_len = context->delay_samples_len;
+    status_out->processing_slack_ms = context->processing_slack_ms;
     unlock_ctx(context);
 
     return true;
@@ -927,40 +927,40 @@ void cli_service_adapter_init(CliServiceAdapter *context, EffectsState *state,
     memset(context, 0, sizeof(*context));
     context->state = state;
     context->params = params;
-    context->adcMax = adc_max;
-    context->romWindow.minAddress = ROM_RAW_MIN_ADDRESS;
-    context->romWindow.maxAddress = ROM_RAW_MAX_ADDRESS;
-    context->romWindow.maxLength = CLI_MAX_ROM_BYTES;
+    context->adc_max = adc_max;
+    context->rom_window.min_address = ROM_RAW_MIN_ADDRESS;
+    context->rom_window.max_address = ROM_RAW_MAX_ADDRESS;
+    context->rom_window.max_length = CLI_MAX_ROM_BYTES;
     context->log.enabled = false;
-    context->log.streamEnabled = false;
+    context->log.stream_enabled = false;
     context->log.level = 0;
-    context->log.frameCount = 0;
-    context->log.failureCount = 0;
-    context->testInput.enabled = false;
-    context->testInput.vector = 0;
-    context->testInput.frequencyHz = TEST_DEFAULT_FREQ_HZ;
-    context->testInput.amplitude = (uint16_t)(X_AXIS / 2U);
+    context->log.frame_count = 0;
+    context->log.failure_count = 0;
+    context->test_input.enabled = false;
+    context->test_input.vector = 0;
+    context->test_input.frequency_hz = TEST_DEFAULT_FREQ_HZ;
+    context->test_input.amplitude = (uint16_t)(X_AXIS / 2U);
 
-    context->testOutput.enabled = false;
-    context->testOutput.vector = 0;
-    context->testOutput.frequencyHz = TEST_DEFAULT_FREQ_HZ;
-    context->testOutput.amplitude = (uint16_t)(X_AXIS / 2U);
+    context->test_output.enabled = false;
+    context->test_output.vector = 0;
+    context->test_output.frequency_hz = TEST_DEFAULT_FREQ_HZ;
+    context->test_output.amplitude = (uint16_t)(X_AXIS / 2U);
 
-    context->profile.frameTimeMinUs = 0;
-    context->profile.frameTimeMaxUs = 0;
-    context->profile.frameTimeTotalUs = 0;
-    context->profile.frameCount = 0;
-    context->profile.overrunCount = 0;
-    context->logStream.dropCount = 0;
-    context->streamBatchSize = 1;
-    context->stepFailureCount = 0;
-    context->stepFailureStreak = 0;
-    context->streamBatchCounter = 0;
-    context->profileBatch.frameTimeMinUs = 0;
-    context->profileBatch.frameTimeMaxUs = 0;
-    context->profileBatch.frameTimeTotalUs = 0;
-    context->profileBatch.frameCount = 0;
-    context->profileBatch.overrunCount = 0;
+    context->profile.frame_time_min_us = 0;
+    context->profile.frame_time_max_us = 0;
+    context->profile.frame_time_total_us = 0;
+    context->profile.frame_count = 0;
+    context->profile.overrun_count = 0;
+    context->log_stream.drop_count = 0;
+    context->stream_batch_size = 1;
+    context->step_failure_count = 0;
+    context->step_failure_streak = 0;
+    context->stream_batch_counter = 0;
+    context->profile_batch.frame_time_min_us = 0;
+    context->profile_batch.frame_time_max_us = 0;
+    context->profile_batch.frame_time_total_us = 0;
+    context->profile_batch.frame_count = 0;
+    context->profile_batch.overrun_count = 0;
 
     if (ops != NULL)
     {
@@ -978,9 +978,9 @@ void cli_service_adapter_bind_heartbeat_period(CliServiceAdapter *context,
         return;
     }
 
-    context->heartbeat.periodMs = period_ms;
-    context->heartbeat.periodMinMs = min_ms;
-    context->heartbeat.periodMaxMs = max_ms;
+    context->heartbeat.period_ms = period_ms;
+    context->heartbeat.period_min_ms = min_ms;
+    context->heartbeat.period_max_ms = max_ms;
 }
 
 void cli_service_adapter_bind(CliServiceAdapter *context, CliServices *services_out)
@@ -1034,13 +1034,13 @@ bool cli_service_adapter_apply_pot_sample(CliServiceAdapter *context, Effect act
 
     lock_ctx(context);
     uint32_t effective_adc = adc_value;
-    if (context->overrides.potEnabled[pot_index])
+    if (context->overrides.pot_enabled[pot_index])
     {
-        effective_adc = context->overrides.potValue[pot_index];
+        effective_adc = context->overrides.pot_value[pot_index];
     }
 
     bool success = effects_params_apply_pot_sample(context->params, active_effect, pot_index,
-                                                   effective_adc, context->adcMax);
+                                                   effective_adc, context->adc_max);
     unlock_ctx(context);
     return success;
 }
@@ -1055,9 +1055,9 @@ bool cli_service_adapter_apply_switches(CliServiceAdapter *context, bool switch_
 
     lock_ctx(context);
     const CliOverrideState *ov = &context->overrides;
-    bool effective_a = ov->switchEnabled[0] ? ov->switchValue[0] : switch_a_enabled;
-    bool effective_b = ov->switchEnabled[1] ? ov->switchValue[1] : switch_b_enabled;
-    bool effective_c = ov->switchEnabled[2] ? ov->switchValue[2] : switch_c_enabled;
+    bool effective_a = ov->switch_enabled[0] ? ov->switch_value[0] : switch_a_enabled;
+    bool effective_b = ov->switch_enabled[1] ? ov->switch_value[1] : switch_b_enabled;
+    bool effective_c = ov->switch_enabled[2] ? ov->switch_value[2] : switch_c_enabled;
 
     effects_state_apply_switches(context->state, effective_a, effective_b, effective_c);
     unlock_ctx(context);
@@ -1073,10 +1073,10 @@ bool cli_service_adapter_get_test_input_mode_status(CliServiceAdapter *context,
     }
 
     lock_ctx(context);
-    status_out->enabled = context->testInput.enabled;
-    status_out->vector = context->testInput.vector;
-    status_out->frequencyHz = context->testInput.frequencyHz;
-    status_out->amplitude = context->testInput.amplitude;
+    status_out->enabled = context->test_input.enabled;
+    status_out->vector = context->test_input.vector;
+    status_out->frequency_hz = context->test_input.frequency_hz;
+    status_out->amplitude = context->test_input.amplitude;
     unlock_ctx(context);
     return true;
 }
@@ -1090,10 +1090,10 @@ bool cli_service_adapter_get_test_output_mode_status(CliServiceAdapter *context,
     }
 
     lock_ctx(context);
-    status_out->enabled = context->testOutput.enabled;
-    status_out->vector = context->testOutput.vector;
-    status_out->frequencyHz = context->testOutput.frequencyHz;
-    status_out->amplitude = context->testOutput.amplitude;
+    status_out->enabled = context->test_output.enabled;
+    status_out->vector = context->test_output.vector;
+    status_out->frequency_hz = context->test_output.frequency_hz;
+    status_out->amplitude = context->test_output.amplitude;
     unlock_ctx(context);
     return true;
 }
@@ -1108,20 +1108,20 @@ bool cli_service_adapter_get_log_stats(CliServiceAdapter *context,
 
     lock_ctx(context);
     stats_out->enabled = context->log.enabled;
-    stats_out->streamEnabled = context->log.streamEnabled;
+    stats_out->stream_enabled = context->log.stream_enabled;
     stats_out->level = context->log.level;
-    stats_out->frameCount = context->log.frameCount;
-    stats_out->failureCount = context->log.failureCount;
-    stats_out->stepFailureCount = context->stepFailureCount;
-    stats_out->stepFailureStreak = context->stepFailureStreak;
-    stats_out->frameTimeMinUs = context->profile.frameTimeMinUs;
-    stats_out->frameTimeMaxUs = context->profile.frameTimeMaxUs;
-    stats_out->frameTimeTotalUs = context->profile.frameTimeTotalUs;
-    stats_out->measuredFrameCount = context->profile.frameCount;
-    stats_out->overrunCount = context->profile.overrunCount;
-    stats_out->streamDropCount = context->logStream.dropCount;
-    stats_out->streamBatchSize = context->streamBatchSize;
-    stats_out->streamQueueCount = context->logStream.count;
+    stats_out->frame_count = context->log.frame_count;
+    stats_out->failure_count = context->log.failure_count;
+    stats_out->step_failure_count = context->step_failure_count;
+    stats_out->step_failure_streak = context->step_failure_streak;
+    stats_out->frame_time_min_us = context->profile.frame_time_min_us;
+    stats_out->frame_time_max_us = context->profile.frame_time_max_us;
+    stats_out->frame_time_total_us = context->profile.frame_time_total_us;
+    stats_out->measured_frame_count = context->profile.frame_count;
+    stats_out->overrun_count = context->profile.overrun_count;
+    stats_out->stream_drop_count = context->log_stream.drop_count;
+    stats_out->stream_batch_size = context->stream_batch_size;
+    stats_out->stream_queue_count = context->log_stream.count;
     unlock_ctx(context);
     return true;
 }
@@ -1135,7 +1135,7 @@ bool cli_service_adapter_get_log_stream_enabled(CliServiceAdapter *context,
     }
 
     lock_ctx(context);
-    *enabled_out = context->log.streamEnabled;
+    *enabled_out = context->log.stream_enabled;
     unlock_ctx(context);
     return true;
 }
@@ -1187,7 +1187,7 @@ void cli_service_adapter_note_frame_processed(CliServiceAdapter *context)
     }
 
     lock_ctx(context);
-    context->log.frameCount++;
+    context->log.frame_count++;
     unlock_ctx(context);
 }
 
@@ -1199,10 +1199,10 @@ void cli_service_adapter_note_processing_failure(CliServiceAdapter *context)
     }
 
     lock_ctx(context);
-    context->log.failureCount++;
+    context->log.failure_count++;
     char line[CLI_LOG_STREAM_LINE_MAX] = {0};
     (void)snprintf(line, sizeof(line), "log failure count=%lu",
-                   (unsigned long)context->log.failureCount);
+                   (unsigned long)context->log.failure_count);
     (void)log_stream_queue_push(context, line);
     unlock_ctx(context);
 }
@@ -1217,12 +1217,12 @@ void cli_service_adapter_note_step_result(CliServiceAdapter *context, bool step_
     lock_ctx(context);
     if (step_succeeded)
     {
-        context->stepFailureStreak = 0;
+        context->step_failure_streak = 0;
     }
     else
     {
-        context->stepFailureCount++;
-        context->stepFailureStreak++;
+        context->step_failure_count++;
+        context->step_failure_streak++;
     }
     unlock_ctx(context);
 }
@@ -1235,7 +1235,7 @@ void cli_service_adapter_set_stream_batch_size(CliServiceAdapter *context, uint8
     }
 
     lock_ctx(context);
-    context->streamBatchSize = batch_size;
+    context->stream_batch_size = batch_size;
     unlock_ctx(context);
 }
 
@@ -1247,7 +1247,7 @@ uint8_t cli_service_adapter_get_stream_batch_size(CliServiceAdapter *context)
     }
 
     lock_ctx(context);
-    uint8_t size = context->streamBatchSize;
+    uint8_t size = context->stream_batch_size;
     unlock_ctx(context);
     return size;
 }
@@ -1265,11 +1265,11 @@ void cli_service_adapter_set_audio_info(CliServiceAdapter *context,
     }
 
     lock_ctx(context);
-    context->sampleRateHz = sample_rate_hz;
-    context->sampleBufLen = sample_buf_len;
-    context->samplingPeriodUs = sampling_period_us;
-    context->delaySamplesLen = delay_samples_len;
-    context->processingSlackMs = processing_slack_ms;
+    context->sample_rate_hz = sample_rate_hz;
+    context->sample_buf_len = sample_buf_len;
+    context->sampling_period_us = sampling_period_us;
+    context->delay_samples_len = delay_samples_len;
+    context->processing_slack_ms = processing_slack_ms;
     unlock_ctx(context);
 }
 
@@ -1281,20 +1281,20 @@ void cli_service_adapter_reset_profiling_stats(CliServiceAdapter *context)
     }
 
     lock_ctx(context);
-    context->profile.frameTimeMinUs = 0;
-    context->profile.frameTimeMaxUs = 0;
-    context->profile.frameTimeTotalUs = 0;
-    context->profile.frameCount = 0;
-    context->profile.overrunCount = 0;
-    context->stepFailureCount = 0;
-    context->stepFailureStreak = 0;
-    context->logStream.dropCount = 0;
-    context->streamBatchCounter = 0;
-    context->profileBatch.frameTimeMinUs = 0;
-    context->profileBatch.frameTimeMaxUs = 0;
-    context->profileBatch.frameTimeTotalUs = 0;
-    context->profileBatch.frameCount = 0;
-    context->profileBatch.overrunCount = 0;
+    context->profile.frame_time_min_us = 0;
+    context->profile.frame_time_max_us = 0;
+    context->profile.frame_time_total_us = 0;
+    context->profile.frame_count = 0;
+    context->profile.overrun_count = 0;
+    context->step_failure_count = 0;
+    context->step_failure_streak = 0;
+    context->log_stream.drop_count = 0;
+    context->stream_batch_counter = 0;
+    context->profile_batch.frame_time_min_us = 0;
+    context->profile_batch.frame_time_max_us = 0;
+    context->profile_batch.frame_time_total_us = 0;
+    context->profile_batch.frame_count = 0;
+    context->profile_batch.overrun_count = 0;
     unlock_ctx(context);
 }
 
@@ -1307,72 +1307,72 @@ void cli_service_adapter_note_frame_timing(CliServiceAdapter *context, uint32_t 
     }
 
     lock_ctx(context);
-    if (context->profile.frameCount == 0)
+    if (context->profile.frame_count == 0)
     {
-        context->profile.frameTimeMinUs = frame_time_us;
-        context->profile.frameTimeMaxUs = frame_time_us;
+        context->profile.frame_time_min_us = frame_time_us;
+        context->profile.frame_time_max_us = frame_time_us;
     }
     else
     {
-        if (frame_time_us < context->profile.frameTimeMinUs)
+        if (frame_time_us < context->profile.frame_time_min_us)
         {
-            context->profile.frameTimeMinUs = frame_time_us;
+            context->profile.frame_time_min_us = frame_time_us;
         }
-        if (frame_time_us > context->profile.frameTimeMaxUs)
+        if (frame_time_us > context->profile.frame_time_max_us)
         {
-            context->profile.frameTimeMaxUs = frame_time_us;
+            context->profile.frame_time_max_us = frame_time_us;
         }
     }
-    context->profile.frameTimeTotalUs += frame_time_us;
-    context->profile.frameCount++;
+    context->profile.frame_time_total_us += frame_time_us;
+    context->profile.frame_count++;
     if (overrun)
     {
-        context->profile.overrunCount++;
+        context->profile.overrun_count++;
     }
 
-    if (context->profileBatch.frameCount == 0)
+    if (context->profile_batch.frame_count == 0)
     {
-        context->profileBatch.frameTimeMinUs = frame_time_us;
-        context->profileBatch.frameTimeMaxUs = frame_time_us;
+        context->profile_batch.frame_time_min_us = frame_time_us;
+        context->profile_batch.frame_time_max_us = frame_time_us;
     }
     else
     {
-        if (frame_time_us < context->profileBatch.frameTimeMinUs)
+        if (frame_time_us < context->profile_batch.frame_time_min_us)
         {
-            context->profileBatch.frameTimeMinUs = frame_time_us;
+            context->profile_batch.frame_time_min_us = frame_time_us;
         }
-        if (frame_time_us > context->profileBatch.frameTimeMaxUs)
+        if (frame_time_us > context->profile_batch.frame_time_max_us)
         {
-            context->profileBatch.frameTimeMaxUs = frame_time_us;
+            context->profile_batch.frame_time_max_us = frame_time_us;
         }
     }
-    context->profileBatch.frameTimeTotalUs += frame_time_us;
-    context->profileBatch.frameCount++;
+    context->profile_batch.frame_time_total_us += frame_time_us;
+    context->profile_batch.frame_count++;
     if (overrun)
     {
-        context->profileBatch.overrunCount++;
+        context->profile_batch.overrun_count++;
     }
-    context->streamBatchCounter++;
+    context->stream_batch_counter++;
 
-    if (context->streamBatchCounter >= context->streamBatchSize && context->log.streamEnabled)
+    if (context->stream_batch_counter >= context->stream_batch_size && context->log.stream_enabled)
     {
-        uint32_t avg_us = context->profileBatch.frameTimeTotalUs / context->profileBatch.frameCount;
+        uint32_t avg_us = context->profile_batch.frame_time_total_us / context->profile_batch.frame_count;
         char line[CLI_LOG_STREAM_LINE_MAX];
         (void)snprintf(line, sizeof(line),
                        "prof f=%lu t=%lu mn=%lu mx=%lu ov=%lu dr=%lu",
-                       (unsigned long)context->profileBatch.frameCount, (unsigned long)avg_us,
-                       (unsigned long)context->profileBatch.frameTimeMinUs,
-                       (unsigned long)context->profileBatch.frameTimeMaxUs,
-                       (unsigned long)context->profileBatch.overrunCount,
-                       (unsigned long)context->logStream.dropCount);
+                       (unsigned long)context->profile_batch.frame_count, (unsigned long)avg_us,
+                       (unsigned long)context->profile_batch.frame_time_min_us,
+                       (unsigned long)context->profile_batch.frame_time_max_us,
+                       (unsigned long)context->profile_batch.overrun_count,
+                       (unsigned long)context->log_stream.drop_count);
         (void)log_stream_queue_push(context, line);
 
-        context->streamBatchCounter = 0;
-        context->profileBatch.frameTimeMinUs = 0;
-        context->profileBatch.frameTimeMaxUs = 0;
-        context->profileBatch.frameTimeTotalUs = 0;
-        context->profileBatch.frameCount = 0;
-        context->profileBatch.overrunCount = 0;
+        context->stream_batch_counter = 0;
+        context->profile_batch.frame_time_min_us = 0;
+        context->profile_batch.frame_time_max_us = 0;
+        context->profile_batch.frame_time_total_us = 0;
+        context->profile_batch.frame_count = 0;
+        context->profile_batch.overrun_count = 0;
     }
 
     unlock_ctx(context);

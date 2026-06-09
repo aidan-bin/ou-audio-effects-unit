@@ -491,26 +491,26 @@ static CliStatus handle_log(char **tokens,
             }
 
             char line[LOG_LINE_BUF_SIZE];
-            if (stats.measuredFrameCount > 0)
+            if (stats.measured_frame_count > 0)
             {
-                uint32_t avg_us = stats.frameTimeTotalUs / stats.measuredFrameCount;
+                uint32_t avg_us = stats.frame_time_total_us / stats.measured_frame_count;
                 (void)snprintf(line, sizeof(line),
                                "log timing mn=%lu mx=%lu avg=%lu meas=%lu over=%lu drop=%lu bs=%u q=%u\n",
-                               (unsigned long)stats.frameTimeMinUs,
-                               (unsigned long)stats.frameTimeMaxUs,
-                               (unsigned long)avg_us, (unsigned long)stats.measuredFrameCount,
-                               (unsigned long)stats.overrunCount,
-                               (unsigned long)stats.streamDropCount,
-                               stats.streamBatchSize,
-                               stats.streamQueueCount);
+                               (unsigned long)stats.frame_time_min_us,
+                               (unsigned long)stats.frame_time_max_us,
+                               (unsigned long)avg_us, (unsigned long)stats.measured_frame_count,
+                               (unsigned long)stats.overrun_count,
+                               (unsigned long)stats.stream_drop_count,
+                               stats.stream_batch_size,
+                               stats.stream_queue_count);
             }
             else
             {
                 (void)snprintf(line, sizeof(line),
                                "log timing drop=%lu bs=%u q=%u\n",
-                               (unsigned long)stats.streamDropCount,
-                               stats.streamBatchSize,
-                               stats.streamQueueCount);
+                               (unsigned long)stats.stream_drop_count,
+                               stats.stream_batch_size,
+                               stats.stream_queue_count);
             }
             return write_line(io, line) ? CLI_STATUS_OK : CLI_STATUS_SERVICE_ERROR;
         }
@@ -535,11 +535,11 @@ static CliStatus handle_log(char **tokens,
         (void)snprintf(line, sizeof(line),
                        "log stats enabled=%u stream=%u level=%u frames=%lu failures=%lu"
                        " stepfail=%lu streak=%lu\n",
-                       stats.enabled ? 1U : 0U, stats.streamEnabled ? 1U : 0U, stats.level,
-                       (unsigned long)stats.frameCount,
-                       (unsigned long)stats.failureCount,
-                       (unsigned long)stats.stepFailureCount,
-                       (unsigned long)stats.stepFailureStreak);
+                       stats.enabled ? 1U : 0U, stats.stream_enabled ? 1U : 0U, stats.level,
+                       (unsigned long)stats.frame_count,
+                       (unsigned long)stats.failure_count,
+                       (unsigned long)stats.step_failure_count,
+                       (unsigned long)stats.step_failure_streak);
         if (!write_line(io, line))
         {
             return CLI_STATUS_SERVICE_ERROR;
@@ -685,7 +685,7 @@ static CliStatus handle_test_mode(char **tokens,
         char line[TEST_STATUS_LINE_BUF_SIZE];
         snprintf(line, sizeof(line),
                  "mode=%u vector=%s freq_hz=%u amp=%u\n",
-                 status.enabled ? 1U : 0U, test_vector_name(status.vector), status.frequencyHz,
+                 status.enabled ? 1U : 0U, test_vector_name(status.vector), status.frequency_hz,
                  status.amplitude);
         write_line(io, line);
         return CLI_STATUS_OK;
@@ -883,11 +883,11 @@ static CliStatus handle_info(char **tokens,
     char line[INFO_LINE_BUF_SIZE];
     (void)snprintf(line, sizeof(line),
                    "info sr=%lu sf=%lu sp=%lu ds=%lu sl=%lu\n",
-                   (unsigned long)status.sampleRateHz,
-                   (unsigned long)status.sampleBufLen,
-                   (unsigned long)status.samplingPeriodUs,
-                   (unsigned long)status.delaySamplesLen,
-                   (unsigned long)status.processingSlackMs);
+                   (unsigned long)status.sample_rate_hz,
+                   (unsigned long)status.sample_buf_len,
+                   (unsigned long)status.sampling_period_us,
+                   (unsigned long)status.delay_samples_len,
+                   (unsigned long)status.processing_slack_ms);
     return write_line(io, line) ? CLI_STATUS_OK : CLI_STATUS_SERVICE_ERROR;
 }
 

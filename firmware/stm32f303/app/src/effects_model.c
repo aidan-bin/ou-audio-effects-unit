@@ -56,9 +56,9 @@ void effects_state_normalize(EffectsState *state)
         effects_state_set_default_order(state);
     }
 
-    if (state->activeEffectSelection >= NUM_EFFECTS)
+    if (state->active_effect_selection >= NUM_EFFECTS)
     {
-        state->activeEffectSelection = 0;
+        state->active_effect_selection = 0;
     }
 }
 
@@ -74,12 +74,12 @@ bool effects_state_get_active_effect(const EffectsState *state, Effect *active_e
         return false;
     }
 
-    if (state->activeEffectSelection >= NUM_EFFECTS)
+    if (state->active_effect_selection >= NUM_EFFECTS)
     {
         return false;
     }
 
-    *active_effect = state->ordered[state->activeEffectSelection];
+    *active_effect = state->ordered[state->active_effect_selection];
     return effect_is_valid(*active_effect);
 }
 
@@ -115,9 +115,9 @@ void effects_state_apply_switches(EffectsState *state, bool switch_a_enabled, bo
         return;
     }
 
-    state->isEnabled[state->ordered[0]] = switch_a_enabled;
-    state->isEnabled[state->ordered[1]] = switch_b_enabled;
-    state->isEnabled[state->ordered[2]] = switch_c_enabled;
+    state->is_enabled[state->ordered[0]] = switch_a_enabled;
+    state->is_enabled[state->ordered[1]] = switch_b_enabled;
+    state->is_enabled[state->ordered[2]] = switch_c_enabled;
 }
 
 bool effects_params_apply_pot_sample(EffectsParams *params, Effect active_effect, uint8_t pot_index,
@@ -134,20 +134,20 @@ bool effects_params_apply_pot_sample(EffectsParams *params, Effect active_effect
         switch (pot_index)
         {
         case 0:
-            params->overdrive.gain = map_adc_to_param(adc_value, params->overdriveMin.gain,
-                                                      params->overdriveMax.gain, adc_max);
+            params->overdrive.gain = map_adc_to_param(adc_value, params->overdrive_min.gain,
+                                                      params->overdrive_max.gain, adc_max);
             return true;
         case 1:
-            params->overdrive.level = map_adc_to_param(adc_value, params->overdriveMin.level,
-                                                       params->overdriveMax.level, adc_max);
+            params->overdrive.level = map_adc_to_param(adc_value, params->overdrive_min.level,
+                                                       params->overdrive_max.level, adc_max);
             return true;
         case 2:
-            params->overdrive.tone = map_adc_to_param(adc_value, params->overdriveMin.tone,
-                                                      params->overdriveMax.tone, adc_max);
+            params->overdrive.tone = map_adc_to_param(adc_value, params->overdrive_min.tone,
+                                                      params->overdrive_max.tone, adc_max);
             return true;
         case 3:
-            params->overdrive.mix = map_adc_to_param(adc_value, params->overdriveMin.mix,
-                                                     params->overdriveMax.mix, adc_max);
+            params->overdrive.mix = map_adc_to_param(adc_value, params->overdrive_min.mix,
+                                                     params->overdrive_max.mix, adc_max);
             return true;
         default:
             return false;
@@ -157,20 +157,20 @@ bool effects_params_apply_pot_sample(EffectsParams *params, Effect active_effect
         switch (pot_index)
         {
         case 0:
-            params->echo.pre_delay = map_adc_to_param(adc_value, params->echoMin.pre_delay,
-                                                      params->echoMax.pre_delay, adc_max);
+            params->echo.pre_delay = map_adc_to_param(adc_value, params->echo_min.pre_delay,
+                                                      params->echo_max.pre_delay, adc_max);
             return true;
         case 1:
-            params->echo.density = map_adc_to_param(adc_value, params->echoMin.density,
-                                                    params->echoMax.density, adc_max);
+            params->echo.density = map_adc_to_param(adc_value, params->echo_min.density,
+                                                    params->echo_max.density, adc_max);
             return true;
         case 2:
             params->echo.attack =
-                map_adc_to_param(adc_value, params->echoMin.attack, params->echoMax.attack, adc_max);
+                map_adc_to_param(adc_value, params->echo_min.attack, params->echo_max.attack, adc_max);
             return true;
         case 3:
             params->echo.decay =
-                map_adc_to_param(adc_value, params->echoMin.decay, params->echoMax.decay, adc_max);
+                map_adc_to_param(adc_value, params->echo_min.decay, params->echo_max.decay, adc_max);
             return true;
         default:
             return false;
@@ -181,12 +181,12 @@ bool effects_params_apply_pot_sample(EffectsParams *params, Effect active_effect
         {
         case 0:
             params->compression.threshold =
-                map_adc_to_param(adc_value, params->compressionMin.threshold,
-                                 params->compressionMax.threshold, adc_max);
+                map_adc_to_param(adc_value, params->compression_min.threshold,
+                                 params->compression_max.threshold, adc_max);
             return true;
         case 1:
-            params->compression.ratio = map_adc_to_param(adc_value, params->compressionMin.ratio,
-                                                         params->compressionMax.ratio, adc_max);
+            params->compression.ratio = map_adc_to_param(adc_value, params->compression_min.ratio,
+                                                         params->compression_max.ratio, adc_max);
             return true;
         case 2:
         case 3:

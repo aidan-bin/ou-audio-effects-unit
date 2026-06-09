@@ -9,15 +9,15 @@ static uint32_t compute_ticks_to_wait(const EffectsTaskContext *task_context,
                                       const EffectsTaskOps *ops)
 {
     if (task_context == NULL || ops == NULL || ops->ms_to_ticks == NULL ||
-        task_context->sampleBufLen == 0)
+        task_context->sample_buf_len == 0)
     {
         return 0;
     }
 
-    uint32_t frame_duration_us = task_context->samplingPeriodUs * (uint32_t)task_context->sampleBufLen;
+    uint32_t frame_duration_us = task_context->sampling_period_us * (uint32_t)task_context->sample_buf_len;
     uint32_t frame_duration_ms = frame_duration_us / US_PER_MS;
     uint32_t frame_ticks = ops->ms_to_ticks(frame_duration_ms, ops->context);
-    uint32_t slack_ticks = ops->ms_to_ticks(task_context->processingSlackMs, ops->context);
+    uint32_t slack_ticks = ops->ms_to_ticks(task_context->processing_slack_ms, ops->context);
 
     return frame_ticks > slack_ticks ? frame_ticks - slack_ticks : 0;
 }
@@ -25,7 +25,7 @@ static uint32_t compute_ticks_to_wait(const EffectsTaskContext *task_context,
 bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTaskOps *ops)
 {
     if (task_context == NULL || ops == NULL || task_context->pipeline == NULL ||
-        task_context->delaySamplesBuf == NULL || ops->wait_for_adc_buffer == NULL ||
+        task_context->delay_samples_buf == NULL || ops->wait_for_adc_buffer == NULL ||
         ops->wait_for_dac_buffer == NULL || ops->dma_copy == NULL || ops->alloc == NULL ||
         ops->free == NULL || ops->read_latched_state == NULL || ops->ms_to_ticks == NULL)
     {
@@ -68,7 +68,7 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
         return false;
     }
 
-    if (curr_adc_buf != task_context->adcBufA && curr_adc_buf != task_context->adcBufB)
+    if (curr_adc_buf != task_context->adc_buf_a && curr_adc_buf != task_context->adc_buf_b)
     {
         (void)log_write(LOG_LEVEL_ERROR, "effects task received invalid adc buffer");
         if (ops->panic_write != NULL)
@@ -79,7 +79,7 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
     }
 
     if (ops->replace_input_for_testing != NULL &&
-        !ops->replace_input_for_testing(curr_adc_buf, task_context->sampleBufLen, ops->context))
+        !ops->replace_input_for_testing(curr_adc_buf, task_context->sample_buf_len, ops->context))
     {
         (void)log_write(LOG_LEVEL_WARN, "effects task test input replacement failed");
         if (ops->panic_write != NULL)
@@ -89,11 +89,11 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
         return false;
     }
 
-    if (task_context->delaySamplesLen > task_context->sampleBufLen)
+    if (task_context->delay_samples_len > task_context->sample_buf_len)
     {
-        size_t shift_count = task_context->delaySamplesLen - task_context->sampleBufLen;
-        if (!ops->dma_copy(&task_context->delaySamplesBuf[task_context->sampleBufLen],
-                           task_context->delaySamplesBuf, shift_count, ticks_to_wait, ops->context))
+        size_t shift_count = task_context->delay_samples_len - task_context->sample_buf_len;
+        if (!ops->dma_copy(&task_context->delay_samples_buf[task_context->sample_buf_len],
+                           task_context->delay_samples_buf, shift_count, ticks_to_wait, ops->context))
         {
             (void)log_write(LOG_LEVEL_ERROR, "effects task delay sample shift failed");
             if (ops->panic_write != NULL)
@@ -106,8 +106,8 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
 
     if (!ops->dma_copy(
             curr_adc_buf,
-            &task_context->delaySamplesBuf[task_context->delaySamplesLen - task_context->sampleBufLen],
-            task_context->sampleBufLen, ticks_to_wait, ops->context))
+            &task_context->delay_samples_buf[task_context->delay_samples_len - task_context->sample_buf_len],
+            task_context->sample_buf_len, ticks_to_wait, ops->context))
     {
         (void)log_write(LOG_LEVEL_ERROR, "effects task delay sample capture failed");
         if (ops->panic_write != NULL)
@@ -120,13 +120,13 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
     if (!ops->wait_for_dac_buffer(ticks_to_wait, &curr_dac_buf, ops->context))
     {
         (void)log_write(LOG_LEVEL_WARN, "effects task dac wait failed");
-        if (curr_adc_buf == task_context->adcBufA)
+        if (curr_adc_buf == task_context->adc_buf_a)
         {
-            curr_dac_buf = task_context->dacBufA;
+            curr_dac_buf = task_context->dac_buf_a;
         }
-        else if (curr_adc_buf == task_context->adcBufB)
+        else if (curr_adc_buf == task_context->adc_buf_b)
         {
-            curr_dac_buf = task_context->dacBufB;
+            curr_dac_buf = task_context->dac_buf_b;
         }
         else
         {
@@ -138,7 +138,7 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
         }
     }
 
-    if (curr_dac_buf != task_context->dacBufA && curr_dac_buf != task_context->dacBufB)
+    if (curr_dac_buf != task_context->dac_buf_a && curr_dac_buf != task_context->dac_buf_b)
     {
         (void)log_write(LOG_LEVEL_ERROR, "effects task received invalid dac buffer");
         if (ops->panic_write != NULL)
@@ -159,7 +159,7 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
     bool any_enabled = false;
     for (int i = 0; i < NUM_EFFECTS; i++)
     {
-        if (latched_effects_state.isEnabled[latched_effects_state.ordered[i]])
+        if (latched_effects_state.is_enabled[latched_effects_state.ordered[i]])
         {
             any_enabled = true;
             break;
@@ -168,7 +168,7 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
 
     if (!any_enabled)
     {
-        if (!ops->dma_copy(curr_adc_buf, curr_dac_buf, task_context->sampleBufLen,
+        if (!ops->dma_copy(curr_adc_buf, curr_dac_buf, task_context->sample_buf_len,
                            ticks_to_wait, ops->context))
         {
             (void)log_write(LOG_LEVEL_ERROR, "effects task pass-through copy failed");
@@ -182,15 +182,15 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
     }
 
     echo_delay_samples_buf =
-        (uint16_t *)ops->alloc(task_context->delaySamplesLen * sizeof(uint16_t), ops->context);
+        (uint16_t *)ops->alloc(task_context->delay_samples_len * sizeof(uint16_t), ops->context);
     if (echo_delay_samples_buf == NULL)
     {
         process_failed = true;
         goto cleanup;
     }
 
-    if (!ops->dma_copy(task_context->delaySamplesBuf, echo_delay_samples_buf,
-                       task_context->delaySamplesLen, ticks_to_wait, ops->context))
+    if (!ops->dma_copy(task_context->delay_samples_buf, echo_delay_samples_buf,
+                       task_context->delay_samples_len, ticks_to_wait, ops->context))
     {
         process_failed = true;
         goto cleanup;
@@ -209,7 +209,7 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
     {
         Effect effect = latched_effects_state.ordered[i];
 
-        if (!latched_effects_state.isEnabled[effect])
+        if (!latched_effects_state.is_enabled[effect])
         {
             continue;
         }
@@ -224,13 +224,13 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
                 break;
             }
 
-            if (num_delay_samples > task_context->delaySamplesLen)
+            if (num_delay_samples > task_context->delay_samples_len)
             {
-                num_delay_samples = task_context->delaySamplesLen;
+                num_delay_samples = task_context->delay_samples_len;
             }
 
             echo_input_buf = (uint16_t *)ops->alloc(
-                (num_delay_samples + task_context->sampleBufLen) * sizeof(uint16_t), ops->context);
+                (num_delay_samples + task_context->sample_buf_len) * sizeof(uint16_t), ops->context);
             if (echo_input_buf == NULL)
             {
                 process_failed = true;
@@ -240,7 +240,7 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
             if (num_delay_samples > 0)
             {
                 if (!ops->dma_copy(
-                        &echo_delay_samples_buf[task_context->delaySamplesLen - num_delay_samples],
+                        &echo_delay_samples_buf[task_context->delay_samples_len - num_delay_samples],
                         echo_input_buf, num_delay_samples, ticks_to_wait, ops->context))
                 {
                     process_failed = true;
@@ -248,7 +248,7 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
                 }
             }
 
-            if (!ops->dma_copy(input_buf, &echo_input_buf[num_delay_samples], task_context->sampleBufLen,
+            if (!ops->dma_copy(input_buf, &echo_input_buf[num_delay_samples], task_context->sample_buf_len,
                                ticks_to_wait, ops->context))
             {
                 process_failed = true;
@@ -259,14 +259,14 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
         if (effect == ECHO)
         {
             if (effects_pipeline_process(task_context->pipeline, effect, echo_input_buf, output_buf,
-                                         task_context->sampleBufLen) != 0)
+                                         task_context->sample_buf_len) != 0)
             {
                 process_failed = true;
                 break;
             }
         }
         else if (effects_pipeline_process(task_context->pipeline, effect, input_buf, output_buf,
-                                          task_context->sampleBufLen) != 0)
+                                          task_context->sample_buf_len) != 0)
         {
             process_failed = true;
             break;
@@ -297,7 +297,7 @@ cleanup:
     }
 
     if (!process_failed && ops->replace_output_for_testing != NULL &&
-        !ops->replace_output_for_testing(curr_dac_buf, task_context->sampleBufLen, ops->context))
+        !ops->replace_output_for_testing(curr_dac_buf, task_context->sample_buf_len, ops->context))
     {
         (void)log_write(LOG_LEVEL_WARN, "effects task test output replacement failed");
         if (ops->panic_write != NULL)
@@ -321,8 +321,8 @@ cleanup:
     if (profiling)
     {
         uint32_t frame_time_us = ops->get_timestamp_us(ops->context) - frame_start_us;
-        uint32_t frame_budget_us = task_context->samplingPeriodUs * (uint32_t)task_context->sampleBufLen;
-        uint32_t slack_us = (uint32_t)task_context->processingSlackMs * US_PER_MS;
+        uint32_t frame_budget_us = task_context->sampling_period_us * (uint32_t)task_context->sample_buf_len;
+        uint32_t slack_us = (uint32_t)task_context->processing_slack_ms * US_PER_MS;
         uint32_t total_budget_us = frame_budget_us + slack_us;
         bool overrun = frame_time_us > total_budget_us;
         if (ops->on_frame_end != NULL)

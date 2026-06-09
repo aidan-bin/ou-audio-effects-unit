@@ -9,38 +9,38 @@
 
 typedef struct
 {
-    void *sourceTask;
-    void *i2cQueueHandle;
-    void *i2cFailedRomSemaphoreHandle;
-    uint16_t deviceAddress;
-    uint16_t readAddress;
-    uint16_t writeAddress;
-    uint32_t bootstrapTimeoutTicks;
-    uint32_t saveTimeoutTicks;
+    void *source_task;
+    void *i2c_queue_handle;
+    void *i2c_failed_rom_semaphore_handle;
+    uint16_t device_address;
+    uint16_t read_address;
+    uint16_t write_address;
+    uint32_t bootstrap_timeout_ticks;
+    uint32_t save_timeout_ticks;
 } RomTaskSupportConfig;
 
 typedef struct
 {
-    bool (*queue_message_and_wait)(void *queueHandle, void *message, bool *pFailed,
-                                   void *failedSemaphoreHandle, uint32_t timeoutTicks,
+    bool (*queue_message_and_wait)(void *queue_handle, void *message, bool *p_failed,
+                                   void *failed_semaphore_handle, uint32_t timeout_ticks,
                                    void *context);
     uint8_t *(*allocate_payload)(size_t size, void *context);
     void (*free_payload)(uint8_t *payload, void *context);
-    void (*set_write_disable)(bool disableWrites, void *context);
+    void (*set_write_disable)(bool disable_writes, void *context);
     void *context;
 } RomTaskSupportOps;
 
-void rom_task_support_init(RomTaskSupportConfig *config, RomTaskSupportOps *ops, void *sourceTask,
-                           void *i2cQueueHandle, void *i2cFailedRomSemaphoreHandle,
-                           uint16_t deviceAddress, uint16_t readAddress, uint16_t writeAddress,
-                           uint32_t bootstrapTimeoutTicks, uint32_t saveTimeoutTicks,
-                           bool (*queue_message_and_wait)(void *queueHandle, void *message,
-                                                          bool *pFailed,
-                                                          void *failedSemaphoreHandle,
-                                                          uint32_t timeoutTicks, void *context),
+void rom_task_support_init(RomTaskSupportConfig *config, RomTaskSupportOps *ops, void *source_task,
+                           void *i2c_queue_handle, void *i2c_failed_rom_semaphore_handle,
+                           uint16_t device_address, uint16_t read_address, uint16_t write_address,
+                           uint32_t bootstrap_timeout_ticks, uint32_t save_timeout_ticks,
+                           bool (*queue_message_and_wait)(void *queue_handle, void *message,
+                                                          bool *p_failed,
+                                                          void *failed_semaphore_handle,
+                                                          uint32_t timeout_ticks, void *context),
                            uint8_t *(*allocate_payload)(size_t size, void *context),
                            void (*free_payload)(uint8_t *payload, void *context),
-                           void (*set_write_disable)(bool disableWrites, void *context),
+                           void (*set_write_disable)(bool disable_writes, void *context),
                            void *context);
 
 bool rom_task_bootstrap_effects(const RomTaskSupportConfig *config, const RomTaskSupportOps *ops,

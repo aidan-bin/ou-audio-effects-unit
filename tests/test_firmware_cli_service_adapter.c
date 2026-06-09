@@ -10,8 +10,8 @@ int failures = 0;
 
 typedef struct
 {
-    uint32_t romReadCalls;
-    uint32_t romWriteCalls;
+    uint32_t rom_read_calls;
+    uint32_t rom_write_calls;
 } TestOpsContext;
 
 static void set_default_effects_state(EffectsState *state)
@@ -24,59 +24,59 @@ static void set_default_effects_params(EffectsParams *params)
 {
     memset(params, 0, sizeof(*params));
 
-    params->overdriveMin.gain = 10;
-    params->overdriveMax.gain = 110;
-    params->overdriveMin.level = 20;
-    params->overdriveMax.level = 120;
-    params->overdriveMin.tone = 30;
-    params->overdriveMax.tone = 130;
-    params->overdriveMin.mix = 40;
-    params->overdriveMax.mix = 140;
+    params->overdrive_min.gain = 10;
+    params->overdrive_max.gain = 110;
+    params->overdrive_min.level = 20;
+    params->overdrive_max.level = 120;
+    params->overdrive_min.tone = 30;
+    params->overdrive_max.tone = 130;
+    params->overdrive_min.mix = 40;
+    params->overdrive_max.mix = 140;
 
-    params->echoMin.delay_samples = 5;
-    params->echoMax.delay_samples = 50;
-    params->echoMin.pre_delay = 1;
-    params->echoMax.pre_delay = 20;
-    params->echoMin.density = 2;
-    params->echoMax.density = 22;
-    params->echoMin.attack = 3;
-    params->echoMax.attack = 23;
-    params->echoMin.decay = 4;
-    params->echoMax.decay = 24;
+    params->echo_min.delay_samples = 5;
+    params->echo_max.delay_samples = 50;
+    params->echo_min.pre_delay = 1;
+    params->echo_max.pre_delay = 20;
+    params->echo_min.density = 2;
+    params->echo_max.density = 22;
+    params->echo_min.attack = 3;
+    params->echo_max.attack = 23;
+    params->echo_min.decay = 4;
+    params->echo_max.decay = 24;
 
-    params->compressionMin.threshold = 100;
-    params->compressionMax.threshold = 400;
-    params->compressionMin.ratio = 1;
-    params->compressionMax.ratio = 32;
+    params->compression_min.threshold = 100;
+    params->compression_max.threshold = 400;
+    params->compression_min.ratio = 1;
+    params->compression_max.ratio = 32;
 }
 
-static bool rom_read_raw(uint16_t address, uint16_t length, uint8_t *payloadOut,
-                         size_t payloadCapacity, size_t *payloadSizeOut, void *context)
+static bool rom_read_raw(uint16_t address, uint16_t length, uint8_t *payload_out,
+                         size_t payload_capacity, size_t *payload_size_out, void *context)
 {
     (void)address;
     (void)length;
     TestOpsContext *ops = (TestOpsContext *)context;
-    ops->romReadCalls++;
+    ops->rom_read_calls++;
 
-    if (payloadCapacity < 2)
+    if (payload_capacity < 2)
     {
         return false;
     }
 
-    payloadOut[0] = 0x12;
-    payloadOut[1] = 0x34;
-    *payloadSizeOut = 2;
+    payload_out[0] = 0x12;
+    payload_out[1] = 0x34;
+    *payload_size_out = 2;
     return true;
 }
 
-static bool rom_write_raw(uint16_t address, const uint8_t *payload, size_t payloadSize,
+static bool rom_write_raw(uint16_t address, const uint8_t *payload, size_t payload_size,
                           void *context)
 {
     (void)address;
     (void)payload;
-    (void)payloadSize;
+    (void)payload_size;
     TestOpsContext *ops = (TestOpsContext *)context;
-    ops->romWriteCalls++;
+    ops->rom_write_calls++;
     return true;
 }
 
@@ -124,12 +124,12 @@ static void test_switch_override_precedence(void)
     expect_true(services.set_switch_override(1, true, services.context), "set switch override");
     expect_true(cli_service_adapter_apply_switches(&context, false, false, false),
                 "apply switches with override");
-    expect_true(state.isEnabled[ECHO], "switch override took precedence");
+    expect_true(state.is_enabled[ECHO], "switch override took precedence");
 
     expect_true(services.clear_switch_override(1, services.context), "clear switch override");
     expect_true(cli_service_adapter_apply_switches(&context, false, false, false),
                 "apply switches after clear");
-    expect_false(state.isEnabled[ECHO], "hardware switch restored after clear");
+    expect_false(state.is_enabled[ECHO], "hardware switch restored after clear");
 }
 
 static void test_config_bounds_and_state_updates(void)
@@ -159,7 +159,7 @@ static void test_config_bounds_and_state_updates(void)
 
     expect_true(services.config_set("state.active_effect", 2, services.context),
                 "set active effect");
-    expect_eq_u8(2, state.activeEffectSelection, "active effect updated");
+    expect_eq_u8(2, state.active_effect_selection, "active effect updated");
     expect_false(services.config_set("state.active_effect", 9, services.context),
                  "reject invalid active effect");
 
@@ -192,9 +192,9 @@ static void test_rom_raw_guardrails(void)
 
     CliServiceAdapter context;
     cli_service_adapter_init(&context, &state, &params, &ops, 255);
-    context.romWindow.minAddress = 0x0040;
-    context.romWindow.maxAddress = 0x00FF;
-    context.romWindow.maxLength = 8;
+    context.rom_window.min_address = 0x0040;
+    context.rom_window.max_address = 0x00FF;
+    context.rom_window.max_length = 8;
 
     CliServices services = {0};
     cli_service_adapter_bind(&context, &services);
@@ -203,20 +203,20 @@ static void test_rom_raw_guardrails(void)
     size_t out_size = 0;
     expect_true(services.rom_read_raw(0x0040, 2, out, sizeof(out), &out_size, services.context),
                 "rom read in range");
-    expect_eq_u32(1, ops_context.romReadCalls, "rom read delegated");
+    expect_eq_u32(1, ops_context.rom_read_calls, "rom read delegated");
 
     expect_false(services.rom_read_raw(0x0001, 2, out, sizeof(out), &out_size, services.context),
                  "rom read out of range rejected");
-    expect_eq_u32(1, ops_context.romReadCalls, "rom read not delegated when rejected");
+    expect_eq_u32(1, ops_context.rom_read_calls, "rom read not delegated when rejected");
 
     uint8_t payload[2] = {0xAA, 0xBB};
     expect_true(services.rom_write_raw(0x0041, payload, 2, services.context),
                 "rom write in range");
-    expect_eq_u32(1, ops_context.romWriteCalls, "rom write delegated");
+    expect_eq_u32(1, ops_context.rom_write_calls, "rom write delegated");
 
     expect_false(services.rom_write_raw(0x00FE, payload, 4, services.context),
                  "rom write overflow rejected");
-    expect_eq_u32(1, ops_context.romWriteCalls, "rom write not delegated when rejected");
+    expect_eq_u32(1, ops_context.rom_write_calls, "rom write not delegated when rejected");
 }
 
 static void test_test_input_mode_status_and_validation(void)
@@ -256,7 +256,7 @@ static void test_test_input_mode_status_and_validation(void)
                 "read input test status through adapter helper");
     expect_true(status.enabled, "input test mode remains enabled");
     expect_eq_u8(2, status.vector, "input test vector persisted");
-    expect_eq_u16(2000, status.frequencyHz, "input test frequency persisted");
+    expect_eq_u16(2000, status.frequency_hz, "input test frequency persisted");
 }
 
 static void test_test_output_mode_status_and_validation(void)
@@ -296,7 +296,7 @@ static void test_test_output_mode_status_and_validation(void)
                 "read output test status through adapter helper");
     expect_true(status.enabled, "output test mode remains enabled");
     expect_eq_u8(2, status.vector, "output test vector persisted");
-    expect_eq_u16(2000, status.frequencyHz, "output test frequency persisted");
+    expect_eq_u16(2000, status.frequency_hz, "output test frequency persisted");
 }
 
 static void test_log_stats_counters(void)
@@ -327,13 +327,13 @@ static void test_log_stats_counters(void)
     CliLogStats stats = {0};
     expect_true(services.log_get_stats(&stats, services.context), "read log stats");
     expect_true(stats.enabled, "logging enabled tracked");
-    expect_true(stats.streamEnabled, "stream enabled tracked");
+    expect_true(stats.stream_enabled, "stream enabled tracked");
     expect_eq_u8(4, stats.level, "log level tracked");
-    expect_eq_u32(2, stats.frameCount, "frame count tracked");
-    expect_eq_u32(1, stats.failureCount, "failure count tracked");
-    expect_eq_u32(0, stats.stepFailureCount, "step failure count tracked");
-    expect_eq_u32(0, stats.stepFailureStreak, "step failure streak tracked");
-    expect_eq_u8(1, stats.streamQueueCount, "stream queue count tracked");
+    expect_eq_u32(2, stats.frame_count, "frame count tracked");
+    expect_eq_u32(1, stats.failure_count, "failure count tracked");
+    expect_eq_u32(0, stats.step_failure_count, "step failure count tracked");
+    expect_eq_u32(0, stats.step_failure_streak, "step failure streak tracked");
+    expect_eq_u8(1, stats.stream_queue_count, "stream queue count tracked");
 
     bool stream_enabled = false;
     expect_true(cli_service_adapter_get_log_stream_enabled(&context, &stream_enabled),
@@ -356,42 +356,42 @@ static void test_profiling_accumulation_and_reset(void)
 
     CliServiceAdapter context;
     cli_service_adapter_init(&context, &state, &params, NULL, 255);
-    context.streamBatchSize = 5;
-    context.log.streamEnabled = true;
+    context.stream_batch_size = 5;
+    context.log.stream_enabled = true;
 
     cli_service_adapter_note_frame_timing(&context, 1000, false);
-    expect_eq_u32(1000, context.profile.frameTimeMinUs, "min tracks first frame");
-    expect_eq_u32(1000, context.profile.frameTimeMaxUs, "max tracks first frame");
-    expect_eq_u32(1, context.profile.frameCount, "frame count incremented");
+    expect_eq_u32(1000, context.profile.frame_time_min_us, "min tracks first frame");
+    expect_eq_u32(1000, context.profile.frame_time_max_us, "max tracks first frame");
+    expect_eq_u32(1, context.profile.frame_count, "frame count incremented");
 
     cli_service_adapter_note_frame_timing(&context, 2000, false);
-    expect_eq_u32(1000, context.profile.frameTimeMinUs, "min unchanged");
-    expect_eq_u32(2000, context.profile.frameTimeMaxUs, "max updated");
-    expect_eq_u32(2, context.profile.frameCount, "frame count 2");
+    expect_eq_u32(1000, context.profile.frame_time_min_us, "min unchanged");
+    expect_eq_u32(2000, context.profile.frame_time_max_us, "max updated");
+    expect_eq_u32(2, context.profile.frame_count, "frame count 2");
 
     cli_service_adapter_note_frame_timing(&context, 500, true);
-    expect_eq_u32(500, context.profile.frameTimeMinUs, "min updated");
-    expect_eq_u32(2000, context.profile.frameTimeMaxUs, "max unchanged");
-    expect_eq_u32(3, context.profile.frameCount, "frame count 3");
-    expect_eq_u32(1, context.profile.overrunCount, "overrun counted");
+    expect_eq_u32(500, context.profile.frame_time_min_us, "min updated");
+    expect_eq_u32(2000, context.profile.frame_time_max_us, "max unchanged");
+    expect_eq_u32(3, context.profile.frame_count, "frame count 3");
+    expect_eq_u32(1, context.profile.overrun_count, "overrun counted");
 
     cli_service_adapter_note_step_result(&context, false);
     cli_service_adapter_note_step_result(&context, false);
-    expect_eq_u32(2, context.stepFailureCount, "step failures counted");
-    expect_eq_u32(2, context.stepFailureStreak, "step failure streak counted");
+    expect_eq_u32(2, context.step_failure_count, "step failures counted");
+    expect_eq_u32(2, context.step_failure_streak, "step failure streak counted");
 
     cli_service_adapter_note_step_result(&context, true);
-    expect_eq_u32(2, context.stepFailureCount, "step failure count retained after success");
-    expect_eq_u32(0, context.stepFailureStreak, "step failure streak reset after success");
+    expect_eq_u32(2, context.step_failure_count, "step failure count retained after success");
+    expect_eq_u32(0, context.step_failure_streak, "step failure streak reset after success");
 
     cli_service_adapter_reset_profiling_stats(&context);
-    expect_eq_u32(0, context.profile.frameCount, "frame count reset");
-    expect_eq_u32(0, context.profile.overrunCount, "overrun reset");
-    expect_eq_u32(0, context.profile.frameTimeMinUs, "min reset");
-    expect_eq_u32(0, context.profile.frameTimeMaxUs, "max reset");
-    expect_eq_u32(0, context.profile.frameTimeTotalUs, "total reset");
-    expect_eq_u32(0, context.stepFailureCount, "step failure count reset");
-    expect_eq_u32(0, context.stepFailureStreak, "step failure streak reset");
+    expect_eq_u32(0, context.profile.frame_count, "frame count reset");
+    expect_eq_u32(0, context.profile.overrun_count, "overrun reset");
+    expect_eq_u32(0, context.profile.frame_time_min_us, "min reset");
+    expect_eq_u32(0, context.profile.frame_time_max_us, "max reset");
+    expect_eq_u32(0, context.profile.frame_time_total_us, "total reset");
+    expect_eq_u32(0, context.step_failure_count, "step failure count reset");
+    expect_eq_u32(0, context.step_failure_streak, "step failure streak reset");
 }
 
 static void test_profiling_batch_emission(void)
@@ -403,20 +403,20 @@ static void test_profiling_batch_emission(void)
 
     CliServiceAdapter context;
     cli_service_adapter_init(&context, &state, &params, NULL, 255);
-    context.streamBatchSize = 3;
-    context.log.streamEnabled = true;
+    context.stream_batch_size = 3;
+    context.log.stream_enabled = true;
 
     CliServices services = {0};
     cli_service_adapter_bind(&context, &services);
 
     cli_service_adapter_note_frame_timing(&context, 1000, false);
-    expect_eq_u32(1, context.streamBatchCounter, "batch counter 1");
+    expect_eq_u32(1, context.stream_batch_counter, "batch counter 1");
 
     cli_service_adapter_note_frame_timing(&context, 2000, false);
-    expect_eq_u32(2, context.streamBatchCounter, "batch counter 2");
+    expect_eq_u32(2, context.stream_batch_counter, "batch counter 2");
 
     cli_service_adapter_note_frame_timing(&context, 1500, false);
-    expect_eq_u32(0, context.streamBatchCounter, "batch counter reset after emit");
+    expect_eq_u32(0, context.stream_batch_counter, "batch counter reset after emit");
 
     char line[64] = {0};
     bool has_line = false;
@@ -446,14 +446,14 @@ static void test_profiling_batch_size_one(void)
 
     CliServiceAdapter context;
     cli_service_adapter_init(&context, &state, &params, NULL, 255);
-    context.streamBatchSize = 1;
-    context.log.streamEnabled = true;
+    context.stream_batch_size = 1;
+    context.log.stream_enabled = true;
 
     CliServices services = {0};
     cli_service_adapter_bind(&context, &services);
 
     cli_service_adapter_note_frame_timing(&context, 1234, false);
-    expect_eq_u32(0, context.streamBatchCounter, "per-frame batch counter resets");
+    expect_eq_u32(0, context.stream_batch_counter, "per-frame batch counter resets");
 
     char line[64] = {0};
     bool has_line = false;
@@ -473,8 +473,8 @@ static void test_queue_overflow_drop_tracking(void)
 
     CliServiceAdapter context;
     cli_service_adapter_init(&context, &state, &params, NULL, 255);
-    context.log.streamEnabled = true;
-    context.streamBatchSize = 1;
+    context.log.stream_enabled = true;
+    context.stream_batch_size = 1;
 
     // Fill queue with profiling frames until it overflows
     for (int i = 0; i < CLI_LOG_STREAM_QUEUE_DEPTH + 5; i++)
@@ -482,7 +482,7 @@ static void test_queue_overflow_drop_tracking(void)
         cli_service_adapter_note_frame_timing(&context, 1000, false);
     }
 
-    expect_eq_u32(5, context.logStream.dropCount, "5 stream lines dropped");
+    expect_eq_u32(5, context.log_stream.drop_count, "5 stream lines dropped");
 }
 
 static void test_log_stream_line_queue(void)

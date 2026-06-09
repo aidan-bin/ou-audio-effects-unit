@@ -90,7 +90,7 @@ bool test_vector_source_fill_buffer(TestVectorSource *source, const CliTestModeS
     uint32_t sample_rate_hz = source->sample_rate_hz == 0U ? TEST_VECTOR_DEFAULT_SAMPLE_RATE_HZ
                                                            : source->sample_rate_hz;
 
-    uint32_t freq_hz = status->vector == 2U ? source->sweep_freq_hz : (uint32_t)status->frequencyHz;
+    uint32_t freq_hz = status->vector == 2U ? source->sweep_freq_hz : (uint32_t)status->frequency_hz;
 
     uint32_t phase_step =
         (uint32_t)(((uint64_t)freq_hz * (uint64_t)lut_size * Q16_ONE) /

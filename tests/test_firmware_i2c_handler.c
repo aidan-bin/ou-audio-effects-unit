@@ -13,32 +13,32 @@ int failures = 0;
 
 typedef struct
 {
-    void *romTask;
-    void *displayTask;
-    bool completionSignaled;
-    uint32_t delayCalls;
-    uint32_t freeCalls;
-    bool transferFailed;
-    FreeRtosMockBinarySemaphore completionSemaphore;
+    void *rom_task;
+    void *display_task;
+    bool completion_signaled;
+    uint32_t delay_calls;
+    uint32_t free_calls;
+    bool transfer_failed;
+    FreeRtosMockBinarySemaphore completion_semaphore;
 } I2CTestContext;
 
-static bool is_source_valid(void *sourceTask, void *context)
+static bool is_source_valid(void *source_task, void *context)
 {
     I2CTestContext *ctx = (I2CTestContext *)context;
-    return sourceTask == ctx->romTask || sourceTask == ctx->displayTask;
+    return source_task == ctx->rom_task || source_task == ctx->display_task;
 }
 
-static void signal_source_completion(void *sourceTask, void *context)
+static void signal_source_completion(void *source_task, void *context)
 {
-    (void)sourceTask;
+    (void)source_task;
     I2CTestContext *ctx = (I2CTestContext *)context;
-    ctx->completionSignaled = true;
+    ctx->completion_signaled = true;
 }
 
-static bool is_device_ready(uint16_t address, uint32_t trials, uint32_t timeoutMs, void *context)
+static bool is_device_ready(uint16_t address, uint32_t trials, uint32_t timeout_ms, void *context)
 {
     (void)context;
-    return hal_mock_i2c_is_device_ready(address, trials, timeoutMs) == HAL_MOCK_STATUS_OK;
+    return hal_mock_i2c_is_device_ready(address, trials, timeout_ms) == HAL_MOCK_STATUS_OK;
 }
 
 static bool start_receive(uint16_t address, uint8_t *payload, uint16_t items, void *context)
@@ -53,53 +53,53 @@ static bool start_transmit(uint16_t address, uint8_t *payload, uint16_t items, v
     return hal_mock_i2c_master_transmit_dma(address, payload, items) == HAL_MOCK_STATUS_OK;
 }
 
-static bool wait_for_completion(uint32_t timeoutMs, bool *transferFailed, void *context)
+static bool wait_for_completion(uint32_t timeout_ms, bool *transfer_failed, void *context)
 {
-    (void)timeoutMs;
+    (void)timeout_ms;
     I2CTestContext *ctx = (I2CTestContext *)context;
 
-    if (freertos_mock_semaphore_take(&ctx->completionSemaphore) != FREERTOS_MOCK_OK)
+    if (freertos_mock_semaphore_take(&ctx->completion_semaphore) != FREERTOS_MOCK_OK)
     {
         return false;
     }
 
-    *transferFailed = ctx->transferFailed;
+    *transfer_failed = ctx->transfer_failed;
     return true;
 }
 
 static void free_payload(uint8_t *payload, void *context)
 {
     I2CTestContext *ctx = (I2CTestContext *)context;
-    ctx->freeCalls++;
+    ctx->free_calls++;
     free(payload);
 }
 
-static void delay_ms(uint32_t delayMs, void *context)
+static void delay_ms(uint32_t delay_ms, void *context)
 {
-    (void)delayMs;
+    (void)delay_ms;
     I2CTestContext *ctx = (I2CTestContext *)context;
-    ctx->delayCalls++;
+    ctx->delay_calls++;
 }
 
 static void on_i2c_tx_complete(void *context)
 {
     I2CTestContext *ctx = (I2CTestContext *)context;
-    ctx->transferFailed = false;
-    freertos_mock_semaphore_give(&ctx->completionSemaphore);
+    ctx->transfer_failed = false;
+    freertos_mock_semaphore_give(&ctx->completion_semaphore);
 }
 
 static void on_i2c_rx_complete(void *context)
 {
     I2CTestContext *ctx = (I2CTestContext *)context;
-    ctx->transferFailed = false;
-    freertos_mock_semaphore_give(&ctx->completionSemaphore);
+    ctx->transfer_failed = false;
+    freertos_mock_semaphore_give(&ctx->completion_semaphore);
 }
 
 static void on_i2c_error(void *context)
 {
     I2CTestContext *ctx = (I2CTestContext *)context;
-    ctx->transferFailed = true;
-    freertos_mock_semaphore_give(&ctx->completionSemaphore);
+    ctx->transfer_failed = true;
+    freertos_mock_semaphore_give(&ctx->completion_semaphore);
 }
 
 static I2CHandlerOps make_ops(void)
@@ -121,9 +121,9 @@ static I2CHandlerConfig make_config(void)
 {
     I2CHandlerConfig config = {
         .trials = 5,
-        .blockingTimeoutMs = 100,
-        .tryAgainDelayMs = 10,
-        .dropBudgetMs = 50,
+        .blocking_timeout_ms = 100,
+        .try_again_delay_ms = 10,
+        .drop_budget_ms = 50,
     };
     return config;
 }
@@ -131,11 +131,11 @@ static I2CHandlerConfig make_config(void)
 static I2CTestContext make_context(void)
 {
     I2CTestContext ctx = {
-        .romTask = (void *)0xA,
-        .displayTask = (void *)0xB,
+        .rom_task = (void *)0xA,
+        .display_task = (void *)0xB,
     };
 
-    freertos_mock_semaphore_init(&ctx.completionSemaphore);
+    freertos_mock_semaphore_init(&ctx.completion_semaphore);
     return ctx;
 }
 
@@ -149,20 +149,20 @@ static void test_invalid_message_rejected_and_signaled(void)
     I2CHandlerConfig config = make_config();
 
     I2CHandlerMessage message = {
-        .sourceTask = (void *)0xDEAD,
-        .rxTxBar = false,
+        .source_task = (void *)0xDEAD,
+        .rx_tx_bar = false,
         .address = 0x3C,
         .payload = malloc(2),
         .items = 2,
-        .pFailed = &(bool){false},
+        .p_failed = &(bool){false},
     };
 
     I2CHandlerResult result = i2c_handler_process_message(&message, &config, &ops, &ctx);
 
     expect_eq_u32(I2C_HANDLER_RESULT_INVALID_MESSAGE, result, "invalid message result");
-    expect_true(*(message.pFailed), "invalid message marks failed");
-    expect_true(ctx.completionSignaled, "invalid message completion signal");
-    expect_eq_u32(1, ctx.freeCalls, "invalid tx payload freed");
+    expect_true(*(message.p_failed), "invalid message marks failed");
+    expect_true(ctx.completion_signaled, "invalid message completion signal");
+    expect_eq_u32(1, ctx.free_calls, "invalid tx payload freed");
 }
 
 static void test_device_not_ready_retries_until_budget_exhausted(void)
@@ -170,7 +170,7 @@ static void test_device_not_ready_retries_until_budget_exhausted(void)
     hal_mock_reset();
     freertos_mock_reset();
 
-    g_halMockState.i2c.nextReadyStatus = HAL_MOCK_STATUS_ERROR;
+    g_hal_mock_state.i2c.next_ready_status = HAL_MOCK_STATUS_ERROR;
 
     I2CTestContext ctx = make_context();
     I2CHandlerOps ops = make_ops();
@@ -178,21 +178,21 @@ static void test_device_not_ready_retries_until_budget_exhausted(void)
 
     bool failed = false;
     I2CHandlerMessage message = {
-        .sourceTask = ctx.romTask,
-        .rxTxBar = false,
+        .source_task = ctx.rom_task,
+        .rx_tx_bar = false,
         .address = 0x3C,
         .payload = malloc(1),
         .items = 1,
-        .pFailed = &failed,
+        .p_failed = &failed,
     };
 
     I2CHandlerResult result = i2c_handler_process_message(&message, &config, &ops, &ctx);
 
     expect_eq_u32(I2C_HANDLER_RESULT_DEVICE_NOT_READY, result, "device not ready result");
     expect_true(failed, "device not ready marks failed");
-    expect_true(ctx.completionSignaled, "device not ready completion signal");
-    expect_true(ctx.delayCalls > 0, "device not ready retries");
-    expect_eq_u32(1, ctx.freeCalls, "device not ready frees tx payload");
+    expect_true(ctx.completion_signaled, "device not ready completion signal");
+    expect_true(ctx.delay_calls > 0, "device not ready retries");
+    expect_eq_u32(1, ctx.free_calls, "device not ready frees tx payload");
 }
 
 static void test_transmit_success_clears_failed_and_frees_payload(void)
@@ -205,14 +205,14 @@ static void test_transmit_success_clears_failed_and_frees_payload(void)
     I2CHandlerConfig config = make_config();
 
     HalMockI2CCallbacks callbacks = {
-        .txComplete = on_i2c_tx_complete,
-        .rxComplete = on_i2c_rx_complete,
+        .tx_complete = on_i2c_tx_complete,
+        .rx_complete = on_i2c_rx_complete,
         .error = on_i2c_error,
         .context = &ctx,
     };
 
     hal_mock_set_i2c_callbacks(callbacks);
-    g_halMockState.i2c.autoInvokeTxComplete = true;
+    g_hal_mock_state.i2c.auto_invoke_tx_complete = true;
 
     bool failed = true;
     uint8_t *payload = malloc(3);
@@ -221,20 +221,20 @@ static void test_transmit_success_clears_failed_and_frees_payload(void)
     payload[2] = 3;
 
     I2CHandlerMessage message = {
-        .sourceTask = ctx.romTask,
-        .rxTxBar = false,
+        .source_task = ctx.rom_task,
+        .rx_tx_bar = false,
         .address = 0xA0,
         .payload = payload,
         .items = 3,
-        .pFailed = &failed,
+        .p_failed = &failed,
     };
 
     I2CHandlerResult result = i2c_handler_process_message(&message, &config, &ops, &ctx);
 
     expect_eq_u32(I2C_HANDLER_RESULT_SUCCESS, result, "tx success result");
     expect_true(!failed, "tx success clears failed");
-    expect_eq_u32(1, g_halMockState.i2c.txCount, "tx success transmit called");
-    expect_eq_u32(1, ctx.freeCalls, "tx success frees payload");
+    expect_eq_u32(1, g_hal_mock_state.i2c.tx_count, "tx success transmit called");
+    expect_eq_u32(1, ctx.free_calls, "tx success frees payload");
 }
 
 static void test_receive_error_sets_failed_without_free(void)
@@ -247,33 +247,33 @@ static void test_receive_error_sets_failed_without_free(void)
     I2CHandlerConfig config = make_config();
 
     HalMockI2CCallbacks callbacks = {
-        .txComplete = on_i2c_tx_complete,
-        .rxComplete = on_i2c_rx_complete,
+        .tx_complete = on_i2c_tx_complete,
+        .rx_complete = on_i2c_rx_complete,
         .error = on_i2c_error,
         .context = &ctx,
     };
 
     hal_mock_set_i2c_callbacks(callbacks);
-    g_halMockState.i2c.nextRxStatus = HAL_MOCK_STATUS_ERROR;
-    g_halMockState.i2c.autoInvokeError = true;
+    g_hal_mock_state.i2c.next_rx_status = HAL_MOCK_STATUS_ERROR;
+    g_hal_mock_state.i2c.auto_invoke_error = true;
 
     bool failed = false;
     uint8_t payload[4] = {0};
 
     I2CHandlerMessage message = {
-        .sourceTask = ctx.romTask,
-        .rxTxBar = true,
+        .source_task = ctx.rom_task,
+        .rx_tx_bar = true,
         .address = 0xA1,
         .payload = payload,
         .items = 4,
-        .pFailed = &failed,
+        .p_failed = &failed,
     };
 
     I2CHandlerResult result = i2c_handler_process_message(&message, &config, &ops, &ctx);
 
     expect_eq_u32(I2C_HANDLER_RESULT_TRANSFER_FAILED, result, "rx error result");
     expect_true(failed, "rx error marks failed");
-    expect_eq_u32(0, ctx.freeCalls, "rx path does not free payload");
+    expect_eq_u32(0, ctx.free_calls, "rx path does not free payload");
 }
 
 int main(void)

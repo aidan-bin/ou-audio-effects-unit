@@ -2,7 +2,7 @@
 
 #include <string.h>
 
-HalMockState g_halMockState;
+HalMockState g_hal_mock_state;
 
 static size_t cap_copy_size(size_t size)
 {
@@ -11,67 +11,67 @@ static size_t cap_copy_size(size_t size)
 
 void hal_mock_reset(void)
 {
-    memset(&g_halMockState, 0, sizeof(g_halMockState));
+    memset(&g_hal_mock_state, 0, sizeof(g_hal_mock_state));
 
-    g_halMockState.gpio.nextState = HAL_MOCK_GPIO_RESET;
+    g_hal_mock_state.gpio.next_state = HAL_MOCK_GPIO_RESET;
 
-    g_halMockState.i2c.nextReadyStatus = HAL_MOCK_STATUS_OK;
-    g_halMockState.i2c.nextTxStatus = HAL_MOCK_STATUS_OK;
-    g_halMockState.i2c.nextRxStatus = HAL_MOCK_STATUS_OK;
+    g_hal_mock_state.i2c.next_ready_status = HAL_MOCK_STATUS_OK;
+    g_hal_mock_state.i2c.next_tx_status = HAL_MOCK_STATUS_OK;
+    g_hal_mock_state.i2c.next_rx_status = HAL_MOCK_STATUS_OK;
 
-    g_halMockState.adc.nextStartStatus = HAL_MOCK_STATUS_OK;
-    g_halMockState.adc.nextStopStatus = HAL_MOCK_STATUS_OK;
+    g_hal_mock_state.adc.next_start_status = HAL_MOCK_STATUS_OK;
+    g_hal_mock_state.adc.next_stop_status = HAL_MOCK_STATUS_OK;
 
-    g_halMockState.dac.nextStartStatus = HAL_MOCK_STATUS_OK;
-    g_halMockState.dac.nextStopStatus = HAL_MOCK_STATUS_OK;
-    g_halMockState.dac.nextSetValueStatus = HAL_MOCK_STATUS_OK;
+    g_hal_mock_state.dac.next_start_status = HAL_MOCK_STATUS_OK;
+    g_hal_mock_state.dac.next_stop_status = HAL_MOCK_STATUS_OK;
+    g_hal_mock_state.dac.next_set_value_status = HAL_MOCK_STATUS_OK;
 }
 
 void hal_mock_set_i2c_callbacks(HalMockI2CCallbacks callbacks)
 {
-    g_halMockState.i2c.callbacks = callbacks;
+    g_hal_mock_state.i2c.callbacks = callbacks;
 }
 
 HalMockGpioState hal_mock_gpio_read_pin(uint16_t pin)
 {
-    g_halMockState.gpio.readCount++;
-    g_halMockState.gpio.lastPin = pin;
-    return g_halMockState.gpio.nextState;
+    g_hal_mock_state.gpio.read_count++;
+    g_hal_mock_state.gpio.last_pin = pin;
+    return g_hal_mock_state.gpio.next_state;
 }
 
-HalMockStatus hal_mock_i2c_is_device_ready(uint16_t address, uint32_t trials, uint32_t timeoutMs)
+HalMockStatus hal_mock_i2c_is_device_ready(uint16_t address, uint32_t trials, uint32_t timeout_ms)
 {
-    g_halMockState.i2c.isReadyCount++;
-    g_halMockState.i2c.lastReadyAddress = address;
-    g_halMockState.i2c.lastReadyTrials = trials;
-    g_halMockState.i2c.lastReadyTimeoutMs = timeoutMs;
-    return g_halMockState.i2c.nextReadyStatus;
+    g_hal_mock_state.i2c.is_ready_count++;
+    g_hal_mock_state.i2c.last_ready_address = address;
+    g_hal_mock_state.i2c.last_ready_trials = trials;
+    g_hal_mock_state.i2c.last_ready_timeout_ms = timeout_ms;
+    return g_hal_mock_state.i2c.next_ready_status;
 }
 
 HalMockStatus hal_mock_i2c_master_transmit_dma(uint16_t address, const uint8_t *data, size_t size)
 {
-    g_halMockState.i2c.txCount++;
-    g_halMockState.i2c.lastTxAddress = address;
-    g_halMockState.i2c.lastTxSize = size;
+    g_hal_mock_state.i2c.tx_count++;
+    g_hal_mock_state.i2c.last_tx_address = address;
+    g_hal_mock_state.i2c.last_tx_size = size;
 
-    size_t copySize = cap_copy_size(size);
-    if (copySize > 0 && data != NULL)
+    size_t copy_size = cap_copy_size(size);
+    if (copy_size > 0 && data != NULL)
     {
-        memcpy(g_halMockState.i2c.lastTxBytes, data, copySize);
+        memcpy(g_hal_mock_state.i2c.last_tx_bytes, data, copy_size);
     }
 
-    HalMockStatus status = g_halMockState.i2c.nextTxStatus;
+    HalMockStatus status = g_hal_mock_state.i2c.next_tx_status;
 
-    if (status == HAL_MOCK_STATUS_OK && g_halMockState.i2c.autoInvokeTxComplete &&
-        g_halMockState.i2c.callbacks.txComplete != NULL)
+    if (status == HAL_MOCK_STATUS_OK && g_hal_mock_state.i2c.auto_invoke_tx_complete &&
+        g_hal_mock_state.i2c.callbacks.tx_complete != NULL)
     {
-        g_halMockState.i2c.callbacks.txComplete(g_halMockState.i2c.callbacks.context);
+        g_hal_mock_state.i2c.callbacks.tx_complete(g_hal_mock_state.i2c.callbacks.context);
     }
 
-    if (status != HAL_MOCK_STATUS_OK && g_halMockState.i2c.autoInvokeError &&
-        g_halMockState.i2c.callbacks.error != NULL)
+    if (status != HAL_MOCK_STATUS_OK && g_hal_mock_state.i2c.auto_invoke_error &&
+        g_hal_mock_state.i2c.callbacks.error != NULL)
     {
-        g_halMockState.i2c.callbacks.error(g_halMockState.i2c.callbacks.context);
+        g_hal_mock_state.i2c.callbacks.error(g_hal_mock_state.i2c.callbacks.context);
     }
 
     return status;
@@ -79,28 +79,28 @@ HalMockStatus hal_mock_i2c_master_transmit_dma(uint16_t address, const uint8_t *
 
 HalMockStatus hal_mock_i2c_master_receive_dma(uint16_t address, uint8_t *data, size_t size)
 {
-    g_halMockState.i2c.rxCount++;
-    g_halMockState.i2c.lastRxAddress = address;
-    g_halMockState.i2c.lastRxSize = size;
+    g_hal_mock_state.i2c.rx_count++;
+    g_hal_mock_state.i2c.last_rx_address = address;
+    g_hal_mock_state.i2c.last_rx_size = size;
 
-    size_t copySize = cap_copy_size(size);
-    if (copySize > 0 && data != NULL)
+    size_t copy_size = cap_copy_size(size);
+    if (copy_size > 0 && data != NULL)
     {
-        memcpy(data, g_halMockState.i2c.nextRxBytes, copySize);
+        memcpy(data, g_hal_mock_state.i2c.next_rx_bytes, copy_size);
     }
 
-    HalMockStatus status = g_halMockState.i2c.nextRxStatus;
+    HalMockStatus status = g_hal_mock_state.i2c.next_rx_status;
 
-    if (status == HAL_MOCK_STATUS_OK && g_halMockState.i2c.autoInvokeRxComplete &&
-        g_halMockState.i2c.callbacks.rxComplete != NULL)
+    if (status == HAL_MOCK_STATUS_OK && g_hal_mock_state.i2c.auto_invoke_rx_complete &&
+        g_hal_mock_state.i2c.callbacks.rx_complete != NULL)
     {
-        g_halMockState.i2c.callbacks.rxComplete(g_halMockState.i2c.callbacks.context);
+        g_hal_mock_state.i2c.callbacks.rx_complete(g_hal_mock_state.i2c.callbacks.context);
     }
 
-    if (status != HAL_MOCK_STATUS_OK && g_halMockState.i2c.autoInvokeError &&
-        g_halMockState.i2c.callbacks.error != NULL)
+    if (status != HAL_MOCK_STATUS_OK && g_hal_mock_state.i2c.auto_invoke_error &&
+        g_hal_mock_state.i2c.callbacks.error != NULL)
     {
-        g_halMockState.i2c.callbacks.error(g_halMockState.i2c.callbacks.context);
+        g_hal_mock_state.i2c.callbacks.error(g_hal_mock_state.i2c.callbacks.context);
     }
 
     return status;
@@ -108,35 +108,35 @@ HalMockStatus hal_mock_i2c_master_receive_dma(uint16_t address, uint8_t *data, s
 
 HalMockStatus hal_mock_adc_start_dma(uint16_t *buffer, size_t length)
 {
-    g_halMockState.adc.startDmaCount++;
-    g_halMockState.adc.lastStartBuffer = buffer;
-    g_halMockState.adc.lastStartLength = length;
-    return g_halMockState.adc.nextStartStatus;
+    g_hal_mock_state.adc.start_dma_count++;
+    g_hal_mock_state.adc.last_start_buffer = buffer;
+    g_hal_mock_state.adc.last_start_length = length;
+    return g_hal_mock_state.adc.next_start_status;
 }
 
 HalMockStatus hal_mock_adc_stop_dma(void)
 {
-    g_halMockState.adc.stopDmaCount++;
-    return g_halMockState.adc.nextStopStatus;
+    g_hal_mock_state.adc.stop_dma_count++;
+    return g_hal_mock_state.adc.next_stop_status;
 }
 
 HalMockStatus hal_mock_dac_start_dma(const uint16_t *buffer, size_t length)
 {
-    g_halMockState.dac.startDmaCount++;
-    g_halMockState.dac.lastStartBuffer = buffer;
-    g_halMockState.dac.lastStartLength = length;
-    return g_halMockState.dac.nextStartStatus;
+    g_hal_mock_state.dac.start_dma_count++;
+    g_hal_mock_state.dac.last_start_buffer = buffer;
+    g_hal_mock_state.dac.last_start_length = length;
+    return g_hal_mock_state.dac.next_start_status;
 }
 
 HalMockStatus hal_mock_dac_stop_dma(void)
 {
-    g_halMockState.dac.stopDmaCount++;
-    return g_halMockState.dac.nextStopStatus;
+    g_hal_mock_state.dac.stop_dma_count++;
+    return g_hal_mock_state.dac.next_stop_status;
 }
 
 HalMockStatus hal_mock_dac_set_value(uint16_t value)
 {
-    g_halMockState.dac.setValueCount++;
-    g_halMockState.dac.lastValue = value;
-    return g_halMockState.dac.nextSetValueStatus;
+    g_hal_mock_state.dac.set_value_count++;
+    g_hal_mock_state.dac.last_value = value;
+    return g_hal_mock_state.dac.next_set_value_status;
 }

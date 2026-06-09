@@ -10,28 +10,28 @@
 typedef struct
 {
     EffectsPipeline *pipeline;
-    volatile EffectsState *effectsState;
-    volatile EffectsParams *effectsParams;
+    volatile EffectsState *effects_state;
+    volatile EffectsParams *effects_params;
 
-    uint16_t *adcBufA;
-    uint16_t *adcBufB;
-    uint16_t *dacBufA;
-    uint16_t *dacBufB;
-    uint16_t *delaySamplesBuf;
+    uint16_t *adc_buf_a;
+    uint16_t *adc_buf_b;
+    uint16_t *dac_buf_a;
+    uint16_t *dac_buf_b;
+    uint16_t *delay_samples_buf;
 
-    size_t sampleBufLen;
-    size_t delaySamplesLen;
+    size_t sample_buf_len;
+    size_t delay_samples_len;
 
-    uint32_t samplingPeriodUs;
-    uint32_t processingSlackMs;
+    uint32_t sampling_period_us;
+    uint32_t processing_slack_ms;
 } EffectsTaskContext;
 
 typedef struct
 {
-    bool (*wait_for_adc_buffer)(uint32_t timeoutTicks, uint16_t **bufPtr, void *context);
-    bool (*wait_for_dac_buffer)(uint32_t timeoutTicks, uint16_t **bufPtr, void *context);
+    bool (*wait_for_adc_buffer)(uint32_t timeout_ticks, uint16_t **buf_ptr, void *context);
+    bool (*wait_for_dac_buffer)(uint32_t timeout_ticks, uint16_t **buf_ptr, void *context);
 
-    bool (*dma_copy)(const uint16_t *src, uint16_t *dst, size_t count, uint32_t timeoutTicks,
+    bool (*dma_copy)(const uint16_t *src, uint16_t *dst, size_t count, uint32_t timeout_ticks,
                      void *context);
 
     void *(*alloc)(size_t size, void *context);
@@ -53,6 +53,6 @@ typedef struct
     void *context;
 } EffectsTaskOps;
 
-bool effects_task_step(const EffectsTaskContext *taskContext, const EffectsTaskOps *ops);
+bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTaskOps *ops);
 
 #endif

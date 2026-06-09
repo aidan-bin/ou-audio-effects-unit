@@ -62,7 +62,7 @@ void peripheral_on_gpio_exti(const PeripheralDispatchContext *dispatch,
         return;
     }
 
-    ops->task_notify_from_isr(dispatch->btnHandlerTaskHandle, (uint32_t)gpio_pin, ops->context);
+    ops->task_notify_from_isr(dispatch->btn_handler_task_handle, (uint32_t)gpio_pin, ops->context);
 }
 
 void peripheral_on_adc_half_complete(const PeripheralDispatchContext *dispatch,
@@ -73,10 +73,10 @@ void peripheral_on_adc_half_complete(const PeripheralDispatchContext *dispatch,
         return;
     }
 
-    if (adc_handle == dispatch->effectsAdcHandle)
+    if (adc_handle == dispatch->effects_adc_handle)
     {
-        ops->task_notify_from_isr(dispatch->effectsTaskHandle,
-                                  (uint32_t)(uintptr_t)dispatch->adcBufA, ops->context);
+        ops->task_notify_from_isr(dispatch->effects_task_handle,
+                                  (uint32_t)(uintptr_t)dispatch->adc_buf_a, ops->context);
     }
 }
 
@@ -88,7 +88,7 @@ void peripheral_on_adc_complete(const PeripheralDispatchContext *dispatch,
         return;
     }
 
-    if (adc_handle == dispatch->potAdcHandle)
+    if (adc_handle == dispatch->pot_adc_handle)
     {
         if (ops->adc_get_value == NULL)
         {
@@ -96,14 +96,14 @@ void peripheral_on_adc_complete(const PeripheralDispatchContext *dispatch,
         }
 
         uint32_t value = ops->adc_get_value(adc_handle, ops->context);
-        ops->task_notify_from_isr(dispatch->potHandlerTaskHandle, value, ops->context);
+        ops->task_notify_from_isr(dispatch->pot_handler_task_handle, value, ops->context);
         return;
     }
 
-    if (adc_handle == dispatch->effectsAdcHandle)
+    if (adc_handle == dispatch->effects_adc_handle)
     {
-        ops->task_notify_from_isr(dispatch->effectsTaskHandle,
-                                  (uint32_t)(uintptr_t)dispatch->adcBufB, ops->context);
+        ops->task_notify_from_isr(dispatch->effects_task_handle,
+                                  (uint32_t)(uintptr_t)dispatch->adc_buf_b, ops->context);
     }
 }
 
@@ -117,7 +117,7 @@ void peripheral_on_dac_half_complete(const PeripheralDispatchContext *dispatch,
         return;
     }
 
-    ops->task_notify_from_isr(dispatch->effectsTaskHandle, (uint32_t)(uintptr_t)dispatch->dacBufA,
+    ops->task_notify_from_isr(dispatch->effects_task_handle, (uint32_t)(uintptr_t)dispatch->dac_buf_a,
                               ops->context);
 }
 
@@ -131,7 +131,7 @@ void peripheral_on_dac_complete(const PeripheralDispatchContext *dispatch,
         return;
     }
 
-    ops->task_notify_from_isr(dispatch->effectsTaskHandle, (uint32_t)(uintptr_t)dispatch->dacBufB,
+    ops->task_notify_from_isr(dispatch->effects_task_handle, (uint32_t)(uintptr_t)dispatch->dac_buf_b,
                               ops->context);
 }
 
@@ -143,9 +143,9 @@ void peripheral_on_i2c_tx_complete(const PeripheralDispatchContext *dispatch,
         return;
     }
 
-    if (i2c_handle == dispatch->i2cHandle)
+    if (i2c_handle == dispatch->i2c_handle)
     {
-        ops->i2c_signal_completion_from_isr(dispatch->i2cTaskSupportContext, false, ops->context);
+        ops->i2c_signal_completion_from_isr(dispatch->i2c_task_support_context, false, ops->context);
     }
 }
 
@@ -157,9 +157,9 @@ void peripheral_on_i2c_rx_complete(const PeripheralDispatchContext *dispatch,
         return;
     }
 
-    if (i2c_handle == dispatch->i2cHandle)
+    if (i2c_handle == dispatch->i2c_handle)
     {
-        ops->i2c_signal_completion_from_isr(dispatch->i2cTaskSupportContext, false, ops->context);
+        ops->i2c_signal_completion_from_isr(dispatch->i2c_task_support_context, false, ops->context);
     }
 }
 
@@ -171,10 +171,10 @@ void peripheral_on_i2c_error(const PeripheralDispatchContext *dispatch,
         return;
     }
 
-    if (i2c_handle == dispatch->i2cHandle)
+    if (i2c_handle == dispatch->i2c_handle)
     {
         (void)log_write(LOG_LEVEL_WARN, "i2c error callback");
-        ops->i2c_signal_completion_from_isr(dispatch->i2cTaskSupportContext, true, ops->context);
+        ops->i2c_signal_completion_from_isr(dispatch->i2c_task_support_context, true, ops->context);
     }
 }
 
@@ -186,10 +186,10 @@ void peripheral_on_i2c_abort_complete(const PeripheralDispatchContext *dispatch,
         return;
     }
 
-    if (i2c_handle == dispatch->i2cHandle)
+    if (i2c_handle == dispatch->i2c_handle)
     {
         (void)log_write(LOG_LEVEL_WARN, "i2c abort callback");
-        ops->i2c_signal_completion_from_isr(dispatch->i2cTaskSupportContext, true, ops->context);
+        ops->i2c_signal_completion_from_isr(dispatch->i2c_task_support_context, true, ops->context);
     }
 }
 
@@ -201,8 +201,8 @@ void peripheral_on_dma_complete(const PeripheralDispatchContext *dispatch,
         return;
     }
 
-    if (dma_handle == dispatch->memToMemDmaHandle)
+    if (dma_handle == dispatch->mem_to_mem_dma_handle)
     {
-        ops->semaphore_give_from_isr(dispatch->delaySamplesDmaSemaphoreHandle, ops->context);
+        ops->semaphore_give_from_isr(dispatch->delay_samples_dma_semaphore_handle, ops->context);
     }
 }

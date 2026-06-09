@@ -2,21 +2,21 @@
 
 #include <string.h>
 
-FreeRtosMockState g_freeRtosMockState;
+FreeRtosMockState g_free_rtos_mock_state;
 
-static bool queue_config_valid(size_t itemSize, size_t capacity)
+static bool queue_config_valid(size_t item_size, size_t capacity)
 {
-    return itemSize > 0 && itemSize <= FREERTOS_MOCK_MAX_ITEM_SIZE && capacity > 0 &&
+    return item_size > 0 && item_size <= FREERTOS_MOCK_MAX_ITEM_SIZE && capacity > 0 &&
            capacity <= FREERTOS_MOCK_MAX_QUEUE_CAPACITY;
 }
 
 void freertos_mock_reset(void)
 {
-    memset(&g_freeRtosMockState, 0, sizeof(g_freeRtosMockState));
+    memset(&g_free_rtos_mock_state, 0, sizeof(g_free_rtos_mock_state));
 
-    freertos_mock_semaphore_init(&g_freeRtosMockState.semaphore);
-    freertos_mock_notify_init(&g_freeRtosMockState.notify);
-    freertos_mock_queue_init(&g_freeRtosMockState.queue, sizeof(uint32_t),
+    freertos_mock_semaphore_init(&g_free_rtos_mock_state.semaphore);
+    freertos_mock_notify_init(&g_free_rtos_mock_state.notify);
+    freertos_mock_queue_init(&g_free_rtos_mock_state.queue, sizeof(uint32_t),
                              FREERTOS_MOCK_MAX_QUEUE_CAPACITY);
 }
 
@@ -37,7 +37,7 @@ void freertos_mock_semaphore_give(FreeRtosMockBinarySemaphore *semaphore)
         return;
     }
 
-    semaphore->giveCount++;
+    semaphore->give_count++;
     semaphore->available = true;
 }
 
@@ -48,7 +48,7 @@ FreeRtosMockStatus freertos_mock_semaphore_take(FreeRtosMockBinarySemaphore *sem
         return FREERTOS_MOCK_ERROR;
     }
 
-    semaphore->takeCount++;
+    semaphore->take_count++;
 
     if (!semaphore->available)
     {
@@ -59,53 +59,53 @@ FreeRtosMockStatus freertos_mock_semaphore_take(FreeRtosMockBinarySemaphore *sem
     return FREERTOS_MOCK_OK;
 }
 
-void freertos_mock_notify_init(FreeRtosMockTaskNotify *notifyState)
+void freertos_mock_notify_init(FreeRtosMockTaskNotify *notify_state)
 {
-    if (notifyState == NULL)
+    if (notify_state == NULL)
     {
         return;
     }
 
-    memset(notifyState, 0, sizeof(*notifyState));
+    memset(notify_state, 0, sizeof(*notify_state));
 }
 
-void freertos_mock_task_notify(FreeRtosMockTaskNotify *notifyState, uint32_t value)
+void freertos_mock_task_notify(FreeRtosMockTaskNotify *notify_state, uint32_t value)
 {
-    if (notifyState == NULL)
+    if (notify_state == NULL)
     {
         return;
     }
 
-    notifyState->notifySendCount++;
-    notifyState->pending = true;
-    notifyState->lastValue = value;
+    notify_state->notify_send_count++;
+    notify_state->pending = true;
+    notify_state->last_value = value;
 }
 
-FreeRtosMockStatus freertos_mock_task_notify_wait(FreeRtosMockTaskNotify *notifyState,
-                                                  uint32_t *valueOut)
+FreeRtosMockStatus freertos_mock_task_notify_wait(FreeRtosMockTaskNotify *notify_state,
+                                                  uint32_t *value_out)
 {
-    if (notifyState == NULL)
+    if (notify_state == NULL)
     {
         return FREERTOS_MOCK_ERROR;
     }
 
-    notifyState->notifyWaitCount++;
+    notify_state->notify_wait_count++;
 
-    if (!notifyState->pending)
+    if (!notify_state->pending)
     {
         return FREERTOS_MOCK_TIMEOUT;
     }
 
-    if (valueOut != NULL)
+    if (value_out != NULL)
     {
-        *valueOut = notifyState->lastValue;
+        *value_out = notify_state->last_value;
     }
 
-    notifyState->pending = false;
+    notify_state->pending = false;
     return FREERTOS_MOCK_OK;
 }
 
-void freertos_mock_queue_init(FreeRtosMockQueue *queue, size_t itemSize, size_t capacity)
+void freertos_mock_queue_init(FreeRtosMockQueue *queue, size_t item_size, size_t capacity)
 {
     if (queue == NULL)
     {
@@ -114,50 +114,50 @@ void freertos_mock_queue_init(FreeRtosMockQueue *queue, size_t itemSize, size_t 
 
     memset(queue, 0, sizeof(*queue));
 
-    if (!queue_config_valid(itemSize, capacity))
+    if (!queue_config_valid(item_size, capacity))
     {
         return;
     }
 
-    queue->itemSize = itemSize;
+    queue->item_size = item_size;
     queue->capacity = capacity;
 }
 
 FreeRtosMockStatus freertos_mock_queue_send(FreeRtosMockQueue *queue, const void *item)
 {
-    if (queue == NULL || item == NULL || queue->itemSize == 0 || queue->capacity == 0)
+    if (queue == NULL || item == NULL || queue->item_size == 0 || queue->capacity == 0)
     {
         return FREERTOS_MOCK_ERROR;
     }
 
-    queue->sendCount++;
+    queue->send_count++;
 
     if (queue->count >= queue->capacity)
     {
         return FREERTOS_MOCK_TIMEOUT;
     }
 
-    memcpy(queue->storage[queue->tail], item, queue->itemSize);
+    memcpy(queue->storage[queue->tail], item, queue->item_size);
     queue->tail = (queue->tail + 1U) % queue->capacity;
     queue->count++;
     return FREERTOS_MOCK_OK;
 }
 
-FreeRtosMockStatus freertos_mock_queue_receive(FreeRtosMockQueue *queue, void *itemOut)
+FreeRtosMockStatus freertos_mock_queue_receive(FreeRtosMockQueue *queue, void *item_out)
 {
-    if (queue == NULL || itemOut == NULL || queue->itemSize == 0 || queue->capacity == 0)
+    if (queue == NULL || item_out == NULL || queue->item_size == 0 || queue->capacity == 0)
     {
         return FREERTOS_MOCK_ERROR;
     }
 
-    queue->receiveCount++;
+    queue->receive_count++;
 
     if (queue->count == 0)
     {
         return FREERTOS_MOCK_TIMEOUT;
     }
 
-    memcpy(itemOut, queue->storage[queue->head], queue->itemSize);
+    memcpy(item_out, queue->storage[queue->head], queue->item_size);
     queue->head = (queue->head + 1U) % queue->capacity;
     queue->count--;
     return FREERTOS_MOCK_OK;

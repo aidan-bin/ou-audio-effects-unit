@@ -11,8 +11,8 @@ static void test_effects_state_order_valid_default_order(void)
 {
     EffectsState state = {
         .ordered = {OVERDRIVE, ECHO, COMPRESSION},
-        .isEnabled = {true, false, true},
-        .activeEffectSelection = 1,
+        .is_enabled = {true, false, true},
+        .active_effect_selection = 1,
     };
 
     expect_true(effects_state_order_valid(&state), "order valid default");
@@ -22,8 +22,8 @@ static void test_effects_state_normalize_invalid_order_resets(void)
 {
     EffectsState state = {
         .ordered = {OVERDRIVE, OVERDRIVE, COMPRESSION},
-        .isEnabled = {true, true, true},
-        .activeEffectSelection = NUM_EFFECTS,
+        .is_enabled = {true, true, true},
+        .active_effect_selection = NUM_EFFECTS,
     };
 
     effects_state_normalize(&state);
@@ -31,15 +31,15 @@ static void test_effects_state_normalize_invalid_order_resets(void)
     expect_eq_u8(OVERDRIVE, state.ordered[0], "normalize order[0]");
     expect_eq_u8(ECHO, state.ordered[1], "normalize order[1]");
     expect_eq_u8(COMPRESSION, state.ordered[2], "normalize order[2]");
-    expect_eq_u8(0, state.activeEffectSelection, "normalize active selection");
+    expect_eq_u8(0, state.active_effect_selection, "normalize active selection");
 }
 
 static void test_effects_state_get_active_effect_invalid_state_fails(void)
 {
     EffectsState state = {
         .ordered = {OVERDRIVE, OVERDRIVE, COMPRESSION},
-        .isEnabled = {true, true, true},
-        .activeEffectSelection = 0,
+        .is_enabled = {true, true, true},
+        .active_effect_selection = 0,
     };
 
     Effect active = OVERDRIVE;
@@ -51,8 +51,8 @@ static void test_effects_state_get_active_effect_after_normalize(void)
 {
     EffectsState state = {
         .ordered = {OVERDRIVE, ECHO, COMPRESSION},
-        .isEnabled = {true, true, true},
-        .activeEffectSelection = 2,
+        .is_enabled = {true, true, true},
+        .active_effect_selection = 2,
     };
 
     Effect active = OVERDRIVE;
@@ -84,28 +84,28 @@ static EffectsParams test_params_template(void)
     EffectsParams params;
     memset(&params, 0, sizeof(params));
 
-    params.overdriveMin.gain = 10;
-    params.overdriveMax.gain = 110;
-    params.overdriveMin.level = 100;
-    params.overdriveMax.level = 500;
-    params.overdriveMin.tone = 50;
-    params.overdriveMax.tone = 250;
-    params.overdriveMin.mix = 20;
-    params.overdriveMax.mix = 120;
+    params.overdrive_min.gain = 10;
+    params.overdrive_max.gain = 110;
+    params.overdrive_min.level = 100;
+    params.overdrive_max.level = 500;
+    params.overdrive_min.tone = 50;
+    params.overdrive_max.tone = 250;
+    params.overdrive_min.mix = 20;
+    params.overdrive_max.mix = 120;
 
-    params.echoMin.pre_delay = 1;
-    params.echoMax.pre_delay = 9;
-    params.echoMin.density = 5;
-    params.echoMax.density = 25;
-    params.echoMin.attack = 7;
-    params.echoMax.attack = 27;
-    params.echoMin.decay = 3;
-    params.echoMax.decay = 23;
+    params.echo_min.pre_delay = 1;
+    params.echo_max.pre_delay = 9;
+    params.echo_min.density = 5;
+    params.echo_max.density = 25;
+    params.echo_min.attack = 7;
+    params.echo_max.attack = 27;
+    params.echo_min.decay = 3;
+    params.echo_max.decay = 23;
 
-    params.compressionMin.threshold = 11;
-    params.compressionMax.threshold = 211;
-    params.compressionMin.ratio = 13;
-    params.compressionMax.ratio = 213;
+    params.compression_min.threshold = 11;
+    params.compression_max.threshold = 211;
+    params.compression_min.ratio = 13;
+    params.compression_max.ratio = 213;
 
     return params;
 }
@@ -114,22 +114,22 @@ static void test_switch_mapping_uses_effect_order(void)
 {
     EffectsState state = {
         .ordered = {ECHO, COMPRESSION, OVERDRIVE},
-        .isEnabled = {false, false, false},
-        .activeEffectSelection = 0,
+        .is_enabled = {false, false, false},
+        .active_effect_selection = 0,
     };
 
     effects_state_apply_switches(&state, true, false, true);
 
-    expect_true(state.isEnabled[ECHO], "switch A maps to ordered[0]");
-    expect_false(state.isEnabled[COMPRESSION], "switch B maps to ordered[1]");
-    expect_true(state.isEnabled[OVERDRIVE], "switch C maps to ordered[2]");
+    expect_true(state.is_enabled[ECHO], "switch A maps to ordered[0]");
+    expect_false(state.is_enabled[COMPRESSION], "switch B maps to ordered[1]");
+    expect_true(state.is_enabled[OVERDRIVE], "switch C maps to ordered[2]");
 }
 
 static void test_overdrive_pot_updates_target_parameter(void)
 {
     EffectsParams params = test_params_template();
     size_t expected_level =
-        map_adc_to_param(255, params.overdriveMin.level, params.overdriveMax.level, 255);
+        map_adc_to_param(255, params.overdrive_min.level, params.overdrive_max.level, 255);
 
     expect_true(effects_params_apply_pot_sample(&params, OVERDRIVE, 1, 255, 255),
                 "overdrive pot apply returns true");

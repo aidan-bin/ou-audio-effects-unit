@@ -10,65 +10,65 @@ int failures = 0;
 
 typedef struct
 {
-    bool switchValues[3];
-    EffectsState sourceState;
+    bool switch_values[3];
+    EffectsState source_state;
 
-    bool readSwitchSucceeds;
-    bool readStateSucceeds;
-    bool writeStateSucceeds;
+    bool read_switch_succeeds;
+    bool read_state_succeeds;
+    bool write_state_succeeds;
 
-    uint32_t writeCalls;
-    EffectsState writtenState;
+    uint32_t write_calls;
+    EffectsState written_state;
 
-    uint32_t sleepCalls;
-    uint32_t lastSleepMs;
+    uint32_t sleep_calls;
+    uint32_t last_sleep_ms;
 } SwitchTaskTestState;
 
-static bool read_switch(uint8_t index, bool *enabledOut, void *context)
+static bool read_switch(uint8_t index, bool *enabled_out, void *context)
 {
     SwitchTaskTestState *state = (SwitchTaskTestState *)context;
 
-    if (!state->readSwitchSucceeds || enabledOut == NULL || index >= 3)
+    if (!state->read_switch_succeeds || enabled_out == NULL || index >= 3)
     {
         return false;
     }
 
-    *enabledOut = state->switchValues[index];
+    *enabled_out = state->switch_values[index];
     return true;
 }
 
-static bool read_state(EffectsState *stateOut, void *context)
+static bool read_state(EffectsState *state_out, void *context)
 {
     SwitchTaskTestState *state = (SwitchTaskTestState *)context;
 
-    if (!state->readStateSucceeds || stateOut == NULL)
+    if (!state->read_state_succeeds || state_out == NULL)
     {
         return false;
     }
 
-    *stateOut = state->sourceState;
+    *state_out = state->source_state;
     return true;
 }
 
-static bool write_state(const EffectsState *stateIn, void *context)
+static bool write_state(const EffectsState *state_in, void *context)
 {
     SwitchTaskTestState *state = (SwitchTaskTestState *)context;
 
-    if (!state->writeStateSucceeds || stateIn == NULL)
+    if (!state->write_state_succeeds || state_in == NULL)
     {
         return false;
     }
 
-    state->writeCalls++;
-    state->writtenState = *stateIn;
+    state->write_calls++;
+    state->written_state = *state_in;
     return true;
 }
 
 static void sleep_ms(uint32_t ms, void *context)
 {
     SwitchTaskTestState *state = (SwitchTaskTestState *)context;
-    state->sleepCalls++;
-    state->lastSleepMs = ms;
+    state->sleep_calls++;
+    state->last_sleep_ms = ms;
 }
 
 static SwitchTaskOps make_ops(SwitchTaskTestState *state)
@@ -87,7 +87,7 @@ static SwitchTaskOps make_ops(SwitchTaskTestState *state)
 static SwitchTaskContext make_context(void)
 {
     SwitchTaskContext context = {
-        .pollingFrequencyMs = 5,
+        .polling_frequency_ms = 5,
     };
 
     return context;
@@ -96,36 +96,36 @@ static SwitchTaskContext make_context(void)
 static void init_state(SwitchTaskTestState *state)
 {
     memset(state, 0, sizeof(*state));
-    state->readSwitchSucceeds = true;
-    state->readStateSucceeds = true;
-    state->writeStateSucceeds = true;
+    state->read_switch_succeeds = true;
+    state->read_state_succeeds = true;
+    state->write_state_succeeds = true;
 
-    effects_state_set_default_order(&state->sourceState);
-    state->sourceState.activeEffectSelection = 1;
+    effects_state_set_default_order(&state->source_state);
+    state->source_state.active_effect_selection = 1;
 }
 
 static void test_switch_mapping_and_sleep(void)
 {
     SwitchTaskTestState state;
     init_state(&state);
-    state.switchValues[0] = true;
-    state.switchValues[1] = false;
-    state.switchValues[2] = true;
+    state.switch_values[0] = true;
+    state.switch_values[1] = false;
+    state.switch_values[2] = true;
 
     SwitchTaskContext context = make_context();
     SwitchTaskOps ops = make_ops(&state);
 
     bool ok = switch_task_step(&context, &ops);
     expect_true(ok, "switch step succeeds");
-    expect_eq_u32(1, state.writeCalls, "state written once");
-    expect_true(state.writtenState.isEnabled[state.writtenState.ordered[0]],
+    expect_eq_u32(1, state.write_calls, "state written once");
+    expect_true(state.written_state.is_enabled[state.written_state.ordered[0]],
                 "switch A maps to first ordered effect");
-    expect_true(!state.writtenState.isEnabled[state.writtenState.ordered[1]],
+    expect_true(!state.written_state.is_enabled[state.written_state.ordered[1]],
                 "switch B maps to second ordered effect");
-    expect_true(state.writtenState.isEnabled[state.writtenState.ordered[2]],
+    expect_true(state.written_state.is_enabled[state.written_state.ordered[2]],
                 "switch C maps to third ordered effect");
-    expect_eq_u32(1, state.sleepCalls, "sleep called once");
-    expect_eq_u32(5, state.lastSleepMs, "sleep uses polling frequency");
+    expect_eq_u32(1, state.sleep_calls, "sleep called once");
+    expect_eq_u32(5, state.last_sleep_ms, "sleep uses polling frequency");
 }
 
 static void test_state_is_normalized_before_write(void)
@@ -133,19 +133,19 @@ static void test_state_is_normalized_before_write(void)
     SwitchTaskTestState state;
     init_state(&state);
 
-    state.sourceState.ordered[0] = (Effect)99;
-    state.sourceState.ordered[1] = ECHO;
-    state.sourceState.ordered[2] = ECHO;
-    state.sourceState.activeEffectSelection = 99;
+    state.source_state.ordered[0] = (Effect)99;
+    state.source_state.ordered[1] = ECHO;
+    state.source_state.ordered[2] = ECHO;
+    state.source_state.active_effect_selection = 99;
 
     SwitchTaskContext context = make_context();
     SwitchTaskOps ops = make_ops(&state);
 
     bool ok = switch_task_step(&context, &ops);
     expect_true(ok, "switch step succeeds with invalid source state");
-    expect_eq_u32(1, state.writeCalls, "normalized state written");
-    expect_true(effects_state_order_valid(&state.writtenState), "written state order normalized");
-    expect_true(state.writtenState.activeEffectSelection < NUM_EFFECTS,
+    expect_eq_u32(1, state.write_calls, "normalized state written");
+    expect_true(effects_state_order_valid(&state.written_state), "written state order normalized");
+    expect_true(state.written_state.active_effect_selection < NUM_EFFECTS,
                 "active selection normalized");
 }
 

@@ -24,8 +24,8 @@ static void test_encode_write_and_decode_round_trip(void)
 {
     EffectsState state = {
         .ordered = {ECHO, COMPRESSION, OVERDRIVE},
-        .isEnabled = {true, false, true},
-        .activeEffectSelection = 2,
+        .is_enabled = {true, false, true},
+        .active_effect_selection = 2,
     };
 
     EffectsParams params;
@@ -39,37 +39,37 @@ static void test_encode_write_and_decode_round_trip(void)
     expect_true(rom_handler_encode_write_payload(0x0040, &state, &params, payload, sizeof(payload)),
                 "encode write payload success");
 
-    EffectsState decodedState;
-    EffectsParams decodedParams;
-    memset(&decodedState, 0, sizeof(decodedState));
-    memset(&decodedParams, 0, sizeof(decodedParams));
+    EffectsState decoded_state;
+    EffectsParams decoded_params;
+    memset(&decoded_state, 0, sizeof(decoded_state));
+    memset(&decoded_params, 0, sizeof(decoded_params));
 
-    expect_true(rom_handler_decode_read_payload(&payload[2], sizeof(payload) - 2, &decodedState,
-                                                &decodedParams),
+    expect_true(rom_handler_decode_read_payload(&payload[2], sizeof(payload) - 2, &decoded_state,
+                                                &decoded_params),
                 "decode read payload success");
 
-    expect_true(decodedState.ordered[0] == ECHO, "decode ordered[0]");
-    expect_true(decodedState.ordered[1] == COMPRESSION, "decode ordered[1]");
-    expect_true(decodedState.ordered[2] == OVERDRIVE, "decode ordered[2]");
-    expect_true(decodedState.activeEffectSelection == 2, "decode selection");
+    expect_true(decoded_state.ordered[0] == ECHO, "decode ordered[0]");
+    expect_true(decoded_state.ordered[1] == COMPRESSION, "decode ordered[1]");
+    expect_true(decoded_state.ordered[2] == OVERDRIVE, "decode ordered[2]");
+    expect_true(decoded_state.active_effect_selection == 2, "decode selection");
 
-    expect_true(decodedParams.overdrive.level == 111, "decode overdrive level");
-    expect_true(decodedParams.echo.attack == 222, "decode echo attack");
-    expect_true(decodedParams.compression.threshold == 333, "decode compression threshold");
+    expect_true(decoded_params.overdrive.level == 111, "decode overdrive level");
+    expect_true(decoded_params.echo.attack == 222, "decode echo attack");
+    expect_true(decoded_params.compression.threshold == 333, "decode compression threshold");
 }
 
 static void test_encode_fails_for_small_buffer(void)
 {
-    uint8_t smallAddressBuf[1] = {0};
-    expect_true(!rom_handler_encode_address(0x1111, smallAddressBuf, sizeof(smallAddressBuf)),
+    uint8_t small_address_buf[1] = {0};
+    expect_true(!rom_handler_encode_address(0x1111, small_address_buf, sizeof(small_address_buf)),
                 "encode address rejects small buffer");
 
     EffectsState state = {0};
     EffectsParams params = {0};
-    uint8_t smallWriteBuf[4] = {0};
+    uint8_t small_write_buf[4] = {0};
 
     expect_true(
-        !rom_handler_encode_write_payload(0, &state, &params, smallWriteBuf, sizeof(smallWriteBuf)),
+        !rom_handler_encode_write_payload(0, &state, &params, small_write_buf, sizeof(small_write_buf)),
         "encode write rejects small buffer");
 }
 

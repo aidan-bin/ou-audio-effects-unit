@@ -26,10 +26,10 @@ static void test_pipeline_init_and_sync_params(void)
 
     expect_true(effects_pipeline_sync_params(&pipeline, &params) == 0, "pipeline sync succeeds");
 
-    size_t delaySamples = 0;
-    expect_true(effects_pipeline_get_echo_delay_samples(&pipeline, &delaySamples) == 0,
+    size_t delay_samples = 0;
+    expect_true(effects_pipeline_get_echo_delay_samples(&pipeline, &delay_samples) == 0,
                 "pipeline get echo delay succeeds");
-    expect_eq_size(7, delaySamples, "echo delay mirrors params");
+    expect_eq_size(7, delay_samples, "echo delay mirrors params");
 }
 
 static void test_pipeline_process_matches_runtime_helpers(void)
@@ -70,14 +70,14 @@ static void test_pipeline_process_matches_runtime_helpers(void)
         expect_eq_u16(expected[i], output[i], "overdrive output matches runtime");
     }
 
-    uint16_t echoInput[8] = {0};
-    memcpy(&echoInput[4], input, sizeof(input));
+    uint16_t echo_input[8] = {0};
+    memcpy(&echo_input[4], input, sizeof(input));
     memset(output, 0, sizeof(output));
     memset(expected, 0, sizeof(expected));
 
-    expect_true(effects_pipeline_process(&pipeline, ECHO, echoInput, output, 4) == 0,
+    expect_true(effects_pipeline_process(&pipeline, ECHO, echo_input, output, 4) == 0,
                 "pipeline echo process succeeds");
-    buf_echo(echoInput, expected, 4, &params.echo);
+    buf_echo(echo_input, expected, 4, &params.echo);
 
     for (size_t i = 0; i < 4; i++)
     {

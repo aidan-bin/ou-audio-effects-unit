@@ -13,58 +13,58 @@ int failures = 0;
 
 typedef struct
 {
-    EffectsState effectsState;
-    EffectsParams effectsParams;
+    EffectsState effects_state;
+    EffectsParams effects_params;
 
     bool switches[3];
-    uint32_t potSamples[4];
-    uint8_t currentPot;
+    uint32_t pot_samples[4];
+    uint8_t current_pot;
 
-    bool adcReady;
-    bool dacReady;
-    uint16_t *adcBuffer;
-    uint16_t *dacBuffer;
+    bool adc_ready;
+    bool dac_ready;
+    uint16_t *adc_buffer;
+    uint16_t *dac_buffer;
 
-    uint32_t outstandingAllocs;
-    uint32_t failureReports;
+    uint32_t outstanding_allocs;
+    uint32_t failure_reports;
 } IntegrationState;
 
-static bool switch_read_switch(uint8_t index, bool *enabledOut, void *context)
+static bool switch_read_switch(uint8_t index, bool *enabled_out, void *context)
 {
     IntegrationState *state = (IntegrationState *)context;
 
-    if (state == NULL || enabledOut == NULL || index >= 3)
+    if (state == NULL || enabled_out == NULL || index >= 3)
     {
         return false;
     }
 
-    *enabledOut = state->switches[index];
+    *enabled_out = state->switches[index];
     return true;
 }
 
-static bool switch_read_state(EffectsState *stateOut, void *context)
+static bool switch_read_state(EffectsState *state_out, void *context)
 {
     IntegrationState *state = (IntegrationState *)context;
 
-    if (state == NULL || stateOut == NULL)
+    if (state == NULL || state_out == NULL)
     {
         return false;
     }
 
-    *stateOut = state->effectsState;
+    *state_out = state->effects_state;
     return true;
 }
 
-static bool switch_write_state(const EffectsState *stateIn, void *context)
+static bool switch_write_state(const EffectsState *state_in, void *context)
 {
     IntegrationState *state = (IntegrationState *)context;
 
-    if (state == NULL || stateIn == NULL)
+    if (state == NULL || state_in == NULL)
     {
         return false;
     }
 
-    state->effectsState = *stateIn;
+    state->effects_state = *state_in;
     return true;
 }
 
@@ -74,51 +74,51 @@ static void switch_sleep_ms(uint32_t ms, void *context)
     (void)context;
 }
 
-static bool pot_start_adc(uint8_t potIndex, void *context)
+static bool pot_start_adc(uint8_t pot_index, void *context)
 {
     IntegrationState *state = (IntegrationState *)context;
 
-    if (state == NULL || potIndex >= 4)
+    if (state == NULL || pot_index >= 4)
     {
         return false;
     }
 
-    state->currentPot = potIndex;
+    state->current_pot = pot_index;
     return true;
 }
 
-static bool pot_wait_for_sample(uint32_t timeoutTicks, uint32_t *valueOut, void *context)
+static bool pot_wait_for_sample(uint32_t timeout_ticks, uint32_t *value_out, void *context)
 {
-    (void)timeoutTicks;
+    (void)timeout_ticks;
 
     IntegrationState *state = (IntegrationState *)context;
 
-    if (state == NULL || valueOut == NULL)
+    if (state == NULL || value_out == NULL)
     {
         return false;
     }
 
-    *valueOut = state->potSamples[state->currentPot];
+    *value_out = state->pot_samples[state->current_pot];
     return true;
 }
 
-static bool pot_read_active_effect(Effect *activeEffect, void *context)
+static bool pot_read_active_effect(Effect *active_effect, void *context)
 {
     IntegrationState *state = (IntegrationState *)context;
 
-    if (state == NULL || activeEffect == NULL)
+    if (state == NULL || active_effect == NULL)
     {
         return false;
     }
 
-    EffectsState latchedState = state->effectsState;
-    effects_state_normalize(&latchedState);
+    EffectsState latched_state = state->effects_state;
+    effects_state_normalize(&latched_state);
 
-    return effects_state_get_active_effect(&latchedState, activeEffect);
+    return effects_state_get_active_effect(&latched_state, active_effect);
 }
 
-static void pot_apply_sample(Effect activeEffect, uint8_t potIndex, uint32_t adcValue,
-                             uint32_t adcMax, void *context)
+static void pot_apply_sample(Effect active_effect, uint8_t pot_index, uint32_t adc_value,
+                             uint32_t adc_max, void *context)
 {
     IntegrationState *state = (IntegrationState *)context;
 
@@ -127,46 +127,46 @@ static void pot_apply_sample(Effect activeEffect, uint8_t potIndex, uint32_t adc
         return;
     }
 
-    (void)effects_params_apply_pot_sample(&state->effectsParams, activeEffect, potIndex, adcValue,
-                                          adcMax);
+    (void)effects_params_apply_pot_sample(&state->effects_params, active_effect, pot_index, adc_value,
+                                          adc_max);
 }
 
-static bool effects_wait_for_adc(uint32_t timeoutTicks, uint16_t **bufPtr, void *context)
+static bool effects_wait_for_adc(uint32_t timeout_ticks, uint16_t **buf_ptr, void *context)
 {
-    (void)timeoutTicks;
+    (void)timeout_ticks;
 
     IntegrationState *state = (IntegrationState *)context;
 
-    if (state == NULL || bufPtr == NULL || !state->adcReady)
+    if (state == NULL || buf_ptr == NULL || !state->adc_ready)
     {
         return false;
     }
 
-    state->adcReady = false;
-    *bufPtr = state->adcBuffer;
+    state->adc_ready = false;
+    *buf_ptr = state->adc_buffer;
     return true;
 }
 
-static bool effects_wait_for_dac(uint32_t timeoutTicks, uint16_t **bufPtr, void *context)
+static bool effects_wait_for_dac(uint32_t timeout_ticks, uint16_t **buf_ptr, void *context)
 {
-    (void)timeoutTicks;
+    (void)timeout_ticks;
 
     IntegrationState *state = (IntegrationState *)context;
 
-    if (state == NULL || bufPtr == NULL || !state->dacReady)
+    if (state == NULL || buf_ptr == NULL || !state->dac_ready)
     {
         return false;
     }
 
-    state->dacReady = false;
-    *bufPtr = state->dacBuffer;
+    state->dac_ready = false;
+    *buf_ptr = state->dac_buffer;
     return true;
 }
 
 static bool effects_dma_copy(const uint16_t *src, uint16_t *dst, size_t count,
-                             uint32_t timeoutTicks, void *context)
+                             uint32_t timeout_ticks, void *context)
 {
-    (void)timeoutTicks;
+    (void)timeout_ticks;
     (void)context;
 
     memmove(dst, src, count * sizeof(uint16_t));
@@ -180,7 +180,7 @@ static void *effects_alloc(size_t size, void *context)
 
     if (state != NULL && ptr != NULL)
     {
-        state->outstandingAllocs++;
+        state->outstanding_allocs++;
     }
 
     return ptr;
@@ -196,23 +196,23 @@ static void effects_free(void *ptr, void *context)
 
         if (state != NULL)
         {
-            state->outstandingAllocs--;
+            state->outstanding_allocs--;
         }
     }
 }
 
-static bool effects_read_latched_state(EffectsState *stateOut, EffectsParams *paramsOut,
+static bool effects_read_latched_state(EffectsState *state_out, EffectsParams *params_out,
                                        void *context)
 {
     IntegrationState *state = (IntegrationState *)context;
 
-    if (state == NULL || stateOut == NULL || paramsOut == NULL)
+    if (state == NULL || state_out == NULL || params_out == NULL)
     {
         return false;
     }
 
-    *stateOut = state->effectsState;
-    *paramsOut = state->effectsParams;
+    *state_out = state->effects_state;
+    *params_out = state->effects_params;
     return true;
 }
 
@@ -222,7 +222,7 @@ static void effects_report_failure(void *context)
 
     if (state != NULL)
     {
-        state->failureReports++;
+        state->failure_reports++;
     }
 }
 
@@ -234,25 +234,25 @@ static uint32_t effects_ms_to_ticks(uint32_t ms, void *context)
 
 static void seed_default_limits(IntegrationState *state)
 {
-    state->effectsParams.overdriveMin = (OverdriveParam){
+    state->effects_params.overdrive_min = (OverdriveParam){
         .level = 0,
         .gain = 0,
         .tone = MIN_OVERDRIVE_TONE,
         .mix = 0,
     };
-    state->effectsParams.overdriveMax = (OverdriveParam){
+    state->effects_params.overdrive_max = (OverdriveParam){
         .level = MAX_OVERDRIVE_LEVEL,
         .gain = MAX_OVERDRIVE_GAIN,
         .tone = MAX_OVERDRIVE_TONE,
         .mix = MAX_OVERDRIVE_MIX,
     };
-    state->effectsParams.echoMin = (EchoParam){
+    state->effects_params.echo_min = (EchoParam){
         .pre_delay = MIN_ECHO_PRE_DELAY,
         .density = 5,
         .attack = 7,
         .decay = 3,
     };
-    state->effectsParams.echoMax = (EchoParam){
+    state->effects_params.echo_max = (EchoParam){
         .pre_delay = MAX_ECHO_PRE_DELAY,
         .density = 25,
         .attack = 27,
@@ -265,24 +265,24 @@ static void test_integration_switch_pot_and_effects_pipeline(void)
     IntegrationState state;
     memset(&state, 0, sizeof(state));
 
-    effects_state_set_default_order(&state.effectsState);
-    state.effectsState.activeEffectSelection = 1;
+    effects_state_set_default_order(&state.effects_state);
+    state.effects_state.active_effect_selection = 1;
 
     state.switches[0] = false;
     state.switches[1] = true;
     state.switches[2] = false;
 
-    state.potSamples[0] = 255;
-    state.potSamples[1] = 192;
-    state.potSamples[2] = 64;
-    state.potSamples[3] = 32;
+    state.pot_samples[0] = 255;
+    state.pot_samples[1] = 192;
+    state.pot_samples[2] = 64;
+    state.pot_samples[3] = 32;
 
     seed_default_limits(&state);
 
-    SwitchTaskContext switchContext = {
-        .pollingFrequencyMs = 5,
+    SwitchTaskContext switch_context = {
+        .polling_frequency_ms = 5,
     };
-    SwitchTaskOps switchOps = {
+    SwitchTaskOps switch_ops = {
         .read_switch = switch_read_switch,
         .read_state = switch_read_state,
         .write_state = switch_write_state,
@@ -290,19 +290,19 @@ static void test_integration_switch_pot_and_effects_pipeline(void)
         .context = &state,
     };
 
-    expect_true(switch_task_step(&switchContext, &switchOps), "switch task step succeeds");
-    expect_true(state.effectsState.isEnabled[OVERDRIVE] == false, "switch task disables overdrive");
-    expect_true(state.effectsState.isEnabled[ECHO], "switch task enables echo");
-    expect_true(state.effectsState.isEnabled[COMPRESSION] == false,
+    expect_true(switch_task_step(&switch_context, &switch_ops), "switch task step succeeds");
+    expect_true(state.effects_state.is_enabled[OVERDRIVE] == false, "switch task disables overdrive");
+    expect_true(state.effects_state.is_enabled[ECHO], "switch task enables echo");
+    expect_true(state.effects_state.is_enabled[COMPRESSION] == false,
                 "switch task disables compression");
 
-    PotTaskContext potContext = {
-        .samplingFrequencyTicks = 5,
-        .timeoutSlackTicks = 1,
-        .adcMax = 255,
-        .potCount = 4,
+    PotTaskContext pot_context = {
+        .sampling_frequency_ticks = 5,
+        .timeout_slack_ticks = 1,
+        .adc_max = 255,
+        .pot_count = 4,
     };
-    PotTaskOps potOps = {
+    PotTaskOps pot_ops = {
         .start_adc = pot_start_adc,
         .wait_for_sample = pot_wait_for_sample,
         .read_active_effect = pot_read_active_effect,
@@ -310,50 +310,50 @@ static void test_integration_switch_pot_and_effects_pipeline(void)
         .context = &state,
     };
 
-    expect_true(pot_task_step(&potContext, &potOps), "pot task step succeeds");
+    expect_true(pot_task_step(&pot_context, &pot_ops), "pot task step succeeds");
     expect_eq_u32(
-        map_adc_to_param(state.potSamples[0], MIN_ECHO_PRE_DELAY, MAX_ECHO_PRE_DELAY, 255),
-        state.effectsParams.echo.pre_delay, "pot A updates echo pre-delay");
-    expect_eq_u32(map_adc_to_param(state.potSamples[1], state.effectsParams.echoMin.density,
-                                   state.effectsParams.echoMax.density, 255),
-                  state.effectsParams.echo.density, "pot B updates echo density");
-    expect_eq_u32(map_adc_to_param(state.potSamples[2], state.effectsParams.echoMin.attack,
-                                   state.effectsParams.echoMax.attack, 255),
-                  state.effectsParams.echo.attack, "pot C updates echo attack");
-    expect_eq_u32(map_adc_to_param(state.potSamples[3], state.effectsParams.echoMin.decay,
-                                   state.effectsParams.echoMax.decay, 255),
-                  state.effectsParams.echo.decay, "pot D updates echo decay");
+        map_adc_to_param(state.pot_samples[0], MIN_ECHO_PRE_DELAY, MAX_ECHO_PRE_DELAY, 255),
+        state.effects_params.echo.pre_delay, "pot A updates echo pre-delay");
+    expect_eq_u32(map_adc_to_param(state.pot_samples[1], state.effects_params.echo_min.density,
+                                   state.effects_params.echo_max.density, 255),
+                  state.effects_params.echo.density, "pot B updates echo density");
+    expect_eq_u32(map_adc_to_param(state.pot_samples[2], state.effects_params.echo_min.attack,
+                                   state.effects_params.echo_max.attack, 255),
+                  state.effects_params.echo.attack, "pot C updates echo attack");
+    expect_eq_u32(map_adc_to_param(state.pot_samples[3], state.effects_params.echo_min.decay,
+                                   state.effects_params.echo_max.decay, 255),
+                  state.effects_params.echo.decay, "pot D updates echo decay");
 
     EffectsPipeline pipeline;
     expect_true(effects_pipeline_init(&pipeline) == 0, "effects pipeline init succeeds");
 
-    uint16_t adcA[8] = {X_AXIS - 20, X_AXIS + 12, X_AXIS + 45, X_AXIS - 30,
-                        X_AXIS + 60, X_AXIS - 5, X_AXIS + 1, X_AXIS - 1};
-    uint16_t adcB[8] = {0};
-    uint16_t dacA[8] = {0};
-    uint16_t dacB[8] = {0};
-    uint16_t delaySamples[16] = {0};
+    uint16_t adc_a[8] = {X_AXIS - 20, X_AXIS + 12, X_AXIS + 45, X_AXIS - 30,
+                         X_AXIS + 60, X_AXIS - 5, X_AXIS + 1, X_AXIS - 1};
+    uint16_t adc_b[8] = {0};
+    uint16_t dac_a[8] = {0};
+    uint16_t dac_b[8] = {0};
+    uint16_t delay_samples[16] = {0};
 
-    state.adcReady = true;
-    state.dacReady = true;
-    state.adcBuffer = adcA;
-    state.dacBuffer = dacA;
+    state.adc_ready = true;
+    state.dac_ready = true;
+    state.adc_buffer = adc_a;
+    state.dac_buffer = dac_a;
 
-    EffectsTaskContext effectsContext = {
+    EffectsTaskContext effects_context = {
         .pipeline = &pipeline,
-        .effectsState = NULL,
-        .effectsParams = NULL,
-        .adcBufA = adcA,
-        .adcBufB = adcB,
-        .dacBufA = dacA,
-        .dacBufB = dacB,
-        .delaySamplesBuf = delaySamples,
-        .sampleBufLen = 8,
-        .delaySamplesLen = 16,
-        .samplingPeriodUs = 25,
-        .processingSlackMs = 1,
+        .effects_state = NULL,
+        .effects_params = NULL,
+        .adc_buf_a = adc_a,
+        .adc_buf_b = adc_b,
+        .dac_buf_a = dac_a,
+        .dac_buf_b = dac_b,
+        .delay_samples_buf = delay_samples,
+        .sample_buf_len = 8,
+        .delay_samples_len = 16,
+        .sampling_period_us = 25,
+        .processing_slack_ms = 1,
     };
-    EffectsTaskOps effectsOps = {
+    EffectsTaskOps effects_ops = {
         .wait_for_adc_buffer = effects_wait_for_adc,
         .wait_for_dac_buffer = effects_wait_for_dac,
         .dma_copy = effects_dma_copy,
@@ -365,9 +365,9 @@ static void test_integration_switch_pot_and_effects_pipeline(void)
         .context = &state,
     };
 
-    expect_true(effects_task_step(&effectsContext, &effectsOps), "effects task step succeeds");
-    expect_eq_u32(0, state.failureReports, "effects task reports no failures");
-    expect_eq_u32(0, state.outstandingAllocs, "effects task frees all temporary allocations");
+    expect_true(effects_task_step(&effects_context, &effects_ops), "effects task step succeeds");
+    expect_eq_u32(0, state.failure_reports, "effects task reports no failures");
+    expect_eq_u32(0, state.outstanding_allocs, "effects task frees all temporary allocations");
 }
 
 int main(void)

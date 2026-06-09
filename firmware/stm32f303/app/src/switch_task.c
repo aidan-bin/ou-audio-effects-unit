@@ -34,6 +34,6 @@ bool switch_task_step(const SwitchTaskContext *task_context, const SwitchTaskOps
         return false;
     }
 
-    ops->sleep_ms(task_context->pollingFrequencyMs, ops->context);
+    ops->sleep_ms(task_context->polling_frequency_ms, ops->context);
     return true;
 }

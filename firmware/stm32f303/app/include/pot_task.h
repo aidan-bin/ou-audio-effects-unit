@@ -8,22 +8,22 @@
 
 typedef struct
 {
-    uint32_t samplingFrequencyTicks;
-    uint32_t timeoutSlackTicks;
-    uint32_t adcMax;
-    uint8_t potCount;
+    uint32_t sampling_frequency_ticks;
+    uint32_t timeout_slack_ticks;
+    uint32_t adc_max;
+    uint8_t pot_count;
 } PotTaskContext;
 
 typedef struct
 {
-    bool (*start_adc)(uint8_t potIndex, void *context);
-    bool (*wait_for_sample)(uint32_t timeoutTicks, uint32_t *valueOut, void *context);
-    bool (*read_active_effect)(Effect *activeEffect, void *context);
-    void (*apply_pot_sample)(Effect activeEffect, uint8_t potIndex, uint32_t adcValue,
-                             uint32_t adcMax, void *context);
+    bool (*start_adc)(uint8_t pot_index, void *context);
+    bool (*wait_for_sample)(uint32_t timeout_ticks, uint32_t *value_out, void *context);
+    bool (*read_active_effect)(Effect *active_effect, void *context);
+    void (*apply_pot_sample)(Effect active_effect, uint8_t pot_index, uint32_t adc_value,
+                             uint32_t adc_max, void *context);
     void *context;
 } PotTaskOps;
 
-bool pot_task_step(const PotTaskContext *taskContext, const PotTaskOps *ops);
+bool pot_task_step(const PotTaskContext *task_context, const PotTaskOps *ops);
 
 #endif

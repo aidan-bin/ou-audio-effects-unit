@@ -550,9 +550,9 @@ static bool switch_task_write_state(const EffectsState *state, void *context)
     CliServiceAdapter *adapter_context = (CliServiceAdapter *)context;
     if (adapter_context != NULL)
     {
-        const bool switch_a_enabled = state->isEnabled[state->ordered[0]];
-        const bool switch_b_enabled = state->isEnabled[state->ordered[1]];
-        const bool switch_c_enabled = state->isEnabled[state->ordered[2]];
+        const bool switch_a_enabled = state->is_enabled[state->ordered[0]];
+        const bool switch_b_enabled = state->is_enabled[state->ordered[1]];
+        const bool switch_c_enabled = state->is_enabled[state->ordered[2]];
         return cli_service_adapter_apply_switches(adapter_context,
                                                   switch_a_enabled,
                                                   switch_b_enabled,
@@ -808,19 +808,19 @@ static uint32_t sampling_period_us_from_rate_hz(uint32_t sample_rate_hz)
 
 static void init_peripheral_dispatch(void)
 {
-    peripheral_dispatch_context.effectsTaskHandle = effectsTaskHandle;
-    peripheral_dispatch_context.potHandlerTaskHandle = potHandlerTaskHandle;
-    peripheral_dispatch_context.btnHandlerTaskHandle = btnHandlerTaskHandle;
-    peripheral_dispatch_context.effectsAdcHandle = &hadc3;
-    peripheral_dispatch_context.potAdcHandle = &hadc1;
-    peripheral_dispatch_context.i2cHandle = &hi2c1;
-    peripheral_dispatch_context.memToMemDmaHandle = &hdma_memtomem_dma1_channel1;
-    peripheral_dispatch_context.i2cTaskSupportContext = &i2c_task_support_context;
-    peripheral_dispatch_context.delaySamplesDmaSemaphoreHandle = delaySamplesDmaSemaphoreHandle;
-    peripheral_dispatch_context.adcBufA = (void *)adc_buf_a;
-    peripheral_dispatch_context.adcBufB = (void *)adc_buf_b;
-    peripheral_dispatch_context.dacBufA = (void *)dac_buf_a;
-    peripheral_dispatch_context.dacBufB = (void *)dac_buf_b;
+    peripheral_dispatch_context.effects_task_handle = effectsTaskHandle;
+    peripheral_dispatch_context.pot_handler_task_handle = potHandlerTaskHandle;
+    peripheral_dispatch_context.btn_handler_task_handle = btnHandlerTaskHandle;
+    peripheral_dispatch_context.effects_adc_handle = &hadc3;
+    peripheral_dispatch_context.pot_adc_handle = &hadc1;
+    peripheral_dispatch_context.i2c_handle = &hi2c1;
+    peripheral_dispatch_context.mem_to_mem_dma_handle = &hdma_memtomem_dma1_channel1;
+    peripheral_dispatch_context.i2c_task_support_context = &i2c_task_support_context;
+    peripheral_dispatch_context.delay_samples_dma_semaphore_handle = delaySamplesDmaSemaphoreHandle;
+    peripheral_dispatch_context.adc_buf_a = (void *)adc_buf_a;
+    peripheral_dispatch_context.adc_buf_b = (void *)adc_buf_b;
+    peripheral_dispatch_context.dac_buf_a = (void *)dac_buf_a;
+    peripheral_dispatch_context.dac_buf_b = (void *)dac_buf_b;
 
     peripheral_dispatch_ops.semaphore_take = peripheral_semaphore_take;
     peripheral_dispatch_ops.task_notify_from_isr = peripheral_task_notify_from_isr;
@@ -1622,17 +1622,17 @@ void startEffectsTask(void const *argument)
 
     EffectsTaskContext task_context = {
         .pipeline = &effects_pipeline,
-        .effectsState = &effects_state,
-        .effectsParams = &effects_params,
-        .adcBufA = (uint16_t *)adc_buf_a,
-        .adcBufB = (uint16_t *)adc_buf_b,
-        .dacBufA = (uint16_t *)dac_buf_a,
-        .dacBufB = (uint16_t *)dac_buf_b,
-        .delaySamplesBuf = (uint16_t *)delay_samples_buf,
-        .sampleBufLen = SAMPLE_BUF_LEN,
-        .delaySamplesLen = NUM_DELAY_SAMPLES,
-        .samplingPeriodUs = sampling_period_us,
-        .processingSlackMs = 2,
+        .effects_state = &effects_state,
+        .effects_params = &effects_params,
+        .adc_buf_a = (uint16_t *)adc_buf_a,
+        .adc_buf_b = (uint16_t *)adc_buf_b,
+        .dac_buf_a = (uint16_t *)dac_buf_a,
+        .dac_buf_b = (uint16_t *)dac_buf_b,
+        .delay_samples_buf = (uint16_t *)delay_samples_buf,
+        .sample_buf_len = SAMPLE_BUF_LEN,
+        .delay_samples_len = NUM_DELAY_SAMPLES,
+        .sampling_period_us = sampling_period_us,
+        .processing_slack_ms = 2,
     };
 
     cli_service_adapter_set_audio_info(&cli_service_adapter_context,
@@ -1707,7 +1707,7 @@ void startSwHandlerTask(void const *argument)
 {
     /* USER CODE BEGIN startSwHandlerTask */
     SwitchTaskContext task_context = {
-        .pollingFrequencyMs = 5,
+        .polling_frequency_ms = 5,
     };
 
     SwitchTaskOps task_ops = {
@@ -1737,10 +1737,10 @@ void startPotHandlerTask(void const *argument)
 {
     /* USER CODE BEGIN startPotHandlerTask */
     PotTaskContext task_context = {
-        .samplingFrequencyTicks = pdMS_TO_TICKS(5),
-        .timeoutSlackTicks = pdMS_TO_TICKS(1),
-        .adcMax = UINT8_MAX,
-        .potCount = 4,
+        .sampling_frequency_ticks = pdMS_TO_TICKS(5),
+        .timeout_slack_ticks = pdMS_TO_TICKS(1),
+        .adc_max = UINT8_MAX,
+        .pot_count = 4,
     };
 
     PotTaskOps task_ops = {

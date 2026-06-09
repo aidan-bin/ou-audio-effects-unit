@@ -12,11 +12,11 @@
 size_t rom_handler_read_payload_size(void);
 size_t rom_handler_write_payload_size(void);
 
-bool rom_handler_encode_address(uint16_t address, uint8_t *payload, size_t payloadSize);
-bool rom_handler_encode_write_payload(uint16_t writeAddress, const EffectsState *state,
+bool rom_handler_encode_address(uint16_t address, uint8_t *payload, size_t payload_size);
+bool rom_handler_encode_write_payload(uint16_t write_address, const EffectsState *state,
                                       const EffectsParams *params, uint8_t *payload,
-                                      size_t payloadSize);
-bool rom_handler_decode_read_payload(const uint8_t *payload, size_t payloadSize,
+                                      size_t payload_size);
+bool rom_handler_decode_read_payload(const uint8_t *payload, size_t payload_size,
                                      EffectsState *state, EffectsParams *params);
 
 #endif

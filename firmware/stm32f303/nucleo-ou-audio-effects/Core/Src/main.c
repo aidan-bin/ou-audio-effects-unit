@@ -658,10 +658,10 @@ static void init_effects_defaults(void)
     (void)memset((void *)&effects_params, 0, sizeof(effects_params));
 
     effects_state_set_default_order((EffectsState *)&effects_state);
-    effects_state.activeEffectSelection = 0;
-    effects_state.isEnabled[OVERDRIVE] = true;
-    effects_state.isEnabled[ECHO] = false;
-    effects_state.isEnabled[COMPRESSION] = false;
+    effects_state.active_effect_selection = 0;
+    effects_state.is_enabled[OVERDRIVE] = true;
+    effects_state.is_enabled[ECHO] = false;
+    effects_state.is_enabled[COMPRESSION] = false;
 
     effects_params.overdrive.gain = MAX_OVERDRIVE_GAIN;
     effects_params.overdrive.level = MAX_OVERDRIVE_LEVEL;
@@ -677,32 +677,32 @@ static void init_effects_defaults(void)
     effects_params.compression.threshold = X_AXIS;
     effects_params.compression.ratio = 0;
 
-    effects_params.overdriveMin.gain = 0;
-    effects_params.overdriveMin.level = 0;
-    effects_params.overdriveMin.tone = MIN_OVERDRIVE_TONE;
-    effects_params.overdriveMin.mix = 0;
+    effects_params.overdrive_min.gain = 0;
+    effects_params.overdrive_min.level = 0;
+    effects_params.overdrive_min.tone = MIN_OVERDRIVE_TONE;
+    effects_params.overdrive_min.mix = 0;
 
-    effects_params.overdriveMax.gain = MAX_OVERDRIVE_GAIN;
-    effects_params.overdriveMax.level = MAX_OVERDRIVE_LEVEL;
-    effects_params.overdriveMax.tone = MAX_OVERDRIVE_TONE;
-    effects_params.overdriveMax.mix = MAX_OVERDRIVE_MIX;
+    effects_params.overdrive_max.gain = MAX_OVERDRIVE_GAIN;
+    effects_params.overdrive_max.level = MAX_OVERDRIVE_LEVEL;
+    effects_params.overdrive_max.tone = MAX_OVERDRIVE_TONE;
+    effects_params.overdrive_max.mix = MAX_OVERDRIVE_MIX;
 
-    effects_params.echoMin.delay_samples = 0;
-    effects_params.echoMin.pre_delay = MIN_ECHO_PRE_DELAY;
-    effects_params.echoMin.density = 0;
-    effects_params.echoMin.attack = 0;
-    effects_params.echoMin.decay = 0;
+    effects_params.echo_min.delay_samples = 0;
+    effects_params.echo_min.pre_delay = MIN_ECHO_PRE_DELAY;
+    effects_params.echo_min.density = 0;
+    effects_params.echo_min.attack = 0;
+    effects_params.echo_min.decay = 0;
 
-    effects_params.echoMax.delay_samples = MAX_ECHO_DELAY_SAMPLES;
-    effects_params.echoMax.pre_delay = MAX_ECHO_PRE_DELAY;
-    effects_params.echoMax.density = MAX_ECHO_DENSITY;
-    effects_params.echoMax.attack = MAX_ECHO_ATTACK;
-    effects_params.echoMax.decay = MAX_ECHO_DECAY;
+    effects_params.echo_max.delay_samples = MAX_ECHO_DELAY_SAMPLES;
+    effects_params.echo_max.pre_delay = MAX_ECHO_PRE_DELAY;
+    effects_params.echo_max.density = MAX_ECHO_DENSITY;
+    effects_params.echo_max.attack = MAX_ECHO_ATTACK;
+    effects_params.echo_max.decay = MAX_ECHO_DECAY;
 
-    effects_params.compressionMin.threshold = 0;
-    effects_params.compressionMin.ratio = 0;
-    effects_params.compressionMax.threshold = MAX_COMPRESSION_THRESHOLD;
-    effects_params.compressionMax.ratio = MAX_COMPRESSION_RATIO;
+    effects_params.compression_min.threshold = 0;
+    effects_params.compression_min.ratio = 0;
+    effects_params.compression_max.threshold = MAX_COMPRESSION_THRESHOLD;
+    effects_params.compression_max.ratio = MAX_COMPRESSION_RATIO;
 
     taskEXIT_CRITICAL();
 }
@@ -750,17 +750,17 @@ void startEffectsTask(void const *argument)
     const uint32_t sampling_period_us = compute_sampling_period_us();
     EffectsTaskContext task_context = {
         .pipeline = &effects_pipeline,
-        .effectsState = &effects_state,
-        .effectsParams = &effects_params,
-        .adcBufA = (uint16_t *)adc_buf_a,
-        .adcBufB = (uint16_t *)adc_buf_b,
-        .dacBufA = (uint16_t *)dac_buf_a,
-        .dacBufB = (uint16_t *)dac_buf_b,
-        .delaySamplesBuf = (uint16_t *)delay_samples_buf,
-        .sampleBufLen = SAMPLE_BUF_LEN,
-        .delaySamplesLen = NUM_DELAY_SAMPLES,
-        .samplingPeriodUs = sampling_period_us,
-        .processingSlackMs = 2,
+        .effects_state = &effects_state,
+        .effects_params = &effects_params,
+        .adc_buf_a = (uint16_t *)adc_buf_a,
+        .adc_buf_b = (uint16_t *)adc_buf_b,
+        .dac_buf_a = (uint16_t *)dac_buf_a,
+        .dac_buf_b = (uint16_t *)dac_buf_b,
+        .delay_samples_buf = (uint16_t *)delay_samples_buf,
+        .sample_buf_len = SAMPLE_BUF_LEN,
+        .delay_samples_len = NUM_DELAY_SAMPLES,
+        .sampling_period_us = sampling_period_us,
+        .processing_slack_ms = 2,
     };
 
     cli_service_adapter_set_audio_info(&cli_service_adapter_context,
@@ -771,13 +771,13 @@ void startEffectsTask(void const *argument)
                                        2);
 
     test_vector_source_init(&test_vector_source,
-                            task_context.samplingPeriodUs == 0U
+                            task_context.sampling_period_us == 0U
                                 ? 40500U
-                                : (1000000U / task_context.samplingPeriodUs));
+                                : (1000000U / task_context.sampling_period_us));
     test_vector_source_init(&test_vector_source_output,
-                            task_context.samplingPeriodUs == 0U
+                            task_context.sampling_period_us == 0U
                                 ? 40500U
-                                : (1000000U / task_context.samplingPeriodUs));
+                                : (1000000U / task_context.sampling_period_us));
 
     EffectsTaskOps task_ops = {
         .wait_for_adc_buffer = effects_task_wait_for_adc_buffer,
@@ -867,7 +867,7 @@ static void effects_task_on_frame_begin(void *context)
     b1_pressed = false;
 
     taskENTER_CRITICAL();
-    adapter->testInput.enabled = !adapter->testInput.enabled;
+    adapter->test_input.enabled = !adapter->test_input.enabled;
     taskEXIT_CRITICAL();
 }
 

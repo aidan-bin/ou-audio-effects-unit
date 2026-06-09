@@ -6,12 +6,12 @@
 
 typedef struct
 {
-    void *sourceTask;
-    bool rxTxBar;
+    void *source_task;
+    bool rx_tx_bar;
     uint16_t address;
     uint8_t *payload;
     uint16_t items;
-    bool *pFailed;
+    bool *p_failed;
 } I2CHandlerMessage;
 
 typedef enum
@@ -25,23 +25,23 @@ typedef enum
 typedef struct
 {
     uint32_t trials;
-    uint32_t blockingTimeoutMs;
-    uint32_t tryAgainDelayMs;
-    uint32_t dropBudgetMs;
+    uint32_t blocking_timeout_ms;
+    uint32_t try_again_delay_ms;
+    uint32_t drop_budget_ms;
 } I2CHandlerConfig;
 
 typedef struct
 {
-    bool (*is_source_valid)(void *sourceTask, void *context);
-    void (*signal_source_completion)(void *sourceTask, void *context);
+    bool (*is_source_valid)(void *source_task, void *context);
+    void (*signal_source_completion)(void *source_task, void *context);
 
-    bool (*is_device_ready)(uint16_t address, uint32_t trials, uint32_t timeoutMs, void *context);
+    bool (*is_device_ready)(uint16_t address, uint32_t trials, uint32_t timeout_ms, void *context);
     bool (*start_receive)(uint16_t address, uint8_t *payload, uint16_t items, void *context);
     bool (*start_transmit)(uint16_t address, uint8_t *payload, uint16_t items, void *context);
-    bool (*wait_for_completion)(uint32_t timeoutMs, bool *transferFailed, void *context);
+    bool (*wait_for_completion)(uint32_t timeout_ms, bool *transfer_failed, void *context);
 
     void (*free_payload)(uint8_t *payload, void *context);
-    void (*delay_ms)(uint32_t delayMs, void *context);
+    void (*delay_ms)(uint32_t delay_ms, void *context);
 } I2CHandlerOps;
 
 I2CHandlerResult i2c_handler_process_message(const I2CHandlerMessage *message,

@@ -11,12 +11,12 @@
 typedef struct
 {
     I2C_HandleTypeDef *hi2c;
-    osThreadId romHandlerTaskHandle;
-    osThreadId displayHandlerTaskHandle;
-    osSemaphoreId i2cCompletionSemaphoreHandle;
-    osSemaphoreId i2cFailedRomSemaphoreHandle;
-    osSemaphoreId i2cFailedDisplaySemaphoreHandle;
-    volatile bool *i2cTransferFailed;
+    osThreadId rom_handler_task_handle;
+    osThreadId display_handler_task_handle;
+    osSemaphoreId i2c_completion_semaphore_handle;
+    osSemaphoreId i2c_failed_rom_semaphore_handle;
+    osSemaphoreId i2c_failed_display_semaphore_handle;
+    volatile bool *i2c_transfer_failed;
 } I2CTaskSupportContext;
 
 void i2c_task_support_init(I2CTaskSupportContext *support_context, I2CHandlerConfig *handler_config,

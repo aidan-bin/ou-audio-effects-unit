@@ -24,14 +24,14 @@ void rom_task_support_init(RomTaskSupportConfig *config, RomTaskSupportOps *ops,
         return;
     }
 
-    config->sourceTask = source_task;
-    config->i2cQueueHandle = i2c_queue_handle;
-    config->i2cFailedRomSemaphoreHandle = i2c_failed_rom_semaphore_handle;
-    config->deviceAddress = device_address;
-    config->readAddress = read_address;
-    config->writeAddress = write_address;
-    config->bootstrapTimeoutTicks = bootstrap_timeout_ticks;
-    config->saveTimeoutTicks = save_timeout_ticks;
+    config->source_task = source_task;
+    config->i2c_queue_handle = i2c_queue_handle;
+    config->i2c_failed_rom_semaphore_handle = i2c_failed_rom_semaphore_handle;
+    config->device_address = device_address;
+    config->read_address = read_address;
+    config->write_address = write_address;
+    config->bootstrap_timeout_ticks = bootstrap_timeout_ticks;
+    config->save_timeout_ticks = save_timeout_ticks;
 
     ops->queue_message_and_wait = queue_message_and_wait;
     ops->allocate_payload = allocate_payload;
@@ -49,8 +49,8 @@ static bool queue_message(const RomTaskSupportConfig *config, const RomTaskSuppo
         return false;
     }
 
-    return ops->queue_message_and_wait(config->i2cQueueHandle, message, failed,
-                                       config->i2cFailedRomSemaphoreHandle, timeout_ticks,
+    return ops->queue_message_and_wait(config->i2c_queue_handle, message, failed,
+                                       config->i2c_failed_rom_semaphore_handle, timeout_ticks,
                                        ops->context);
 }
 
@@ -96,8 +96,8 @@ bool rom_task_bootstrap_effects(const RomTaskSupportConfig *config, const RomTas
 
     bool failed = true;
     I2CHandlerMessage message = {0};
-    message.sourceTask = config->sourceTask;
-    message.pFailed = &failed;
+    message.source_task = config->source_task;
+    message.p_failed = &failed;
 
     message.payload = allocate_payload(ops, address_payload_size_bytes);
     if (message.payload == NULL)
@@ -106,7 +106,7 @@ bool rom_task_bootstrap_effects(const RomTaskSupportConfig *config, const RomTas
         return false;
     }
 
-    if (!rom_handler_encode_address(config->readAddress, message.payload,
+    if (!rom_handler_encode_address(config->read_address, message.payload,
                                     address_payload_size_bytes))
     {
         (void)log_write(LOG_LEVEL_ERROR, "rom bootstrap address encode failed");
@@ -114,12 +114,12 @@ bool rom_task_bootstrap_effects(const RomTaskSupportConfig *config, const RomTas
         return false;
     }
 
-    message.rxTxBar = false;
-    message.address = config->deviceAddress;
+    message.rx_tx_bar = false;
+    message.address = config->device_address;
     message.items = (uint16_t)address_payload_size_bytes;
 
     set_write_disable(ops, false);
-    if (!queue_message(config, ops, &message, message.pFailed, config->bootstrapTimeoutTicks))
+    if (!queue_message(config, ops, &message, message.p_failed, config->bootstrap_timeout_ticks))
     {
         (void)log_write(LOG_LEVEL_ERROR, "rom bootstrap read-address transfer failed");
         set_write_disable(ops, true);
@@ -136,11 +136,11 @@ bool rom_task_bootstrap_effects(const RomTaskSupportConfig *config, const RomTas
         return false;
     }
 
-    message.rxTxBar = true;
-    message.address = config->deviceAddress | I2C_READ_FLAG;
+    message.rx_tx_bar = true;
+    message.address = config->device_address | I2C_READ_FLAG;
     message.items = (uint16_t)payload_size_bytes;
 
-    if (!queue_message(config, ops, &message, message.pFailed, config->bootstrapTimeoutTicks))
+    if (!queue_message(config, ops, &message, message.p_failed, config->bootstrap_timeout_ticks))
     {
         (void)log_write(LOG_LEVEL_ERROR, "rom bootstrap read transfer failed");
         free_payload(ops, message.payload);
@@ -180,8 +180,8 @@ bool rom_task_save_effects(const RomTaskSupportConfig *config, const RomTaskSupp
 
     bool failed = true;
     I2CHandlerMessage message = {0};
-    message.sourceTask = config->sourceTask;
-    message.pFailed = &failed;
+    message.source_task = config->source_task;
+    message.p_failed = &failed;
 
     message.payload = allocate_payload(ops, payload_size_bytes);
     if (message.payload == NULL)
@@ -190,7 +190,7 @@ bool rom_task_save_effects(const RomTaskSupportConfig *config, const RomTaskSupp
         return false;
     }
 
-    if (!rom_handler_encode_write_payload(config->writeAddress, state, params, message.payload,
+    if (!rom_handler_encode_write_payload(config->write_address, state, params, message.payload,
                                           payload_size_bytes))
     {
         (void)log_write(LOG_LEVEL_ERROR, "rom save payload encode failed");
@@ -198,12 +198,12 @@ bool rom_task_save_effects(const RomTaskSupportConfig *config, const RomTaskSupp
         return false;
     }
 
-    message.rxTxBar = false;
-    message.address = config->deviceAddress;
+    message.rx_tx_bar = false;
+    message.address = config->device_address;
     message.items = (uint16_t)payload_size_bytes;
 
     set_write_disable(ops, false);
-    if (!queue_message(config, ops, &message, message.pFailed, config->saveTimeoutTicks))
+    if (!queue_message(config, ops, &message, message.p_failed, config->save_timeout_ticks))
     {
         (void)log_write(LOG_LEVEL_ERROR, "rom save transfer failed");
         set_write_disable(ops, true);

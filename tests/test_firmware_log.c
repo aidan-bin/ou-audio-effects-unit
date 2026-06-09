@@ -12,8 +12,8 @@ typedef struct
 {
     bool enabled;
     uint8_t level;
-    uint32_t writeCalls;
-    char lastLine[128];
+    uint32_t write_calls;
+    char last_line[128];
 } LogTestContext;
 
 static bool log_is_enabled(void *context)
@@ -36,9 +36,9 @@ static bool log_write_line(const char *line, void *context)
         return false;
     }
 
-    ctx->writeCalls++;
-    (void)strncpy(ctx->lastLine, line, sizeof(ctx->lastLine) - 1U);
-    ctx->lastLine[sizeof(ctx->lastLine) - 1U] = '\0';
+    ctx->write_calls++;
+    (void)strncpy(ctx->last_line, line, sizeof(ctx->last_line) - 1U);
+    ctx->last_line[sizeof(ctx->last_line) - 1U] = '\0';
     return true;
 }
 
@@ -47,7 +47,7 @@ static void test_log_filters_by_enabled_and_level(void)
     LogTestContext context = {
         .enabled = false,
         .level = (uint8_t)LOG_LEVEL_TRACE,
-        .writeCalls = 0,
+        .write_calls = 0,
     };
 
     LogOps ops = {
@@ -60,19 +60,19 @@ static void test_log_filters_by_enabled_and_level(void)
     log_configure(&ops);
 
     expect_false(log_write(LOG_LEVEL_INFO, "disabled path"), "disabled log is filtered");
-    expect_eq_u32(0, context.writeCalls, "disabled log does not write");
+    expect_eq_u32(0, context.write_calls, "disabled log does not write");
 
     context.enabled = true;
     context.level = (uint8_t)LOG_LEVEL_WARN;
 
     expect_false(log_write(LOG_LEVEL_INFO, "below threshold"),
                  "below threshold log is filtered");
-    expect_eq_u32(0, context.writeCalls, "below threshold log does not write");
+    expect_eq_u32(0, context.write_calls, "below threshold log does not write");
 
     expect_true(log_write(LOG_LEVEL_ERROR, "critical event"),
                 "error level log is emitted");
-    expect_eq_u32(1, context.writeCalls, "error level increments writes");
-    expect_true(strstr(context.lastLine, "[error] critical event") != NULL,
+    expect_eq_u32(1, context.write_calls, "error level increments writes");
+    expect_true(strstr(context.last_line, "[error] critical event") != NULL,
                 "error line contains level prefix");
 }
 
@@ -81,7 +81,7 @@ static void test_logf_formats_with_prefix(void)
     LogTestContext context = {
         .enabled = true,
         .level = (uint8_t)LOG_LEVEL_DEBUG,
-        .writeCalls = 0,
+        .write_calls = 0,
     };
 
     LogOps ops = {
@@ -95,8 +95,8 @@ static void test_logf_formats_with_prefix(void)
 
     expect_true(log_messagef(LOG_LEVEL_DEBUG, "value=%u", 17U),
                 "formatted debug log emitted");
-    expect_eq_u32(1, context.writeCalls, "formatted log increments writes");
-    expect_true(strstr(context.lastLine, "[debug] value=17") != NULL,
+    expect_eq_u32(1, context.write_calls, "formatted log increments writes");
+    expect_true(strstr(context.last_line, "[debug] value=17") != NULL,
                 "formatted log contains message and prefix");
 }
 
@@ -105,7 +105,7 @@ static void test_log_config_reset_disables_output(void)
     LogTestContext context = {
         .enabled = true,
         .level = (uint8_t)LOG_LEVEL_TRACE,
-        .writeCalls = 0,
+        .write_calls = 0,
     };
 
     LogOps ops = {
@@ -120,7 +120,7 @@ static void test_log_config_reset_disables_output(void)
 
     log_configure(NULL);
     expect_false(log_write(LOG_LEVEL_INFO, "after reset"), "log disabled after reset");
-    expect_eq_u32(1, context.writeCalls, "reset prevents additional writes");
+    expect_eq_u32(1, context.write_calls, "reset prevents additional writes");
 }
 
 int main(void)

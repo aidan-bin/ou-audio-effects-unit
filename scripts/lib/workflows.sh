@@ -383,13 +383,13 @@ run_lint() {
 		local checks_override=""
 
 		if [[ "$file" == firmware/stm32f303/app/* ]]; then
-			header_filter='^(dsp|firmware/stm32f303/app)/'
+			header_filter='(^|/)(dsp|firmware/stm32f303/app)/'
 			if ! compile_db_dir="$(select_app_compile_db_dir "$file")"; then
 				echo "Lint requires compile_commands entry for $file in root or CubeMX compile database."
 				return 1
 			fi
 		elif [[ "$file" == tests/* ]]; then
-			header_filter='^(dsp|firmware/stm32f303/app|tests)/'
+			header_filter='(^|/)(dsp|firmware/stm32f303/app|tests)/'
 			checks_override='clang-analyzer-*,bugprone-*,-bugprone-easily-swappable-parameters,performance-*,-readability-identifier-naming,-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,-clang-analyzer-optin.core.EnumCastOutOfRange'
 		fi
 
@@ -417,7 +417,7 @@ run_lint() {
 		line_filter="$(user_code_clang_tidy_line_filter "$file")"
 		[[ -z "$line_filter" ]] && continue
 
-		run_tidy "$file" '^(dsp|firmware/stm32f303/app|firmware/stm32f303/cubemx|firmware/stm32f303/nucleo-ou-audio-effects)/' \
+		run_tidy "$file" '(^|/)(dsp|firmware/stm32f303/app|firmware/stm32f303/cubemx|firmware/stm32f303/nucleo-ou-audio-effects)/' \
 			"$generated_compile_db_dir" "$line_filter" fail "$checks_override"
 	done < <(discover_generated_c)
 }

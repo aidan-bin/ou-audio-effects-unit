@@ -39,82 +39,82 @@ typedef struct
 {
     bool enabled;
     uint8_t vector;
-    uint16_t frequencyHz;
+    uint16_t frequency_hz;
     uint16_t amplitude;
 } CliTestModeStatus;
 
 typedef struct
 {
     bool enabled;
-    bool streamEnabled;
+    bool stream_enabled;
     uint8_t level;
-    uint32_t frameCount;
-    uint32_t failureCount;
-    uint32_t stepFailureCount;
-    uint32_t stepFailureStreak;
-    uint32_t frameTimeMinUs;
-    uint32_t frameTimeMaxUs;
-    uint32_t frameTimeTotalUs;
-    uint32_t measuredFrameCount;
-    uint32_t overrunCount;
-    uint32_t streamDropCount;
-    uint8_t streamBatchSize;
-    uint8_t streamQueueCount;
+    uint32_t frame_count;
+    uint32_t failure_count;
+    uint32_t step_failure_count;
+    uint32_t step_failure_streak;
+    uint32_t frame_time_min_us;
+    uint32_t frame_time_max_us;
+    uint32_t frame_time_total_us;
+    uint32_t measured_frame_count;
+    uint32_t overrun_count;
+    uint32_t stream_drop_count;
+    uint8_t stream_batch_size;
+    uint8_t stream_queue_count;
 } CliLogStats;
 
 typedef struct
 {
-    uint32_t sampleRateHz;
-    uint32_t sampleBufLen;
-    uint32_t samplingPeriodUs;
-    uint32_t delaySamplesLen;
-    uint32_t processingSlackMs;
+    uint32_t sample_rate_hz;
+    uint32_t sample_buf_len;
+    uint32_t sampling_period_us;
+    uint32_t delay_samples_len;
+    uint32_t processing_slack_ms;
 } CliAudioStatus;
 
 typedef struct
 {
-    bool (*set_pot_override)(uint8_t potIndex, uint32_t value, void *context);
-    bool (*clear_pot_override)(uint8_t potIndex, void *context);
-    bool (*set_switch_override)(uint8_t switchIndex, bool enabled, void *context);
-    bool (*clear_switch_override)(uint8_t switchIndex, void *context);
+    bool (*set_pot_override)(uint8_t pot_index, uint32_t value, void *context);
+    bool (*clear_pot_override)(uint8_t pot_index, void *context);
+    bool (*set_switch_override)(uint8_t switch_index, bool enabled, void *context);
+    bool (*clear_switch_override)(uint8_t switch_index, void *context);
     bool (*clear_all_overrides)(void *context);
 
     bool (*config_set)(const char *key, int32_t value, void *context);
-    bool (*config_get)(const char *key, int32_t *valueOut, void *context);
+    bool (*config_get)(const char *key, int32_t *value_out, void *context);
 
     bool (*rom_save_state)(void *context);
     bool (*rom_load_state)(void *context);
-    bool (*rom_read_raw)(uint16_t address, uint16_t length, uint8_t *payloadOut,
-                         size_t payloadCapacity, size_t *payloadSizeOut, void *context);
-    bool (*rom_write_raw)(uint16_t address, const uint8_t *payload, size_t payloadSize,
+    bool (*rom_read_raw)(uint16_t address, uint16_t length, uint8_t *payload_out,
+                         size_t payload_capacity, size_t *payload_size_out, void *context);
+    bool (*rom_write_raw)(uint16_t address, const uint8_t *payload, size_t payload_size,
                           void *context);
 
     bool (*log_set_level)(uint8_t level, void *context);
     bool (*log_set_enabled)(bool enabled, void *context);
     bool (*log_set_stream)(bool enabled, void *context);
-    bool (*log_set_stream_batch)(uint8_t batchSize, void *context);
-    bool (*log_read_line)(char *lineOut,
-                          size_t lineCapacity,
-                          bool *hasLineOut,
+    bool (*log_set_stream_batch)(uint8_t batch_size, void *context);
+    bool (*log_read_line)(char *line_out,
+                          size_t line_capacity,
+                          bool *has_line_out,
                           void *context);
-    bool (*log_get_stats)(CliLogStats *statsOut, void *context);
+    bool (*log_get_stats)(CliLogStats *stats_out, void *context);
     bool (*log_reset_stats)(void *context);
 
     bool (*test_set_input_mode)(bool enabled, void *context);
     bool (*test_set_input_vector)(uint8_t vector, void *context);
-    bool (*test_set_input_frequency_hz)(uint16_t frequencyHz, void *context);
+    bool (*test_set_input_frequency_hz)(uint16_t frequency_hz, void *context);
     bool (*test_set_input_amplitude)(uint16_t amplitude, void *context);
-    bool (*test_get_input_status)(CliTestModeStatus *statusOut, void *context);
+    bool (*test_get_input_status)(CliTestModeStatus *status_out, void *context);
 
     bool (*test_set_output_mode)(bool enabled, void *context);
     bool (*test_set_output_vector)(uint8_t vector, void *context);
-    bool (*test_set_output_frequency_hz)(uint16_t frequencyHz, void *context);
+    bool (*test_set_output_frequency_hz)(uint16_t frequency_hz, void *context);
     bool (*test_set_output_amplitude)(uint16_t amplitude, void *context);
-    bool (*test_get_output_status)(CliTestModeStatus *statusOut, void *context);
+    bool (*test_get_output_status)(CliTestModeStatus *status_out, void *context);
 
     bool (*system_reboot)(void *context);
 
-    bool (*audio_get_info)(CliAudioStatus *statusOut, void *context);
+    bool (*audio_get_info)(CliAudioStatus *status_out, void *context);
     void *context;
 } CliServices;
 

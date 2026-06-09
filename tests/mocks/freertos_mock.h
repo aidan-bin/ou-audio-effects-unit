@@ -17,25 +17,25 @@ typedef enum
 
 typedef struct
 {
-    uint32_t giveCount;
-    uint32_t takeCount;
+    uint32_t give_count;
+    uint32_t take_count;
     bool available;
 } FreeRtosMockBinarySemaphore;
 
 typedef struct
 {
-    uint32_t notifySendCount;
-    uint32_t notifyWaitCount;
+    uint32_t notify_send_count;
+    uint32_t notify_wait_count;
     bool pending;
-    uint32_t lastValue;
+    uint32_t last_value;
 } FreeRtosMockTaskNotify;
 
 typedef struct
 {
-    uint32_t sendCount;
-    uint32_t receiveCount;
+    uint32_t send_count;
+    uint32_t receive_count;
 
-    size_t itemSize;
+    size_t item_size;
     size_t capacity;
     size_t count;
     size_t head;
@@ -51,7 +51,7 @@ typedef struct
     FreeRtosMockQueue queue;
 } FreeRtosMockState;
 
-extern FreeRtosMockState g_freeRtosMockState;
+extern FreeRtosMockState g_free_rtos_mock_state;
 
 void freertos_mock_reset(void);
 
@@ -59,13 +59,13 @@ void freertos_mock_semaphore_init(FreeRtosMockBinarySemaphore *semaphore);
 void freertos_mock_semaphore_give(FreeRtosMockBinarySemaphore *semaphore);
 FreeRtosMockStatus freertos_mock_semaphore_take(FreeRtosMockBinarySemaphore *semaphore);
 
-void freertos_mock_notify_init(FreeRtosMockTaskNotify *notifyState);
-void freertos_mock_task_notify(FreeRtosMockTaskNotify *notifyState, uint32_t value);
-FreeRtosMockStatus freertos_mock_task_notify_wait(FreeRtosMockTaskNotify *notifyState,
-                                                  uint32_t *valueOut);
+void freertos_mock_notify_init(FreeRtosMockTaskNotify *notify_state);
+void freertos_mock_task_notify(FreeRtosMockTaskNotify *notify_state, uint32_t value);
+FreeRtosMockStatus freertos_mock_task_notify_wait(FreeRtosMockTaskNotify *notify_state,
+                                                  uint32_t *value_out);
 
-void freertos_mock_queue_init(FreeRtosMockQueue *queue, size_t itemSize, size_t capacity);
+void freertos_mock_queue_init(FreeRtosMockQueue *queue, size_t item_size, size_t capacity);
 FreeRtosMockStatus freertos_mock_queue_send(FreeRtosMockQueue *queue, const void *item);
-FreeRtosMockStatus freertos_mock_queue_receive(FreeRtosMockQueue *queue, void *itemOut);
+FreeRtosMockStatus freertos_mock_queue_receive(FreeRtosMockQueue *queue, void *item_out);
 
 #endif

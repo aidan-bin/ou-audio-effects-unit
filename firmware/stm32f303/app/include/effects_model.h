@@ -19,8 +19,8 @@ typedef enum
 typedef struct
 {
     Effect ordered[NUM_EFFECTS];
-    bool isEnabled[NUM_EFFECTS];
-    uint8_t activeEffectSelection;
+    bool is_enabled[NUM_EFFECTS];
+    uint8_t active_effect_selection;
 } EffectsState;
 
 typedef struct
@@ -29,22 +29,22 @@ typedef struct
     EchoParam echo;
     CompressionParam compression;
 
-    OverdriveParam overdriveMin, overdriveMax;
-    EchoParam echoMin, echoMax;
-    CompressionParam compressionMin, compressionMax;
+    OverdriveParam overdrive_min, overdrive_max;
+    EchoParam echo_min, echo_max;
+    CompressionParam compression_min, compression_max;
 } EffectsParams;
 
 bool effect_is_valid(Effect effect);
 void effects_state_set_default_order(EffectsState *state);
 bool effects_state_order_valid(const EffectsState *state);
 void effects_state_normalize(EffectsState *state);
-bool effects_state_get_active_effect(const EffectsState *state, Effect *activeEffect);
-size_t map_adc_to_param(uint32_t adcValue, size_t min, size_t max, uint32_t adcMax);
+bool effects_state_get_active_effect(const EffectsState *state, Effect *active_effect);
+size_t map_adc_to_param(uint32_t adc_value, size_t min, size_t max, uint32_t adc_max);
 
-void effects_state_apply_switches(EffectsState *state, bool switchAEnabled, bool switchBEnabled,
-                                  bool switchCEnabled);
+void effects_state_apply_switches(EffectsState *state, bool switch_a_enabled, bool switch_b_enabled,
+                                  bool switch_c_enabled);
 
-bool effects_params_apply_pot_sample(EffectsParams *params, Effect activeEffect, uint8_t potIndex,
-                                     uint32_t adcValue, uint32_t adcMax);
+bool effects_params_apply_pot_sample(EffectsParams *params, Effect active_effect, uint8_t pot_index,
+                                     uint32_t adc_value, uint32_t adc_max);
 
 #endif
