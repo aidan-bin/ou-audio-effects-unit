@@ -37,6 +37,8 @@ typedef struct
     bool (*test_set_output_vector)(uint8_t vector, void *context);
     bool (*test_set_output_frequency_hz)(uint16_t frequencyHz, void *context);
     bool (*test_set_output_amplitude)(uint16_t amplitude, void *context);
+
+    void (*system_reboot)(void *context);
     void *context;
 } CliServiceAdapterOps;
 

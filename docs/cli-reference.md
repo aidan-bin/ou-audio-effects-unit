@@ -69,6 +69,10 @@ EEPROM state persistence.
 - `log stats reset` — reset all counters
 - `log stats timing` — show timing stats (min, max, avg frame time in us, overruns, drops, batch size, queue depth)
 
+### reboot
+
+- `reboot` — confirms then resets the device.
+
 ### test
 
 Inject test signals in place of ADC input / route to DAC output.

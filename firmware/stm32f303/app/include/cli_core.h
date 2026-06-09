@@ -102,6 +102,8 @@ typedef struct
     bool (*test_set_output_frequency_hz)(uint16_t frequencyHz, void *context);
     bool (*test_set_output_amplitude)(uint16_t amplitude, void *context);
     bool (*test_get_output_status)(CliTestModeStatus *statusOut, void *context);
+
+    bool (*system_reboot)(void *context);
     void *context;
 } CliServices;
 

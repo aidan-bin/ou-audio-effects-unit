@@ -39,7 +39,7 @@ static const char *command_help_text(const char *command)
 {
     if (command == NULL)
     {
-        return "commands: help ping override config rom log test\n";
+        return "commands: help ping override config rom log test reboot\n";
     }
 
     if (strcmp(command, "help") == 0)
@@ -70,6 +70,10 @@ static const char *command_help_text(const char *command)
     {
         return "test mode <0|1> | vector <sine|lut> | freq <hz> | amp <value> | status\n";
     }
+    if (strcmp(command, "reboot") == 0)
+    {
+        return "reboot\n";
+    }
 
     return NULL;
 }
@@ -92,6 +96,26 @@ const char *cli_core_error_text(CliStatus status)
     default:
         return NULL;
     }
+}
+
+static CliStatus handle_reboot(char **tokens,
+                               size_t token_count,
+                               const CliServices *services,
+                               const CliIo *io,
+                               CliCommandResult *result)
+{
+    (void)tokens;
+    (void)token_count;
+    (void)result;
+
+    if (services->system_reboot == NULL)
+    {
+        return CLI_STATUS_UNSUPPORTED;
+    }
+
+    write_line(io, "reboot ok\n");
+    services->system_reboot(services->context);
+    return CLI_STATUS_OK;
 }
 
 static CliStatus handle_help(char **tokens,
@@ -881,6 +905,7 @@ CliStatus cli_core_process_line_ex(const char *line,
         {.name = "rom", .handler = handle_rom},
         {.name = "log", .handler = handle_log},
         {.name = "test", .handler = handle_test},
+        {.name = "reboot", .handler = handle_reboot},
     };
 
     CliStatus status = CLI_STATUS_UNKNOWN_COMMAND;

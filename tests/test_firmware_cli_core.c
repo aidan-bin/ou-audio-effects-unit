@@ -42,6 +42,8 @@ typedef struct
     uint8_t testOutputVector;
     uint16_t testOutputFrequencyHz;
     uint16_t testOutputAmplitude;
+
+    bool rebootCalled;
 } CliCoreTestContext;
 
 static bool test_write(const char *text, void *context)
@@ -303,6 +305,13 @@ static bool test_get_output_status(CliTestModeStatus *statusOut, void *context)
     return !ctx->failService;
 }
 
+static bool system_reboot(void *context)
+{
+    CliCoreTestContext *ctx = (CliCoreTestContext *)context;
+    ctx->rebootCalled = true;
+    return !ctx->failService;
+}
+
 static CliServices make_services(CliCoreTestContext *ctx)
 {
     CliServices services = {
@@ -334,6 +343,7 @@ static CliServices make_services(CliCoreTestContext *ctx)
         .test_set_output_frequency_hz = test_set_output_frequency_hz,
         .test_set_output_amplitude = test_set_output_amplitude,
         .test_get_output_status = test_get_output_status,
+        .system_reboot = system_reboot,
         .context = ctx,
     };
     return services;
@@ -598,6 +608,19 @@ static void test_log_stats_reset(void)
     expect_eq_u32(0, ctx.failureCount, "failure count reset");
 }
 
+static void test_reboot_command(void)
+{
+    CliCoreTestContext ctx = {0};
+    CliServices services = make_services(&ctx);
+    CliIo io = make_io(&ctx);
+
+    expect_eq_u32(CLI_STATUS_OK,
+                  cli_core_process_line("reboot", &services, &io),
+                  "reboot returns ok");
+    expect_true(ctx.rebootCalled, "reboot service called");
+    expect_true(strstr(ctx.output, "reboot ok") != NULL, "reboot writes confirmation");
+}
+
 static void test_error_paths(void)
 {
     CliCoreTestContext ctx = {0};
@@ -633,6 +656,7 @@ int main(void)
     test_log_stats_reset();
     test_test_input_mode_commands();
     test_test_output_mode_commands();
+    test_reboot_command();
     test_error_paths();
 
     if (failures != 0)

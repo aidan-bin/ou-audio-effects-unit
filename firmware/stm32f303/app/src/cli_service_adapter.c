@@ -884,6 +884,18 @@ static bool service_test_get_output_status(CliTestModeStatus *status_out, void *
     return true;
 }
 
+static bool service_system_reboot(void *ctx)
+{
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
+    if (context == NULL || context->ops.system_reboot == NULL)
+    {
+        return false;
+    }
+
+    context->ops.system_reboot(context->ops.context);
+    return true;
+}
+
 void cli_service_adapter_init(CliServiceAdapter *context, EffectsState *state,
                               EffectsParams *params, const CliServiceAdapterOps *ops,
                               uint32_t adc_max)
@@ -988,6 +1000,7 @@ void cli_service_adapter_bind(CliServiceAdapter *context, CliServices *services_
     services_out->test_set_output_frequency_hz = service_test_set_output_frequency_hz;
     services_out->test_set_output_amplitude = service_test_set_output_amplitude;
     services_out->test_get_output_status = service_test_get_output_status;
+    services_out->system_reboot = service_system_reboot;
     services_out->context = context;
 }
 

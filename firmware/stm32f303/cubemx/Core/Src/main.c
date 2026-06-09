@@ -237,6 +237,7 @@ static uint8_t log_get_level(void *context);
 static bool log_write_line(const char *line, void *context);
 static void cli_service_lock(void *context);
 static void cli_service_unlock(void *context);
+static void cli_system_reboot(void *context);
 static void init_cli_service_adapter(void);
 static bool cli_usb_write(const char *text, void *context);
 static void cli_usb_rx_queue_push_byte(uint8_t byte);
@@ -678,6 +679,7 @@ static void init_cli_service_adapter(void)
         .rom_write_raw = NULL,
         .log_set_level = NULL,
         .log_set_enabled = NULL,
+        .system_reboot = cli_system_reboot,
         .context = NULL,
     };
 
@@ -829,6 +831,12 @@ static void init_peripheral_dispatch(void)
     peripheral_dispatch_ops.adc_get_value = peripheral_adc_get_value;
     peripheral_dispatch_ops.i2c_signal_completion_from_isr = peripheral_i2c_signal_completion_from_isr;
     peripheral_dispatch_ops.context = NULL;
+}
+
+static void cli_system_reboot(void *context)
+{
+    (void)context;
+    NVIC_SystemReset();
 }
 
 /* USER CODE END 0 */

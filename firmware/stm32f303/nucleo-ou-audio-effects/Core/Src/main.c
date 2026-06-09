@@ -175,6 +175,7 @@ static bool cli_uart_write(const char *text, void *context);
 static void cli_service_lock(void *context);
 static void cli_service_unlock(void *context);
 static void cli_uart_recover_rx_errors(void);
+static void cli_system_reboot(void *context);
 static void init_cli_service_adapter(void);
 static void init_effects_defaults(void);
 static uint32_t compute_sampling_period_us(void);
@@ -621,6 +622,7 @@ static void init_cli_service_adapter(void)
         .log_set_level = NULL,
         .log_set_enabled = NULL,
         .log_set_stream = NULL,
+        .system_reboot = cli_system_reboot,
         .context = NULL,
     };
 
@@ -825,6 +827,12 @@ void startCliTask(void const *argument)
 
         osDelay(1);
     }
+}
+
+static void cli_system_reboot(void *context)
+{
+    (void)context;
+    NVIC_SystemReset();
 }
 
 /* USER CODE END 0 */
