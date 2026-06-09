@@ -896,6 +896,25 @@ static bool service_system_reboot(void *ctx)
     return true;
 }
 
+static bool service_audio_get_info(CliAudioStatus *status_out, void *ctx)
+{
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
+    if (context == NULL || status_out == NULL)
+    {
+        return false;
+    }
+
+    lock_ctx(context);
+    status_out->sampleRateHz = context->sampleRateHz;
+    status_out->sampleBufLen = context->sampleBufLen;
+    status_out->samplingPeriodUs = context->samplingPeriodUs;
+    status_out->delaySamplesLen = context->delaySamplesLen;
+    status_out->processingSlackMs = context->processingSlackMs;
+    unlock_ctx(context);
+
+    return true;
+}
+
 void cli_service_adapter_init(CliServiceAdapter *context, EffectsState *state,
                               EffectsParams *params, const CliServiceAdapterOps *ops,
                               uint32_t adc_max)
@@ -1001,6 +1020,7 @@ void cli_service_adapter_bind(CliServiceAdapter *context, CliServices *services_
     services_out->test_set_output_amplitude = service_test_set_output_amplitude;
     services_out->test_get_output_status = service_test_get_output_status;
     services_out->system_reboot = service_system_reboot;
+    services_out->audio_get_info = service_audio_get_info;
     services_out->context = context;
 }
 
@@ -1230,6 +1250,27 @@ uint8_t cli_service_adapter_get_stream_batch_size(CliServiceAdapter *context)
     uint8_t size = context->streamBatchSize;
     unlock_ctx(context);
     return size;
+}
+
+void cli_service_adapter_set_audio_info(CliServiceAdapter *context,
+                                        uint32_t sample_rate_hz,
+                                        uint32_t sample_buf_len,
+                                        uint32_t sampling_period_us,
+                                        uint32_t delay_samples_len,
+                                        uint32_t processing_slack_ms)
+{
+    if (context == NULL)
+    {
+        return;
+    }
+
+    lock_ctx(context);
+    context->sampleRateHz = sample_rate_hz;
+    context->sampleBufLen = sample_buf_len;
+    context->samplingPeriodUs = sampling_period_us;
+    context->delaySamplesLen = delay_samples_len;
+    context->processingSlackMs = processing_slack_ms;
+    unlock_ctx(context);
 }
 
 void cli_service_adapter_reset_profiling_stats(CliServiceAdapter *context)

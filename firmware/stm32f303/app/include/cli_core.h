@@ -64,6 +64,15 @@ typedef struct
 
 typedef struct
 {
+    uint32_t sampleRateHz;
+    uint32_t sampleBufLen;
+    uint32_t samplingPeriodUs;
+    uint32_t delaySamplesLen;
+    uint32_t processingSlackMs;
+} CliAudioStatus;
+
+typedef struct
+{
     bool (*set_pot_override)(uint8_t potIndex, uint32_t value, void *context);
     bool (*clear_pot_override)(uint8_t potIndex, void *context);
     bool (*set_switch_override)(uint8_t switchIndex, bool enabled, void *context);
@@ -104,6 +113,8 @@ typedef struct
     bool (*test_get_output_status)(CliTestModeStatus *statusOut, void *context);
 
     bool (*system_reboot)(void *context);
+
+    bool (*audio_get_info)(CliAudioStatus *statusOut, void *context);
     void *context;
 } CliServices;
 

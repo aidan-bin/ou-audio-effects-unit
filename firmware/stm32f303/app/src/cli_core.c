@@ -8,6 +8,7 @@
 #define LOG_LINE_BUF_SIZE 128
 #define LOG_STREAM_BATCH_MAX 255
 #define TEST_STATUS_LINE_BUF_SIZE 112
+#define INFO_LINE_BUF_SIZE 96
 
 typedef CliStatus (*CliCommandHandler)(char **tokens,
                                        size_t token_count,
@@ -39,7 +40,7 @@ static const char *command_help_text(const char *command)
 {
     if (command == NULL)
     {
-        return "commands: help ping override config rom log test reboot\n";
+        return "commands: help ping override config rom log test reboot info\n";
     }
 
     if (strcmp(command, "help") == 0)
@@ -73,6 +74,10 @@ static const char *command_help_text(const char *command)
     if (strcmp(command, "reboot") == 0)
     {
         return "reboot\n";
+    }
+    if (strcmp(command, "info") == 0)
+    {
+        return "info\n";
     }
 
     return NULL;
@@ -851,6 +856,41 @@ static CliStatus handle_test(char **tokens,
                             services->context, io);
 }
 
+static CliStatus handle_info(char **tokens,
+                             size_t token_count,
+                             const CliServices *services,
+                             const CliIo *io,
+                             CliCommandResult *result)
+{
+    (void)result;
+
+    if (token_count != 1)
+    {
+        return CLI_STATUS_INVALID_ARGUMENTS;
+    }
+
+    if (services->audio_get_info == NULL)
+    {
+        return CLI_STATUS_UNSUPPORTED;
+    }
+
+    CliAudioStatus status = {0};
+    if (!services->audio_get_info(&status, services->context))
+    {
+        return CLI_STATUS_SERVICE_ERROR;
+    }
+
+    char line[INFO_LINE_BUF_SIZE];
+    (void)snprintf(line, sizeof(line),
+                   "info sr=%lu sf=%lu sp=%lu ds=%lu sl=%lu\n",
+                   (unsigned long)status.sampleRateHz,
+                   (unsigned long)status.sampleBufLen,
+                   (unsigned long)status.samplingPeriodUs,
+                   (unsigned long)status.delaySamplesLen,
+                   (unsigned long)status.processingSlackMs);
+    return write_line(io, line) ? CLI_STATUS_OK : CLI_STATUS_SERVICE_ERROR;
+}
+
 CliStatus cli_core_process_line(const char *line, const CliServices *services, const CliIo *io)
 {
     return cli_core_process_line_ex(line, services, io, NULL);
@@ -906,6 +946,7 @@ CliStatus cli_core_process_line_ex(const char *line,
         {.name = "log", .handler = handle_log},
         {.name = "test", .handler = handle_test},
         {.name = "reboot", .handler = handle_reboot},
+        {.name = "info", .handler = handle_info},
     };
 
     CliStatus status = CLI_STATUS_UNKNOWN_COMMAND;

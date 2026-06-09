@@ -2,6 +2,18 @@
 
 ## Commands
 
+### info
+
+Query audio system information.
+
+- `info` — prints `info sr=<Hz> sf=<samples> sp=<us> ds=<samples> sl=<ms>`
+
+- `sr` - sample rate in Hz
+- `sf` - audio frame size (samples per buffer half)
+- `sp` - sampling period in microseconds
+- `ds` - delay line length in samples
+- `sl` - processing deadline slack in ms
+
 ### help, ping
 
 - `help [command]` — list all commands, or show usage for one.

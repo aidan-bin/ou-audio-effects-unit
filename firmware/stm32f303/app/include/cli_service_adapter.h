@@ -120,6 +120,12 @@ typedef struct
     uint32_t stepFailureStreak;
     uint8_t streamBatchSize;
     uint8_t streamBatchCounter;
+
+    uint32_t sampleRateHz;
+    uint32_t sampleBufLen;
+    uint32_t samplingPeriodUs;
+    uint32_t delaySamplesLen;
+    uint32_t processingSlackMs;
 } CliServiceAdapter;
 
 void cli_service_adapter_init(CliServiceAdapter *context, EffectsState *state,
@@ -158,5 +164,11 @@ uint8_t cli_service_adapter_get_stream_batch_size(CliServiceAdapter *context);
 void cli_service_adapter_reset_profiling_stats(CliServiceAdapter *context);
 void cli_service_adapter_note_frame_timing(CliServiceAdapter *context, uint32_t frameTimeUs,
                                            bool overrun);
+void cli_service_adapter_set_audio_info(CliServiceAdapter *context,
+                                        uint32_t sampleRateHz,
+                                        uint32_t sampleBufLen,
+                                        uint32_t samplingPeriodUs,
+                                        uint32_t delaySamplesLen,
+                                        uint32_t processingSlackMs);
 
 #endif
