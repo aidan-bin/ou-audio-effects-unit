@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 
-USER_CODE_REGIONS_PY="$SCRIPT_DIR/lib/user_code_regions.py"
+WORKFLOWS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$WORKFLOWS_DIR/discovery.sh"
+
+USER_CODE_REGIONS_PY="$WORKFLOWS_DIR/user_code_regions.py"
 
 run_user_code_regions() {
 	python3 "$USER_CODE_REGIONS_PY" "$@"
@@ -123,38 +126,38 @@ ensure_clang_tool() {
 	echo "$tool_bin"
 }
 
-run_clang_format_scope() {
-	local clang_format_bin="$1"
-	shift
-
-	"$clang_format_bin" "$@" "${C_FORMAT_FULL_FILES[@]}"
-
-	for file in "${C_CUBEMX_SECTION_FILES[@]}"; do
-		local line_args=()
-		local line_arg
-		[[ ! -f "$file" ]] && continue
-
-		while IFS= read -r line_arg; do
-			[[ -n "$line_arg" ]] && line_args+=("$line_arg")
-		done < <(user_code_clang_format_args "$file")
-		[[ "${#line_args[@]}" -eq 0 ]] && continue
-
-		"$clang_format_bin" "$@" "${line_args[@]}" "$file"
-	done
-}
-
 run_format() {
 	local clang_format_bin
-
 	clang_format_bin="$(ensure_clang_tool clang-format)"
-	run_clang_format_scope "$clang_format_bin" -i
+	_format_scope "$clang_format_bin" -i
 }
 
 run_format_check() {
 	local clang_format_bin
-
 	clang_format_bin="$(ensure_clang_tool clang-format)"
-	run_clang_format_scope "$clang_format_bin" --dry-run --Werror
+	_format_scope "$clang_format_bin" --dry-run --Werror
+}
+
+_format_scope() {
+	local clang_format_bin="$1"
+	shift
+
+	local file
+	while IFS= read -r file; do
+		[[ -n "$file" ]] && "$clang_format_bin" "$@" "$file"
+	done < <(discover_scope_c_h)
+
+	while IFS= read -r file; do
+		[[ -z "$file" ]] && continue
+		[[ ! -f "$file" ]] && continue
+		local line_args=()
+		local line_arg
+		while IFS= read -r line_arg; do
+			[[ -n "$line_arg" ]] && line_args+=("$line_arg")
+		done < <(user_code_clang_format_args "$file")
+		[[ "${#line_args[@]}" -eq 0 ]] && continue
+		"$clang_format_bin" "$@" "${line_args[@]}" "$file"
+	done < <(discover_generated_c_h)
 }
 
 run_lint() {
@@ -174,7 +177,6 @@ run_lint() {
 
 	if [[ "$(uname -s)" == "Darwin" ]]; then
 		local sdk_path
-
 		sdk_path="$(xcrun --sdk macosx --show-sdk-path)"
 		host_extra_args+=("--extra-arg-before=-isysroot${sdk_path}")
 	fi
@@ -197,7 +199,6 @@ run_lint() {
 				echo "$candidate"
 				return 0
 			fi
-
 			echo "Configured CUBEMX_LINT_BUILD_DIR has no compile_commands.json: $candidate"
 			return 1
 		fi
@@ -224,7 +225,6 @@ run_lint() {
 				echo "$candidate"
 				return 0
 			fi
-
 			echo "Configured NUCLEO_LINT_BUILD_DIR has no compile_commands.json: $candidate"
 			return 1
 		fi
@@ -329,7 +329,6 @@ run_lint() {
 				echo "Lint requires compile_commands entry for $file in $compile_db_file"
 				return 1
 			fi
-
 			echo "Skipping lint for $file (no compile_commands entry in $compile_db_file)."
 			return 0
 		fi
@@ -376,7 +375,9 @@ run_lint() {
 		return 1
 	fi
 
-	for file in "${C_LINT_FULL_FILES[@]}"; do
+	local file
+	while IFS= read -r file; do
+		[[ -z "$file" ]] && continue
 		local compile_db_dir="$root_compile_db_dir"
 		local header_filter='^dsp/'
 		local checks_override=""
@@ -387,21 +388,22 @@ run_lint() {
 				echo "Lint requires compile_commands entry for $file in root or CubeMX compile database."
 				return 1
 			fi
-		elif [[ "$file" == tests/* || "$file" == host/* ]]; then
-			header_filter='^(dsp|firmware/stm32f303/app|tests|host)/'
+		elif [[ "$file" == tests/* ]]; then
+			header_filter='^(dsp|firmware/stm32f303/app|tests)/'
 			checks_override='clang-analyzer-*,bugprone-*,-bugprone-easily-swappable-parameters,performance-*,-readability-identifier-naming,-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,-clang-analyzer-optin.core.EnumCastOutOfRange'
 		fi
 
 		run_tidy "$file" "$header_filter" "$compile_db_dir" "" fail "$checks_override"
-	done
+	done < <(discover_scope_c)
 
-	for file in "${C_CUBEMX_SECTION_LINT_FILES[@]}"; do
-		local line_filter
-		local line_filter_file
-		local generated_compile_db_dir
-		local checks_override='clang-analyzer-*,bugprone-*,-bugprone-easily-swappable-parameters,performance-*,-readability-identifier-naming,-performance-no-int-to-ptr,-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling'
+	while IFS= read -r file; do
+		[[ -z "$file" ]] && continue
 		[[ ! -f "$file" ]] && continue
 		[[ "$file" != *.c ]] && continue
+
+		local line_filter
+		local generated_compile_db_dir
+		local checks_override='clang-analyzer-*,bugprone-*,-bugprone-easily-swappable-parameters,performance-*,-readability-identifier-naming,-performance-no-int-to-ptr,-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling'
 
 		if [[ "$file" == firmware/stm32f303/cubemx/* ]]; then
 			generated_compile_db_dir="$cubemx_compile_db_dir"
@@ -412,15 +414,12 @@ run_lint() {
 			return 1
 		fi
 
-		line_filter_file="$file"
-		[[ "$line_filter_file" != /* ]] && line_filter_file="$REPO_ROOT/$line_filter_file"
-
-		line_filter="$(user_code_clang_tidy_line_filter "$line_filter_file")"
+		line_filter="$(user_code_clang_tidy_line_filter "$file")"
 		[[ -z "$line_filter" ]] && continue
 
 		run_tidy "$file" '^(dsp|firmware/stm32f303/app|firmware/stm32f303/cubemx|firmware/stm32f303/nucleo-ou-audio-effects)/' \
 			"$generated_compile_db_dir" "$line_filter" fail "$checks_override"
-	done
+	done < <(discover_generated_c)
 }
 
 run_check() {
