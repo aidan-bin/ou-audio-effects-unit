@@ -36,9 +36,13 @@ For anti-aliasing, you can use an RC low-pass filter on the input. For example, 
 
 ### Output Configuration
 
-If you have a piezo, you can connect one terminal to the DAC output (PA4) and the other to GND. It is recommended to add a series resistor (~1k) for protection, a series capacitor (~1uF) for AC coupling (since the DAC output is DC biased), and a parallel resistor (~1M) for discharge.
+The DAC output is a stair-step waveform, so it benefits from low-pass reconstruction filtering. For example, a 1k resistor in series with the DAC output (PA4) connected to a 10nF capacitor to ground creates a simple RC filter with a cutoff around 16kHz.
 
-OPAMP2 is configured in follower mode to buffer the DAC output (useful since the DAC has limited drive capability). You can connect the DAC output (PA4) to the OPAMP2 VINP (PA7) and the OPAMP2 output (PA6) to the piezo.
+OPAMP2 is configured in follower mode to buffer the DAC output (useful to isolate the low-pass filter). Connect the filter output to the OPAMP2 VINP (PA7). Then connect the OPAMP2 output (PA6) to a series coupling capacitor (e.g., 1 µF) with a parallel discharge resistor (e.g., 1M) to remove the DC bias.
+
+You can connect this to a piezo speaker with a series resistor (e.g., 330 Ω) for protection, or to an amplifier. 
+
+A SPICE model is available at `hardware/LTspice/nucleo_output_stage_full.asc`.
 
 ## Calibration and Tuning Notes
 

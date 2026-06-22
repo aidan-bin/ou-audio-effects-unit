@@ -128,3 +128,8 @@ firmware/stm32f303/nucleo-ou-audio-effects/USB_DEVICE/Target/*
 !firmware/stm32f303/nucleo-ou-audio-effects/USB_DEVICE/Target/usbd_conf.h
 
 .local/
+
+# LTSpice artifacts
+*.log
+*.net
+*.raw
