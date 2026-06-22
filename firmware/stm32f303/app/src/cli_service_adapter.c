@@ -5,7 +5,6 @@
 #include <string.h>
 
 #define TEST_FREQ_MIN_HZ 20U
-#define TEST_FREQ_MAX_HZ 8000U
 #define TEST_DEFAULT_FREQ_HZ 1000
 #define MAX_TEST_VECTOR_INDEX 2U
 #define ROM_RAW_MIN_ADDRESS 0x0000
@@ -731,7 +730,7 @@ static bool service_test_set_input_vector(uint8_t vector, void *ctx)
 static bool service_test_set_input_frequency_hz(uint16_t frequency_hz, void *ctx)
 {
     CliServiceAdapter *context = (CliServiceAdapter *)ctx;
-    if (context == NULL || frequency_hz < TEST_FREQ_MIN_HZ || frequency_hz > TEST_FREQ_MAX_HZ)
+    if (context == NULL || frequency_hz < TEST_FREQ_MIN_HZ)
     {
         return false;
     }
@@ -829,7 +828,7 @@ static bool service_test_set_output_vector(uint8_t vector, void *ctx)
 static bool service_test_set_output_frequency_hz(uint16_t frequency_hz, void *ctx)
 {
     CliServiceAdapter *context = (CliServiceAdapter *)ctx;
-    if (context == NULL || frequency_hz < TEST_FREQ_MIN_HZ || frequency_hz > TEST_FREQ_MAX_HZ)
+    if (context == NULL || frequency_hz < TEST_FREQ_MIN_HZ)
     {
         return false;
     }

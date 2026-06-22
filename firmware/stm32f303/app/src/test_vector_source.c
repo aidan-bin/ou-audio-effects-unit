@@ -7,7 +7,6 @@
 
 #define TEST_VECTOR_DEFAULT_SAMPLE_RATE_HZ 40500U
 #define TEST_VECTOR_SWEEP_MIN_HZ 20U
-#define TEST_VECTOR_SWEEP_MAX_HZ 8000U
 
 #define Q16_ONE (1UL << 16)
 
@@ -110,14 +109,15 @@ bool test_vector_source_fill_buffer(TestVectorSource *source, const CliTestModeS
 
     if (status->vector == 2U)
     {
-        uint32_t sweep_step = (uint32_t)((uint64_t)(TEST_VECTOR_SWEEP_MAX_HZ - TEST_VECTOR_SWEEP_MIN_HZ) *
+        uint32_t sweep_max_hz = sample_rate_hz / 2U;
+        uint32_t sweep_step = (uint32_t)((uint64_t)(sweep_max_hz - TEST_VECTOR_SWEEP_MIN_HZ) *
                                          (uint64_t)count / (uint64_t)sample_rate_hz);
         if (sweep_step == 0U)
         {
             sweep_step = 1U;
         }
         source->sweep_freq_hz += sweep_step;
-        if (source->sweep_freq_hz > TEST_VECTOR_SWEEP_MAX_HZ)
+        if (source->sweep_freq_hz > sweep_max_hz)
         {
             source->sweep_freq_hz = TEST_VECTOR_SWEEP_MIN_HZ;
             source->phase_q16 = 0U;

@@ -91,7 +91,7 @@ Inject test signals in place of ADC input / route to DAC output.
 
 - `test input|output mode <0|1>` — enable/disable
 - `test input|output vector <sine|lut|sweep>` — waveform type
-- `test input|output freq <hz>` — range 20–8000
+- `test input|output freq <hz>` — min 20
 - `test input|output amp <value>` — max 32767
 - `test input|output status` — show config
 - `test status` — show both input and output config
