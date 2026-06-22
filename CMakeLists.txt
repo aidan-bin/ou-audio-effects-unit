@@ -35,6 +35,7 @@ set(OU_FIRMWARE_APP_STANDARD_TESTS
     rom_task_support
     peripheral_dispatch
     rom_handler
+    test_vector_source
 )
 
 function(ou_link_math_library target_name)

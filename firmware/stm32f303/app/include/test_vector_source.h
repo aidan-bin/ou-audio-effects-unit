@@ -7,6 +7,10 @@
 
 #include "cli_core.h"
 
+#define TEST_VECTOR_SINE 0U
+#define TEST_VECTOR_USER 1U
+#define TEST_VECTOR_SWEEP 2U
+
 typedef struct
 {
     uint32_t sample_rate_hz;
