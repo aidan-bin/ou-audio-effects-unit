@@ -150,6 +150,7 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
 
     if (!ops->read_latched_state(&latched_effects_state, &latched_effects_params, ops->context))
     {
+        (void)log_write(LOG_LEVEL_ERROR, "process_failed: read_latched_state");
         process_failed = true;
         goto cleanup;
     }
@@ -171,7 +172,7 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
         if (!ops->dma_copy(curr_adc_buf, curr_dac_buf, task_context->sample_buf_len,
                            ticks_to_wait, ops->context))
         {
-            (void)log_write(LOG_LEVEL_ERROR, "effects task pass-through copy failed");
+            (void)log_write(LOG_LEVEL_ERROR, "process_failed: pass-through copy");
             if (ops->panic_write != NULL)
             {
                 ops->panic_write("panic: pass-through copy failed\n", ops->context);
@@ -185,6 +186,7 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
         (uint16_t *)ops->alloc(task_context->delay_samples_len * sizeof(uint16_t), ops->context);
     if (echo_delay_samples_buf == NULL)
     {
+        (void)log_write(LOG_LEVEL_ERROR, "process_failed: echo_delay_samples_buf alloc");
         process_failed = true;
         goto cleanup;
     }
@@ -192,12 +194,14 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
     if (!ops->dma_copy(task_context->delay_samples_buf, echo_delay_samples_buf,
                        task_context->delay_samples_len, ticks_to_wait, ops->context))
     {
+        (void)log_write(LOG_LEVEL_ERROR, "process_failed: echo delay samples dma copy");
         process_failed = true;
         goto cleanup;
     }
 
     if (effects_pipeline_sync_params(task_context->pipeline, &latched_effects_params) != 0)
     {
+        (void)log_write(LOG_LEVEL_ERROR, "process_failed: pipeline_sync_params");
         process_failed = true;
         goto cleanup;
     }
@@ -220,6 +224,7 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
             if (effects_pipeline_get_echo_delay_samples(task_context->pipeline, &num_delay_samples) !=
                 0)
             {
+                (void)log_write(LOG_LEVEL_ERROR, "process_failed: get_echo_delay_samples");
                 process_failed = true;
                 break;
             }
@@ -233,6 +238,7 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
                 (num_delay_samples + task_context->sample_buf_len) * sizeof(uint16_t), ops->context);
             if (echo_input_buf == NULL)
             {
+                (void)log_write(LOG_LEVEL_ERROR, "process_failed: echo_input_buf alloc");
                 process_failed = true;
                 break;
             }
@@ -243,6 +249,7 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
                         &echo_delay_samples_buf[task_context->delay_samples_len - num_delay_samples],
                         echo_input_buf, num_delay_samples, ticks_to_wait, ops->context))
                 {
+                    (void)log_write(LOG_LEVEL_ERROR, "process_failed: echo delay history dma copy");
                     process_failed = true;
                     break;
                 }
@@ -251,6 +258,7 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
             if (!ops->dma_copy(input_buf, &echo_input_buf[num_delay_samples], task_context->sample_buf_len,
                                ticks_to_wait, ops->context))
             {
+                (void)log_write(LOG_LEVEL_ERROR, "process_failed: echo input dma copy");
                 process_failed = true;
                 break;
             }
@@ -261,6 +269,7 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
             if (effects_pipeline_process(task_context->pipeline, effect, echo_input_buf, output_buf,
                                          task_context->sample_buf_len) != 0)
             {
+                (void)log_write(LOG_LEVEL_ERROR, "process_failed: echo pipeline process");
                 process_failed = true;
                 break;
             }
@@ -268,6 +277,7 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
         else if (effects_pipeline_process(task_context->pipeline, effect, input_buf, output_buf,
                                           task_context->sample_buf_len) != 0)
         {
+            (void)log_write(LOG_LEVEL_ERROR, "process_failed: effect pipeline process");
             process_failed = true;
             break;
         }
@@ -299,7 +309,7 @@ cleanup:
     if (!process_failed && ops->replace_output_for_testing != NULL &&
         !ops->replace_output_for_testing(curr_dac_buf, task_context->sample_buf_len, ops->context))
     {
-        (void)log_write(LOG_LEVEL_WARN, "effects task test output replacement failed");
+        (void)log_write(LOG_LEVEL_ERROR, "process_failed: test output replacement");
         if (ops->panic_write != NULL)
         {
             ops->panic_write("panic: test output replacement failed\n", ops->context);
