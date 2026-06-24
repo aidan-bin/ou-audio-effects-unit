@@ -40,7 +40,7 @@ static const char *command_help_text(const char *command)
 {
     if (command == NULL)
     {
-        return "commands: help ping override config rom log test reboot info\n";
+        return "commands: help ping override config rom log test i2c reboot info\n";
     }
 
     if (strcmp(command, "help") == 0)
@@ -74,6 +74,10 @@ static const char *command_help_text(const char *command)
     if (strcmp(command, "reboot") == 0)
     {
         return "reboot\n";
+    }
+    if (strcmp(command, "i2c") == 0)
+    {
+        return "i2c scan [start] [end] | ping <addr> | read <addr> <reg> [len] | write <addr> <reg> <hex> | send <addr> <hex> | recv <addr> <len>\n";
     }
     if (strcmp(command, "info") == 0)
     {
@@ -856,6 +860,245 @@ static CliStatus handle_test(char **tokens,
                             services->context, io);
 }
 
+static CliStatus handle_i2c(char **tokens,
+                            size_t token_count,
+                            const CliServices *services,
+                            const CliIo *io,
+                            CliCommandResult *result)
+{
+    (void)result;
+
+    if (token_count < 2)
+    {
+        return CLI_STATUS_INVALID_ARGUMENTS;
+    }
+
+    if (strcmp(tokens[1], "scan") == 0)
+    {
+        if (services->i2c_scan == NULL)
+        {
+            return CLI_STATUS_UNSUPPORTED;
+        }
+
+        uint32_t start_addr = 0x03;
+        uint32_t end_addr = 0x77;
+        if (token_count >= 3)
+        {
+            if (!cli_parse_u32(tokens[2], &start_addr))
+            {
+                return CLI_STATUS_PARSE_ERROR;
+            }
+        }
+        if (token_count >= 4)
+        {
+            if (!cli_parse_u32(tokens[3], &end_addr))
+            {
+                return CLI_STATUS_PARSE_ERROR;
+            }
+        }
+        if (start_addr > end_addr || start_addr > 0x7F || end_addr > 0x7F)
+        {
+            return CLI_STATUS_INVALID_ARGUMENTS;
+        }
+
+        uint8_t found[128] = {0};
+        size_t count = 0;
+        if (!services->i2c_scan((uint8_t)start_addr, (uint8_t)end_addr,
+                                found, &count, sizeof(found), services->context))
+        {
+            return CLI_STATUS_SERVICE_ERROR;
+        }
+
+        char line[256];
+        size_t used = (size_t)snprintf(line, sizeof(line), "i2c scan");
+        for (size_t i = 0; i < count && used + 6 < sizeof(line); i++)
+        {
+            used += (size_t)snprintf(&line[used], sizeof(line) - used, " 0x%02X", found[i]);
+        }
+        snprintf(&line[used], sizeof(line) - used, "\n");
+        return write_line(io, line) ? CLI_STATUS_OK : CLI_STATUS_SERVICE_ERROR;
+    }
+
+    if (strcmp(tokens[1], "ping") == 0)
+    {
+        if (token_count != 3)
+        {
+            return CLI_STATUS_INVALID_ARGUMENTS;
+        }
+        if (services->i2c_ping == NULL)
+        {
+            return CLI_STATUS_UNSUPPORTED;
+        }
+
+        uint32_t addr = 0;
+        if (!cli_parse_u32(tokens[2], &addr) || addr > 0x7F)
+        {
+            return CLI_STATUS_PARSE_ERROR;
+        }
+
+        if (!services->i2c_ping((uint8_t)addr, services->context))
+        {
+            return CLI_STATUS_SERVICE_ERROR;
+        }
+
+        return write_line(io, "i2c ping ok\n") ? CLI_STATUS_OK : CLI_STATUS_SERVICE_ERROR;
+    }
+
+    if (strcmp(tokens[1], "read") == 0)
+    {
+        if (token_count < 4 || token_count > 5)
+        {
+            return CLI_STATUS_INVALID_ARGUMENTS;
+        }
+        if (services->i2c_transfer == NULL)
+        {
+            return CLI_STATUS_UNSUPPORTED;
+        }
+
+        uint32_t addr = 0, reg = 0;
+        if (!cli_parse_u32(tokens[2], &addr) || addr > 0x7F ||
+            !cli_parse_u32(tokens[3], &reg) || reg > 0xFF)
+        {
+            return CLI_STATUS_PARSE_ERROR;
+        }
+
+        uint32_t len = 1;
+        if (token_count >= 5)
+        {
+            if (!cli_parse_u32(tokens[4], &len) || len == 0 || len > 64)
+            {
+                return CLI_STATUS_PARSE_ERROR;
+            }
+        }
+
+        uint8_t tx_buf[1] = {(uint8_t)reg};
+        uint8_t rx_buf[64] = {0};
+        size_t rx_len = (size_t)len;
+        if (!services->i2c_transfer((uint8_t)addr, tx_buf, sizeof(tx_buf),
+                                    rx_buf, &rx_len, 100, services->context))
+        {
+            return CLI_STATUS_SERVICE_ERROR;
+        }
+
+        char line[256];
+        size_t used = (size_t)snprintf(line, sizeof(line), "i2c data");
+        for (size_t i = 0; i < rx_len && used + 4 < sizeof(line); i++)
+        {
+            used += (size_t)snprintf(&line[used], sizeof(line) - used, " %02X", rx_buf[i]);
+        }
+        snprintf(&line[used], sizeof(line) - used, "\n");
+        return write_line(io, line) ? CLI_STATUS_OK : CLI_STATUS_SERVICE_ERROR;
+    }
+
+    if (strcmp(tokens[1], "write") == 0)
+    {
+        if (token_count != 5)
+        {
+            return CLI_STATUS_INVALID_ARGUMENTS;
+        }
+        if (services->i2c_transfer == NULL)
+        {
+            return CLI_STATUS_UNSUPPORTED;
+        }
+
+        uint32_t addr = 0, reg = 0;
+        if (!cli_parse_u32(tokens[2], &addr) || addr > 0x7F ||
+            !cli_parse_u32(tokens[3], &reg) || reg > 0xFF)
+        {
+            return CLI_STATUS_PARSE_ERROR;
+        }
+
+        uint8_t data[64] = {0};
+        size_t data_count = 0;
+        if (!cli_parse_hex_bytes(tokens[4], data, sizeof(data), &data_count))
+        {
+            return CLI_STATUS_PARSE_ERROR;
+        }
+
+        uint8_t tx_buf[65] = {(uint8_t)reg};
+        memcpy(tx_buf + 1, data, data_count);
+        size_t tx_len = 1 + data_count;
+        size_t rx_len = 0;
+        if (!services->i2c_transfer((uint8_t)addr, tx_buf, tx_len,
+                                    NULL, &rx_len, 100, services->context))
+        {
+            return CLI_STATUS_SERVICE_ERROR;
+        }
+        return CLI_STATUS_OK;
+    }
+
+    if (strcmp(tokens[1], "send") == 0)
+    {
+        if (token_count != 4)
+        {
+            return CLI_STATUS_INVALID_ARGUMENTS;
+        }
+        if (services->i2c_transfer == NULL)
+        {
+            return CLI_STATUS_UNSUPPORTED;
+        }
+
+        uint32_t addr = 0;
+        if (!cli_parse_u32(tokens[2], &addr) || addr > 0x7F)
+        {
+            return CLI_STATUS_PARSE_ERROR;
+        }
+
+        uint8_t tx_buf[64] = {0};
+        size_t tx_count = 0;
+        if (!cli_parse_hex_bytes(tokens[3], tx_buf, sizeof(tx_buf), &tx_count))
+        {
+            return CLI_STATUS_PARSE_ERROR;
+        }
+
+        size_t rx_len = 0;
+        if (!services->i2c_transfer((uint8_t)addr, tx_buf, tx_count,
+                                    NULL, &rx_len, 100, services->context))
+        {
+            return CLI_STATUS_SERVICE_ERROR;
+        }
+        return CLI_STATUS_OK;
+    }
+
+    if (strcmp(tokens[1], "recv") == 0)
+    {
+        if (token_count != 4)
+        {
+            return CLI_STATUS_INVALID_ARGUMENTS;
+        }
+        if (services->i2c_transfer == NULL)
+        {
+            return CLI_STATUS_UNSUPPORTED;
+        }
+
+        uint32_t addr = 0, len = 0;
+        if (!cli_parse_u32(tokens[2], &addr) || addr > 0x7F ||
+            !cli_parse_u32(tokens[3], &len) || len == 0 || len > 64)
+        {
+            return CLI_STATUS_PARSE_ERROR;
+        }
+
+        uint8_t rx_buf[64] = {0};
+        size_t rx_len = (size_t)len;
+        if (!services->i2c_transfer((uint8_t)addr, NULL, 0,
+                                    rx_buf, &rx_len, 100, services->context))
+        {
+            return CLI_STATUS_SERVICE_ERROR;
+        }
+
+        char line[256];
+        size_t used = (size_t)snprintf(line, sizeof(line), "i2c data");
+        for (size_t i = 0; i < rx_len && used + 4 < sizeof(line); i++)
+        {
+            used += (size_t)snprintf(&line[used], sizeof(line) - used, " %02X", rx_buf[i]);
+        }
+        snprintf(&line[used], sizeof(line) - used, "\n");
+        return write_line(io, line) ? CLI_STATUS_OK : CLI_STATUS_SERVICE_ERROR;
+    }
+
+    return CLI_STATUS_UNKNOWN_COMMAND;
+}
+
 static CliStatus handle_info(char **tokens,
                              size_t token_count,
                              const CliServices *services,
@@ -945,6 +1188,7 @@ CliStatus cli_core_process_line_ex(const char *line,
         {.name = "rom", .handler = handle_rom},
         {.name = "log", .handler = handle_log},
         {.name = "test", .handler = handle_test},
+        {.name = "i2c", .handler = handle_i2c},
         {.name = "reboot", .handler = handle_reboot},
         {.name = "info", .handler = handle_info},
     };

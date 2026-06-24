@@ -45,6 +45,7 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ../app/src/log.c
+    ../app/src/fault_handler.c
     ../app/src/cli_core.c
     ../app/src/cli_parse.c
     ../app/src/cli_session.c
@@ -53,6 +54,11 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ../app/src/effects_pipeline.c
     ../app/src/effects_task.c
     ../app/src/test_vector_source.c
+    ../app/src/i2c_handler.c
+    ../app/src/i2c_task_support.c
+    ../app/src/peripheral_dispatch.c
+    ../app/src/rom_handler.c
+    ../app/src/rom_task_support.c
     ../../../dsp/effects/effect_runtime.c
     ../../../dsp/effects/effects.c
     ../../../dsp/math/bam.c

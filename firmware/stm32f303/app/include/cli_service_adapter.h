@@ -38,6 +38,14 @@ typedef struct
     bool (*test_set_output_frequency_hz)(uint16_t frequency_hz, void *context);
     bool (*test_set_output_amplitude)(uint16_t amplitude, void *context);
 
+    bool (*i2c_ping)(uint8_t address, void *context);
+    bool (*i2c_transfer)(uint8_t address, const uint8_t *tx_data, size_t tx_len,
+                         uint8_t *rx_data, size_t *rx_len, uint32_t timeout_ms,
+                         void *context);
+    bool (*i2c_scan)(uint8_t start_addr, uint8_t end_addr,
+                     uint8_t *found_addrs, size_t *count,
+                     size_t max_count, void *context);
+
     void (*system_reboot)(void *context);
     void *context;
 } CliServiceAdapterOps;

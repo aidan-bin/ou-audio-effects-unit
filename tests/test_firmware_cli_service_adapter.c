@@ -12,6 +12,12 @@ typedef struct
 {
     uint32_t rom_read_calls;
     uint32_t rom_write_calls;
+    uint32_t i2c_ping_calls;
+    uint32_t i2c_transfer_calls;
+    uint32_t i2c_scan_calls;
+    uint8_t i2c_last_address;
+    uint8_t i2c_scan_addrs[8];
+    size_t i2c_scan_count;
 } TestOpsContext;
 
 static void set_default_effects_state(EffectsState *state)
@@ -77,6 +83,43 @@ static bool rom_write_raw(uint16_t address, const uint8_t *payload, size_t paylo
     (void)payload_size;
     TestOpsContext *ops = (TestOpsContext *)context;
     ops->rom_write_calls++;
+    return true;
+}
+
+static bool i2c_ping_mock(uint8_t address, void *context)
+{
+    TestOpsContext *ops = (TestOpsContext *)context;
+    ops->i2c_ping_calls++;
+    ops->i2c_last_address = address;
+    return true;
+}
+
+static bool i2c_transfer_mock(uint8_t address, const uint8_t *tx_data, size_t tx_len,
+                              uint8_t *rx_data, size_t *rx_len, uint32_t timeout_ms,
+                              void *context)
+{
+    TestOpsContext *ops = (TestOpsContext *)context;
+    (void)tx_data;
+    (void)tx_len;
+    (void)rx_data;
+    (void)rx_len;
+    (void)timeout_ms;
+    ops->i2c_transfer_calls++;
+    ops->i2c_last_address = address;
+    return true;
+}
+
+static bool i2c_scan_mock(uint8_t start_addr, uint8_t end_addr,
+                          uint8_t *found_addrs, size_t *count,
+                          size_t max_count, void *context)
+{
+    TestOpsContext *ops = (TestOpsContext *)context;
+    (void)start_addr;
+    (void)end_addr;
+    ops->i2c_scan_calls++;
+    size_t to_copy = ops->i2c_scan_count < max_count ? ops->i2c_scan_count : max_count;
+    memcpy(found_addrs, ops->i2c_scan_addrs, to_copy);
+    *count = to_copy;
     return true;
 }
 
@@ -515,6 +558,64 @@ static void test_log_stream_line_queue(void)
     expect_false(has_line, "empty stream queue reports no line");
 }
 
+static void test_i2c_adapter_operations(void)
+{
+    TestOpsContext ops_ctx = {0};
+    EffectsState state;
+    EffectsParams params;
+    set_default_effects_state(&state);
+    set_default_effects_params(&params);
+
+    CliServiceAdapterOps ops = {
+        .i2c_ping = i2c_ping_mock,
+        .i2c_transfer = i2c_transfer_mock,
+        .i2c_scan = i2c_scan_mock,
+        .context = &ops_ctx,
+    };
+
+    CliServiceAdapter context;
+    cli_service_adapter_init(&context, &state, &params, &ops, 255);
+
+    CliServices services = {0};
+    cli_service_adapter_bind(&context, &services);
+
+    expect_true(services.i2c_ping(0x50, services.context), "i2c ping");
+    expect_eq_u32(1, ops_ctx.i2c_ping_calls, "i2c ping delegated");
+    expect_eq_u8(0x50, ops_ctx.i2c_last_address, "i2c ping address");
+
+    size_t rx_len = 0;
+    expect_true(services.i2c_transfer(0x3C, NULL, 0, NULL, &rx_len, 100, services.context),
+                "i2c transfer");
+    expect_eq_u32(1, ops_ctx.i2c_transfer_calls, "i2c transfer delegated");
+
+    uint8_t found[8] = {0};
+    size_t count = 0;
+    ops_ctx.i2c_scan_addrs[0] = 0x3C;
+    ops_ctx.i2c_scan_addrs[1] = 0x50;
+    ops_ctx.i2c_scan_count = 2;
+    expect_true(services.i2c_scan(0x03, 0x77, found, &count, sizeof(found), services.context),
+                "i2c scan");
+    expect_eq_u32(1, ops_ctx.i2c_scan_calls, "i2c scan delegated");
+    expect_eq_size(2, count, "i2c scan found 2 devices");
+    expect_eq_u8(0x3C, found[0], "i2c scan found 0x3C");
+    expect_eq_u8(0x50, found[1], "i2c scan found 0x50");
+
+    // Test with NULL i2c ops
+    CliServiceAdapter context_null;
+    cli_service_adapter_init(&context_null, &state, &params, NULL, 255);
+    CliServices services_null = {0};
+    cli_service_adapter_bind(&context_null, &services_null);
+
+    expect_false(services_null.i2c_ping(0x50, services_null.context),
+                 "i2c ping returns false when ops NULL");
+    expect_false(services_null.i2c_transfer(0x50, NULL, 0, NULL, NULL, 100,
+                                            services_null.context),
+                 "i2c transfer returns false when ops NULL");
+    expect_false(services_null.i2c_scan(0x03, 0x77, found, &count, sizeof(found),
+                                        services_null.context),
+                 "i2c scan returns false when ops NULL");
+}
+
 int main(void)
 {
     test_pot_override_precedence();
@@ -529,6 +630,7 @@ int main(void)
     test_profiling_batch_size_one();
     test_queue_overflow_drop_tracking();
     test_log_stream_line_queue();
+    test_i2c_adapter_operations();
 
     if (failures != 0)
     {

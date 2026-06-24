@@ -549,6 +549,33 @@ static bool service_rom_write_raw(uint16_t address, const uint8_t *payload, size
     return context->ops.rom_write_raw(address, payload, payload_size, context->ops.context);
 }
 
+static bool service_i2c_ping(uint8_t address, void *ctx)
+{
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
+    return context != NULL && context->ops.i2c_ping != NULL &&
+           context->ops.i2c_ping(address, context->ops.context);
+}
+
+static bool service_i2c_transfer(uint8_t address, const uint8_t *tx_data, size_t tx_len,
+                                 uint8_t *rx_data, size_t *rx_len, uint32_t timeout_ms,
+                                 void *ctx)
+{
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
+    return context != NULL && context->ops.i2c_transfer != NULL &&
+           context->ops.i2c_transfer(address, tx_data, tx_len, rx_data, rx_len, timeout_ms,
+                                     context->ops.context);
+}
+
+static bool service_i2c_scan(uint8_t start_addr, uint8_t end_addr,
+                             uint8_t *found_addrs, size_t *count,
+                             size_t max_count, void *ctx)
+{
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
+    return context != NULL && context->ops.i2c_scan != NULL &&
+           context->ops.i2c_scan(start_addr, end_addr, found_addrs, count, max_count,
+                                 context->ops.context);
+}
+
 static bool service_log_set_level(uint8_t level, void *ctx)
 {
     CliServiceAdapter *context = (CliServiceAdapter *)ctx;
@@ -1000,6 +1027,9 @@ void cli_service_adapter_bind(CliServiceAdapter *context, CliServices *services_
     services_out->rom_load_state = service_rom_load_state;
     services_out->rom_read_raw = service_rom_read_raw;
     services_out->rom_write_raw = service_rom_write_raw;
+    services_out->i2c_ping = service_i2c_ping;
+    services_out->i2c_transfer = service_i2c_transfer;
+    services_out->i2c_scan = service_i2c_scan;
     services_out->log_set_level = service_log_set_level;
     services_out->log_set_enabled = service_log_set_enabled;
     services_out->log_set_stream = service_log_set_stream;

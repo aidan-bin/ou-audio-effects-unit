@@ -37,6 +37,12 @@
 #include "effects_task.h"
 #include "test_vector_source.h"
 
+#include "i2c_handler.h"
+#include "i2c_task_support.h"
+#include "peripheral_dispatch.h"
+#include "rom_handler.h"
+#include "rom_task_support.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -69,6 +75,8 @@ DMA_HandleTypeDef hdma_adc3;
 
 DAC_HandleTypeDef hdac1;
 DMA_HandleTypeDef hdma_dac1_ch1;
+
+I2C_HandleTypeDef hi2c1;
 
 OPAMP_HandleTypeDef hopamp2;
 OPAMP_HandleTypeDef hopamp3;
@@ -110,6 +118,36 @@ static TestVectorSource test_vector_source_output;
 
 static volatile bool b1_pressed = false;
 
+static StaticQueue_t i2c_queue_control_block;
+static uint8_t i2c_queue_buffer[16 * sizeof(I2CHandlerMessage)];
+static QueueHandle_t i2cQueueHandle = NULL;
+
+static StaticSemaphore_t i2c_completion_semaphore_buffer;
+static SemaphoreHandle_t i2c_completion_semaphore = NULL;
+static StaticSemaphore_t i2c_failed_rom_semaphore_buffer;
+static SemaphoreHandle_t i2c_failed_rom_semaphore = NULL;
+static StaticSemaphore_t i2c_failed_display_semaphore_buffer;
+static SemaphoreHandle_t i2c_failed_display_semaphore = NULL;
+
+static osThreadId i2cHandlerTaskHandle;
+static osThreadId romHandlerTaskHandle;
+
+static volatile bool i2c_transfer_failed = true;
+
+static I2CTaskSupportContext i2c_task_support_context;
+static I2CHandlerConfig i2c_handler_config;
+static I2CHandlerOps i2c_handler_ops;
+
+static RomTaskSupportConfig rom_task_support_config;
+static RomTaskSupportOps rom_task_support_ops;
+
+static bool i2c_rom_detected = false;
+
+static SemaphoreHandle_t i2c_mutex = NULL;
+
+static PeripheralDispatchContext peripheral_dispatch_context;
+static PeripheralDispatchOps peripheral_dispatch_ops;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -122,7 +160,8 @@ static void MX_DAC1_Init(void);
 static void MX_OPAMP3_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_OPAMP2_Init(void);
-void StartDefaultTask(void const *argument);
+static void MX_I2C1_Init(void);
+void StartDefaultTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -187,6 +226,22 @@ void startEffectsTask(void const *argument);
 void startCliTask(void const *argument);
 
 static void effects_task_on_frame_begin(void *context);
+static void peripheral_i2c_signal_completion_from_isr(void *i2c_context, bool transfer_failed,
+                                                      void *context);
+
+static bool i2c_hal_ping(uint8_t address, void *context);
+static bool i2c_hal_transfer(uint8_t address, const uint8_t *tx_data, size_t tx_len,
+                             uint8_t *rx_data, size_t *rx_len, uint32_t timeout_ms,
+                             void *context);
+static bool i2c_hal_scan(uint8_t start_addr, uint8_t end_addr,
+                         uint8_t *found_addrs, size_t *count,
+                         size_t max_count, void *context);
+static bool rom_read_raw(uint16_t address, uint16_t length, uint8_t *payload_out,
+                         size_t payload_capacity, size_t *payload_size_out, void *context);
+static bool rom_write_raw(uint16_t address, const uint8_t *payload, size_t payload_size,
+                          void *context);
+static bool rom_save_state(void *context);
+static bool rom_load_state(void *context);
 
 /* USER CODE END PFP */
 
@@ -404,7 +459,7 @@ static void effects_task_report_failure(void *context)
 {
     effects_frames_failed++;
     cli_service_adapter_note_processing_failure((CliServiceAdapter *)context);
-    HAL_GPIO_TogglePin(LED_STATUS_GPIO_Port, LED_STATUS_Pin);
+    HAL_GPIO_TogglePin(STATUS_LED_GPIO_Port, STATUS_LED_Pin);
 
     effects_task_panic_write("panic: effects processing failure\n", NULL);
 
@@ -620,14 +675,17 @@ static void init_cli_service_adapter(void)
     CliServiceAdapterOps ops = {
         .lock = cli_service_lock,
         .unlock = cli_service_unlock,
-        .rom_save_state = NULL,
-        .rom_load_state = NULL,
-        .rom_read_raw = NULL,
-        .rom_write_raw = NULL,
+        .rom_save_state = rom_save_state,
+        .rom_load_state = rom_load_state,
+        .rom_read_raw = rom_read_raw,
+        .rom_write_raw = rom_write_raw,
         .log_set_level = NULL,
         .log_set_enabled = NULL,
         .log_set_stream = NULL,
         .system_reboot = cli_system_reboot,
+        .i2c_ping = i2c_hal_ping,
+        .i2c_transfer = i2c_hal_transfer,
+        .i2c_scan = i2c_hal_scan,
         .context = NULL,
     };
 
@@ -877,479 +935,909 @@ static void cli_system_reboot(void *context)
     NVIC_SystemReset();
 }
 
+static void peripheral_i2c_signal_completion_from_isr(void *i2c_context, bool transfer_failed,
+                                                      void *context)
+{
+    (void)context;
+    i2c_task_signal_completion_from_isr((const I2CTaskSupportContext *)i2c_context,
+                                        transfer_failed);
+}
+
+static bool i2c_hal_ping(uint8_t address, void *context)
+{
+    (void)context;
+
+    if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(100)) != pdTRUE)
+    {
+        return false;
+    }
+
+    bool result = HAL_I2C_IsDeviceReady(&hi2c1, (uint16_t)address << 1, 1, 10) == HAL_OK;
+
+    xSemaphoreGive(i2c_mutex);
+    return result;
+}
+
+static bool i2c_hal_transfer(uint8_t address, const uint8_t *tx_data, size_t tx_len,
+                             uint8_t *rx_data, size_t *rx_len, uint32_t timeout_ms,
+                             void *context)
+{
+    (void)context;
+
+    if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(100)) != pdTRUE)
+    {
+        return false;
+    }
+
+    uint16_t hal_addr = (uint16_t)address << 1;
+    bool result = false;
+
+    if (tx_len > 0 && (rx_data == NULL || *rx_len == 0))
+    {
+        result = HAL_I2C_Master_Transmit(&hi2c1, hal_addr, (uint8_t *)tx_data,
+                                         (uint16_t)tx_len, timeout_ms) == HAL_OK;
+    }
+    else if (tx_len > 0 && rx_data != NULL && *rx_len > 0)
+    {
+        result = HAL_I2C_Master_Transmit(&hi2c1, hal_addr, (uint8_t *)tx_data,
+                                         (uint16_t)tx_len, timeout_ms) == HAL_OK;
+        if (result)
+        {
+            result = HAL_I2C_Master_Receive(&hi2c1, hal_addr | 1U, rx_data,
+                                            (uint16_t)*rx_len, timeout_ms) == HAL_OK;
+        }
+    }
+    else if ((tx_len == 0 || tx_data == NULL) && rx_data != NULL && *rx_len > 0)
+    {
+        result = HAL_I2C_Master_Receive(&hi2c1, hal_addr | 1U, rx_data,
+                                        (uint16_t)*rx_len, timeout_ms) == HAL_OK;
+    }
+
+    xSemaphoreGive(i2c_mutex);
+    return result;
+}
+
+static bool i2c_hal_scan(uint8_t start_addr, uint8_t end_addr,
+                         uint8_t *found_addrs, size_t *count,
+                         size_t max_count, void *context)
+{
+    (void)context;
+    if (found_addrs == NULL || count == NULL || max_count == 0)
+    {
+        return false;
+    }
+
+    if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(100)) != pdTRUE)
+    {
+        return false;
+    }
+
+    size_t found = 0;
+    for (uint8_t addr = start_addr; addr <= end_addr && addr <= 0x7F; addr++)
+    {
+        if (HAL_I2C_IsDeviceReady(&hi2c1, (uint16_t)addr << 1, 1, 2) == HAL_OK)
+        {
+            if (found < max_count)
+            {
+                found_addrs[found++] = addr;
+            }
+        }
+    }
+    *count = found;
+
+    xSemaphoreGive(i2c_mutex);
+    return true;
+}
+
+static void i2c_boot_scan(void)
+{
+    boot_log_line("boot: i2c probing...");
+
+    xSemaphoreTake(i2c_mutex, portMAX_DELAY);
+
+    i2c_rom_detected = (HAL_I2C_IsDeviceReady(&hi2c1, (ROM_I2C_ADDR_7BIT << 1), 1, 10) == HAL_OK);
+    bool display_detected = (HAL_I2C_IsDeviceReady(&hi2c1, (DISPLAY_I2C_ADDR_7BIT << 1), 1, 10) == HAL_OK);
+
+    xSemaphoreGive(i2c_mutex);
+
+    if (i2c_rom_detected)
+    {
+        boot_log_line("boot: i2c: ROM (FRAM) detected at 0x50");
+    }
+    else
+    {
+        boot_log_line("boot: i2c: ROM (FRAM) not detected at 0x50");
+    }
+
+    if (display_detected)
+    {
+        boot_log_line("boot: i2c: display (OLED) detected at 0x3C");
+    }
+    else
+    {
+        boot_log_line("boot: i2c: display (OLED) not detected at 0x3C");
+    }
+}
+
+static uint8_t *allocate_payload_adapter(size_t size, void *context)
+{
+    (void)context;
+    if (size == 0)
+    {
+        return NULL;
+    }
+    return (uint8_t *)pvPortMalloc(size);
+}
+
+static void free_payload_adapter(uint8_t *payload, void *context)
+{
+    (void)context;
+    if (payload != NULL)
+    {
+        vPortFree(payload);
+    }
+}
+
+static void set_rom_write_disable_adapter(bool disable_writes, void *context)
+{
+    (void)context;
+    (void)disable_writes;
+}
+
+void startI2cHandlerTask(void const *argument)
+{
+    (void)argument;
+    for (;;)
+    {
+        I2CHandlerMessage msg;
+        if (xQueueReceive(i2cQueueHandle, &msg, portMAX_DELAY) == pdTRUE)
+        {
+            if (xSemaphoreTake(i2c_mutex, portMAX_DELAY) == pdTRUE)
+            {
+                (void)i2c_handler_process_message(&msg, &i2c_handler_config,
+                                                  &i2c_handler_ops, &i2c_task_support_context);
+                xSemaphoreGive(i2c_mutex);
+            }
+        }
+    }
+}
+
+static bool rom_read_raw(uint16_t address, uint16_t length, uint8_t *payload_out,
+                         size_t payload_capacity, size_t *payload_size_out, void *context)
+{
+    (void)context;
+    if (payload_out == NULL || payload_size_out == NULL || payload_capacity == 0)
+    {
+        return false;
+    }
+
+    if (length == 0 || (size_t)length > payload_capacity)
+    {
+        return false;
+    }
+
+    uint8_t addr_buf[ROM_HANDLER_ADDRESS_BYTES];
+    (void)rom_handler_encode_address(address, addr_buf, sizeof(addr_buf));
+
+    if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(100)) != pdTRUE)
+    {
+        return false;
+    }
+
+    bool result = HAL_I2C_Master_Transmit(&hi2c1, (ROM_I2C_ADDR_7BIT << 1), addr_buf,
+                                          ROM_HANDLER_ADDRESS_BYTES, 100) == HAL_OK;
+    if (result)
+    {
+        result = HAL_I2C_Master_Receive(&hi2c1, (ROM_I2C_ADDR_7BIT << 1) | 1U,
+                                        payload_out, length, 100) == HAL_OK;
+    }
+
+    xSemaphoreGive(i2c_mutex);
+
+    if (result)
+    {
+        *payload_size_out = (size_t)length;
+    }
+    return result;
+}
+
+static bool rom_write_raw(uint16_t address, const uint8_t *payload, size_t payload_size,
+                          void *context)
+{
+    (void)context;
+    if (payload == NULL || payload_size == 0 || payload_size > 64)
+    {
+        return false;
+    }
+
+    uint8_t buf[2 + 64];
+    (void)rom_handler_encode_address(address, buf, ROM_HANDLER_ADDRESS_BYTES);
+    memcpy(buf + ROM_HANDLER_ADDRESS_BYTES, payload, payload_size);
+    uint16_t total = (uint16_t)(payload_size + ROM_HANDLER_ADDRESS_BYTES);
+
+    if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(100)) != pdTRUE)
+    {
+        return false;
+    }
+
+    bool result = HAL_I2C_Master_Transmit(&hi2c1, (ROM_I2C_ADDR_7BIT << 1), buf, total, 5000) == HAL_OK;
+
+    xSemaphoreGive(i2c_mutex);
+    return result;
+}
+
+static bool rom_save_state(void *context)
+{
+    (void)context;
+    if (!i2c_rom_detected || !rom_task_support_ops.queue_message_and_wait)
+    {
+        return false;
+    }
+    volatile EffectsState *vstate = &effects_state;
+    volatile EffectsParams *vparams = &effects_params;
+    return rom_task_save_effects(&rom_task_support_config, &rom_task_support_ops,
+                                 (const EffectsState *)vstate,
+                                 (const EffectsParams *)vparams);
+}
+
+static bool rom_load_state(void *context)
+{
+    (void)context;
+    if (!i2c_rom_detected || !rom_task_support_ops.queue_message_and_wait)
+    {
+        return false;
+    }
+    volatile EffectsState *vst = &effects_state;
+    volatile EffectsParams *vp = &effects_params;
+    return rom_task_bootstrap_effects(&rom_task_support_config, &rom_task_support_ops,
+                                      (EffectsState *)vst,
+                                      (EffectsParams *)vp);
+}
+
+void startRomHandlerTask(void const *argument)
+{
+    (void)argument;
+
+    (void)log_write(LOG_LEVEL_INFO, "rom handler task start");
+
+    if (!i2c_rom_detected)
+    {
+        (void)log_write(LOG_LEVEL_WARN, "rom handler: no ROM detected, skipping");
+        for (;;)
+        {
+            osDelay(60000);
+        }
+    }
+
+    volatile EffectsState *boot_vst = &effects_state;
+    volatile EffectsParams *boot_vp = &effects_params;
+    bool bootstrap_ok = rom_task_bootstrap_effects(&rom_task_support_config,
+                                                   &rom_task_support_ops,
+                                                   (EffectsState *)boot_vst,
+                                                   (EffectsParams *)boot_vp);
+
+    if (bootstrap_ok)
+    {
+        (void)log_write(LOG_LEVEL_INFO, "rom handler: bootstrap OK");
+    }
+    else
+    {
+        (void)log_write(LOG_LEVEL_WARN, "rom handler: bootstrap FAILED");
+    }
+
+    for (;;)
+    {
+        osDelay(5000);
+        volatile EffectsState *save_vst = &effects_state;
+        volatile EffectsParams *save_vp = &effects_params;
+        bool save_ok = rom_task_save_effects(&rom_task_support_config, &rom_task_support_ops,
+                                             (const EffectsState *)save_vst,
+                                             (const EffectsParams *)save_vp);
+        if (!save_ok)
+        {
+            (void)log_write(LOG_LEVEL_WARN, "rom handler: save FAILED");
+        }
+    }
+}
+
 /* USER CODE END 0 */
 
 /**
- * @brief  The application entry point.
- * @retval int
- */
+  * @brief  The application entry point.
+  * @retval int
+  */
 int main(void)
 {
 
-    /* USER CODE BEGIN 1 */
+  /* USER CODE BEGIN 1 */
 
-    /* USER CODE END 1 */
+  /* USER CODE END 1 */
 
-    /* MCU Configuration--------------------------------------------------------*/
+  /* MCU Configuration--------------------------------------------------------*/
 
-    /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-    HAL_Init();
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  HAL_Init();
 
-    /* USER CODE BEGIN Init */
+  /* USER CODE BEGIN Init */
 
-    /* USER CODE END Init */
+  /* USER CODE END Init */
 
-    /* Configure the system clock */
-    SystemClock_Config();
+  /* Configure the system clock */
+  SystemClock_Config();
 
-    /* USER CODE BEGIN SysInit */
+  /* USER CODE BEGIN SysInit */
 
-    /* USER CODE END SysInit */
+  /* USER CODE END SysInit */
 
-    /* Initialize all configured peripherals */
-    MX_GPIO_Init();
-    MX_DMA_Init();
-    MX_USART2_UART_Init();
-    MX_ADC3_Init();
-    MX_DAC1_Init();
-    MX_OPAMP3_Init();
-    MX_TIM2_Init();
-    MX_OPAMP2_Init();
-    /* USER CODE BEGIN 2 */
+  /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_DMA_Init();
+  MX_USART2_UART_Init();
+  MX_ADC3_Init();
+  MX_DAC1_Init();
+  MX_OPAMP3_Init();
+  MX_TIM2_Init();
+  MX_OPAMP2_Init();
+  MX_I2C1_Init();
+  /* USER CODE BEGIN 2 */
 
-    boot_log_line("");
+  boot_log_line("");
 
-    boot_log_line("boot: init effects defaults");
+  boot_log_line("boot: init effects defaults");
 
-    init_effects_defaults();
+  init_effects_defaults();
 
-    boot_log_line("boot: init cli service adapter");
-    init_cli_service_adapter();
+  boot_log_line("boot: init cli service adapter");
+  init_cli_service_adapter();
 
-    boot_log_u32("boot: sample period us=", compute_sampling_period_us());
-    boot_log_u32("boot: delay samples=", NUM_DELAY_SAMPLES);
+  boot_log_u32("boot: sample period us=", compute_sampling_period_us());
+  boot_log_u32("boot: delay samples=", NUM_DELAY_SAMPLES);
 
-    /* USER CODE END 2 */
+  /* USER CODE END 2 */
 
-    /* USER CODE BEGIN RTOS_MUTEX */
-    /* add mutexes, ... */
-    /* USER CODE END RTOS_MUTEX */
+  /* USER CODE BEGIN RTOS_MUTEX */
+  /* add mutexes, ... */
+  i2c_mutex = xSemaphoreCreateMutex();
+  /* USER CODE END RTOS_MUTEX */
 
-    /* USER CODE BEGIN RTOS_SEMAPHORES */
-    /* add semaphores, ... */
-    /* USER CODE END RTOS_SEMAPHORES */
+  /* USER CODE BEGIN RTOS_SEMAPHORES */
+  i2c_completion_semaphore = xSemaphoreCreateBinaryStatic(&i2c_completion_semaphore_buffer);
+  i2c_failed_rom_semaphore = xSemaphoreCreateBinaryStatic(&i2c_failed_rom_semaphore_buffer);
+  i2c_failed_display_semaphore = xSemaphoreCreateBinaryStatic(&i2c_failed_display_semaphore_buffer);
+  /* USER CODE END RTOS_SEMAPHORES */
 
-    /* USER CODE BEGIN RTOS_TIMERS */
+  /* USER CODE BEGIN RTOS_TIMERS */
     /* start timers, add new ones, ... */
-    /* USER CODE END RTOS_TIMERS */
+  /* USER CODE END RTOS_TIMERS */
 
-    /* USER CODE BEGIN RTOS_QUEUES */
-    /* add queues, ... */
-    /* USER CODE END RTOS_QUEUES */
+  /* USER CODE BEGIN RTOS_QUEUES */
+  i2cQueueHandle = xQueueCreateStatic(16, sizeof(I2CHandlerMessage),
+                                      i2c_queue_buffer, &i2c_queue_control_block);
+  /* USER CODE END RTOS_QUEUES */
 
-    /* Create the thread(s) */
-    /* definition and creation of defaultTask */
-    osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
-    defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
+  /* Create the thread(s) */
+  /* definition and creation of defaultTask */
+  osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
+  defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
 
-    /* USER CODE BEGIN RTOS_THREADS */
-    boot_log_line("boot: create effects task");
-    osThreadDef(effectsTask, startEffectsTask, osPriorityRealtime, 0, 384);
-    effectsTaskHandle = osThreadCreate(osThread(effectsTask), NULL);
-    if (effectsTaskHandle == NULL)
-    {
-        boot_log_line("boot: effects task create failed");
-        Error_Handler();
+  /* USER CODE BEGIN RTOS_THREADS */
+  i2c_boot_scan();
+
+  peripheral_dispatch_context.i2c_handle = &hi2c1;
+  peripheral_dispatch_context.i2c_task_support_context = &i2c_task_support_context;
+  peripheral_dispatch_ops.i2c_signal_completion_from_isr = peripheral_i2c_signal_completion_from_isr;
+
+  boot_log_line("boot: create i2c handler task");
+  osThreadDef(i2cHandlerTask, startI2cHandlerTask, osPriorityNormal, 0, 128);
+  i2cHandlerTaskHandle = osThreadCreate(osThread(i2cHandlerTask), NULL);
+
+  if (i2c_rom_detected)
+  {
+      boot_log_line("boot: create rom handler task");
+      osThreadDef(romHandlerTask, startRomHandlerTask, osPriorityNormal, 0, 128);
+      romHandlerTaskHandle = osThreadCreate(osThread(romHandlerTask), NULL);
+  }
+  else
+  {
+      boot_log_line("boot: rom handler: not detected, skipped");
+  }
+
+  i2c_task_support_init(&i2c_task_support_context,
+                        &i2c_handler_config,
+                        &i2c_handler_ops,
+                        &hi2c1,
+                        romHandlerTaskHandle,
+                        NULL,
+                        i2c_completion_semaphore,
+                        i2c_failed_rom_semaphore,
+                        i2c_failed_display_semaphore,
+                        &i2c_transfer_failed);
+
+  if (i2c_rom_detected)
+  {
+      rom_task_support_init(&rom_task_support_config,
+                            &rom_task_support_ops,
+                            romHandlerTaskHandle,
+                            i2cQueueHandle,
+                            i2c_failed_rom_semaphore,
+                            (ROM_I2C_ADDR_7BIT << 1),
+                            0,
+                            0,
+                            pdMS_TO_TICKS(100),
+                            pdMS_TO_TICKS(5000),
+                            i2c_task_queue_message_and_wait,
+                            allocate_payload_adapter,
+                            free_payload_adapter,
+                            set_rom_write_disable_adapter,
+                            NULL);
+  }
+
+  boot_log_line("boot: create effects task");
+  osThreadDef(effectsTask, startEffectsTask, osPriorityRealtime, 0, 384);
+  effectsTaskHandle = osThreadCreate(osThread(effectsTask), NULL);
+  if (effectsTaskHandle == NULL)
+  {
+      boot_log_line("boot: effects task create failed");
+      Error_Handler();
+  }
+
+  boot_log_line("boot: create cli task");
+
+  osThreadDef(cliTask, startCliTask, osPriorityNormal, 0, 512);
+  cliTaskHandle = osThreadCreate(osThread(cliTask), NULL);
+  if (cliTaskHandle == NULL)
+  {
+      boot_log_line("boot: cli task create failed");
+      Error_Handler();
+  }
+  boot_log_line("boot: starting scheduler");
+  /* USER CODE END RTOS_THREADS */
+
+  /* Start scheduler */
+  osKernelStart();
+
+  /* We should never get here as control is now taken by the scheduler */
+
+  /* Infinite loop */
+  /* USER CODE BEGIN WHILE */
+  while (1)
+  {
+    /* USER CODE END WHILE */
+
+    /* USER CODE BEGIN 3 */
     }
-
-    boot_log_line("boot: create cli task");
-
-    osThreadDef(cliTask, startCliTask, osPriorityNormal, 0, 256);
-    cliTaskHandle = osThreadCreate(osThread(cliTask), NULL);
-    if (cliTaskHandle == NULL)
-    {
-        boot_log_line("boot: cli task create failed");
-        Error_Handler();
-    }
-    boot_log_line("boot: starting scheduler");
-    /* USER CODE END RTOS_THREADS */
-
-    /* Start scheduler */
-    osKernelStart();
-
-    /* We should never get here as control is now taken by the scheduler */
-
-    /* Infinite loop */
-    /* USER CODE BEGIN WHILE */
-    while (1)
-    {
-        /* USER CODE END WHILE */
-
-        /* USER CODE BEGIN 3 */
-    }
-    /* USER CODE END 3 */
+  /* USER CODE END 3 */
 }
 
 /**
- * @brief System Clock Configuration
- * @retval None
- */
+  * @brief System Clock Configuration
+  * @retval None
+  */
 void SystemClock_Config(void)
 {
-    RCC_OscInitTypeDef RCC_OscInitStruct = {0};
-    RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
-    RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+  RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
 
-    /** Initializes the RCC Oscillators according to the specified parameters
-     * in the RCC_OscInitTypeDef structure.
-     */
-    RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
-    RCC_OscInitStruct.HSEState = RCC_HSE_BYPASS;
-    RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-    RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-    RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-    RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL6;
-    RCC_OscInitStruct.PLL.PREDIV = RCC_PREDIV_DIV1;
-    if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
-    {
-        Error_Handler();
-    }
+  /** Initializes the RCC Oscillators according to the specified parameters
+  * in the RCC_OscInitTypeDef structure.
+  */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_BYPASS;
+  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL6;
+  RCC_OscInitStruct.PLL.PREDIV = RCC_PREDIV_DIV1;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
 
-    /** Initializes the CPU, AHB and APB buses clocks
-     */
-    RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
-    RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
-    RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-    RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
-    RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+  /** Initializes the CPU, AHB and APB buses clocks
+  */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-    if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)
-    {
-        Error_Handler();
-    }
-    PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USART2 | RCC_PERIPHCLK_ADC34 | RCC_PERIPHCLK_TIM2;
-    PeriphClkInit.Usart2ClockSelection = RCC_USART2CLKSOURCE_PCLK1;
-    PeriphClkInit.Adc34ClockSelection = RCC_ADC34PLLCLK_DIV1;
-    PeriphClkInit.Tim2ClockSelection = RCC_TIM2CLK_HCLK;
-    if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
-    {
-        Error_Handler();
-    }
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USART2|RCC_PERIPHCLK_I2C1
+                              |RCC_PERIPHCLK_ADC34|RCC_PERIPHCLK_TIM2;
+  PeriphClkInit.Usart2ClockSelection = RCC_USART2CLKSOURCE_PCLK1;
+  PeriphClkInit.Adc34ClockSelection = RCC_ADC34PLLCLK_DIV1;
+  PeriphClkInit.I2c1ClockSelection = RCC_I2C1CLKSOURCE_HSI;
+  PeriphClkInit.Tim2ClockSelection = RCC_TIM2CLK_HCLK;
+  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
+  {
+    Error_Handler();
+  }
 }
 
 /**
- * @brief ADC3 Initialization Function
- * @param None
- * @retval None
- */
+  * @brief ADC3 Initialization Function
+  * @param None
+  * @retval None
+  */
 static void MX_ADC3_Init(void)
 {
 
-    /* USER CODE BEGIN ADC3_Init 0 */
+  /* USER CODE BEGIN ADC3_Init 0 */
 
-    /* USER CODE END ADC3_Init 0 */
+  /* USER CODE END ADC3_Init 0 */
 
-    ADC_MultiModeTypeDef multimode = {0};
-    ADC_ChannelConfTypeDef sConfig = {0};
+  ADC_MultiModeTypeDef multimode = {0};
+  ADC_ChannelConfTypeDef sConfig = {0};
 
-    /* USER CODE BEGIN ADC3_Init 1 */
+  /* USER CODE BEGIN ADC3_Init 1 */
 
-    /* USER CODE END ADC3_Init 1 */
+  /* USER CODE END ADC3_Init 1 */
 
-    /** Common config
-     */
-    hadc3.Instance = ADC3;
-    hadc3.Init.ClockPrescaler = ADC_CLOCK_ASYNC_DIV1;
-    hadc3.Init.Resolution = ADC_RESOLUTION_12B;
-    hadc3.Init.ScanConvMode = ADC_SCAN_DISABLE;
-    hadc3.Init.ContinuousConvMode = ENABLE;
-    hadc3.Init.DiscontinuousConvMode = DISABLE;
-    hadc3.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
-    hadc3.Init.ExternalTrigConv = ADC_SOFTWARE_START;
-    hadc3.Init.DataAlign = ADC_DATAALIGN_LEFT;
-    hadc3.Init.NbrOfConversion = 1;
-    hadc3.Init.DMAContinuousRequests = ENABLE;
-    hadc3.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
-    hadc3.Init.LowPowerAutoWait = DISABLE;
-    hadc3.Init.Overrun = ADC_OVR_DATA_OVERWRITTEN;
-    if (HAL_ADC_Init(&hadc3) != HAL_OK)
-    {
-        Error_Handler();
-    }
+  /** Common config
+  */
+  hadc3.Instance = ADC3;
+  hadc3.Init.ClockPrescaler = ADC_CLOCK_ASYNC_DIV1;
+  hadc3.Init.Resolution = ADC_RESOLUTION_12B;
+  hadc3.Init.ScanConvMode = ADC_SCAN_DISABLE;
+  hadc3.Init.ContinuousConvMode = ENABLE;
+  hadc3.Init.DiscontinuousConvMode = DISABLE;
+  hadc3.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
+  hadc3.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc3.Init.DataAlign = ADC_DATAALIGN_LEFT;
+  hadc3.Init.NbrOfConversion = 1;
+  hadc3.Init.DMAContinuousRequests = ENABLE;
+  hadc3.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  hadc3.Init.LowPowerAutoWait = DISABLE;
+  hadc3.Init.Overrun = ADC_OVR_DATA_OVERWRITTEN;
+  if (HAL_ADC_Init(&hadc3) != HAL_OK)
+  {
+    Error_Handler();
+  }
 
-    /** Configure the ADC multi-mode
-     */
-    multimode.Mode = ADC_MODE_INDEPENDENT;
-    if (HAL_ADCEx_MultiModeConfigChannel(&hadc3, &multimode) != HAL_OK)
-    {
-        Error_Handler();
-    }
+  /** Configure the ADC multi-mode
+  */
+  multimode.Mode = ADC_MODE_INDEPENDENT;
+  if (HAL_ADCEx_MultiModeConfigChannel(&hadc3, &multimode) != HAL_OK)
+  {
+    Error_Handler();
+  }
 
-    /** Configure Regular Channel
-     */
-    sConfig.Channel = ADC_CHANNEL_1;
-    sConfig.Rank = ADC_REGULAR_RANK_1;
-    sConfig.SingleDiff = ADC_SINGLE_ENDED;
-    sConfig.SamplingTime = ADC_SAMPLETIME_19CYCLES_5;
-    sConfig.OffsetNumber = ADC_OFFSET_NONE;
-    sConfig.Offset = 0;
-    if (HAL_ADC_ConfigChannel(&hadc3, &sConfig) != HAL_OK)
-    {
-        Error_Handler();
-    }
-    /* USER CODE BEGIN ADC3_Init 2 */
+  /** Configure Regular Channel
+  */
+  sConfig.Channel = ADC_CHANNEL_1;
+  sConfig.Rank = ADC_REGULAR_RANK_1;
+  sConfig.SingleDiff = ADC_SINGLE_ENDED;
+  sConfig.SamplingTime = ADC_SAMPLETIME_19CYCLES_5;
+  sConfig.OffsetNumber = ADC_OFFSET_NONE;
+  sConfig.Offset = 0;
+  if (HAL_ADC_ConfigChannel(&hadc3, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN ADC3_Init 2 */
 
-    /* USER CODE END ADC3_Init 2 */
+  /* USER CODE END ADC3_Init 2 */
+
 }
 
 /**
- * @brief DAC1 Initialization Function
- * @param None
- * @retval None
- */
+  * @brief DAC1 Initialization Function
+  * @param None
+  * @retval None
+  */
 static void MX_DAC1_Init(void)
 {
 
-    /* USER CODE BEGIN DAC1_Init 0 */
+  /* USER CODE BEGIN DAC1_Init 0 */
 
-    /* USER CODE END DAC1_Init 0 */
+  /* USER CODE END DAC1_Init 0 */
 
-    DAC_ChannelConfTypeDef sConfig = {0};
+  DAC_ChannelConfTypeDef sConfig = {0};
 
-    /* USER CODE BEGIN DAC1_Init 1 */
+  /* USER CODE BEGIN DAC1_Init 1 */
 
-    /* USER CODE END DAC1_Init 1 */
+  /* USER CODE END DAC1_Init 1 */
 
-    /** DAC Initialization
-     */
-    hdac1.Instance = DAC1;
-    if (HAL_DAC_Init(&hdac1) != HAL_OK)
-    {
-        Error_Handler();
-    }
+  /** DAC Initialization
+  */
+  hdac1.Instance = DAC1;
+  if (HAL_DAC_Init(&hdac1) != HAL_OK)
+  {
+    Error_Handler();
+  }
 
-    /** DAC channel OUT1 config
-     */
-    sConfig.DAC_Trigger = DAC_TRIGGER_T2_TRGO;
-    sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_ENABLE;
-    if (HAL_DAC_ConfigChannel(&hdac1, &sConfig, DAC_CHANNEL_1) != HAL_OK)
-    {
-        Error_Handler();
-    }
-    /* USER CODE BEGIN DAC1_Init 2 */
+  /** DAC channel OUT1 config
+  */
+  sConfig.DAC_Trigger = DAC_TRIGGER_T2_TRGO;
+  sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_ENABLE;
+  if (HAL_DAC_ConfigChannel(&hdac1, &sConfig, DAC_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN DAC1_Init 2 */
 
-    /* USER CODE END DAC1_Init 2 */
+  /* USER CODE END DAC1_Init 2 */
+
 }
 
 /**
- * @brief OPAMP2 Initialization Function
- * @param None
- * @retval None
- */
+  * @brief I2C1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C1_Init(void)
+{
+
+  /* USER CODE BEGIN I2C1_Init 0 */
+
+  /* USER CODE END I2C1_Init 0 */
+
+  /* USER CODE BEGIN I2C1_Init 1 */
+
+  /* USER CODE END I2C1_Init 1 */
+  hi2c1.Instance = I2C1;
+  hi2c1.Init.Timing = 0x00201D2B;
+  hi2c1.Init.OwnAddress1 = 0;
+  hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c1.Init.OwnAddress2 = 0;
+  hi2c1.Init.OwnAddress2Masks = I2C_OA2_NOMASK;
+  hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Analogue filter
+  */
+  if (HAL_I2CEx_ConfigAnalogFilter(&hi2c1, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Digital filter
+  */
+  if (HAL_I2CEx_ConfigDigitalFilter(&hi2c1, 0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C1_Init 2 */
+
+  /* USER CODE END I2C1_Init 2 */
+
+}
+
+/**
+  * @brief OPAMP2 Initialization Function
+  * @param None
+  * @retval None
+  */
 static void MX_OPAMP2_Init(void)
 {
 
-    /* USER CODE BEGIN OPAMP2_Init 0 */
+  /* USER CODE BEGIN OPAMP2_Init 0 */
 
-    /* USER CODE END OPAMP2_Init 0 */
+  /* USER CODE END OPAMP2_Init 0 */
 
-    /* USER CODE BEGIN OPAMP2_Init 1 */
+  /* USER CODE BEGIN OPAMP2_Init 1 */
 
-    /* USER CODE END OPAMP2_Init 1 */
-    hopamp2.Instance = OPAMP2;
-    hopamp2.Init.Mode = OPAMP_FOLLOWER_MODE;
-    hopamp2.Init.NonInvertingInput = OPAMP_NONINVERTINGINPUT_IO0;
-    hopamp2.Init.TimerControlledMuxmode = OPAMP_TIMERCONTROLLEDMUXMODE_DISABLE;
-    hopamp2.Init.UserTrimming = OPAMP_TRIMMING_FACTORY;
-    if (HAL_OPAMP_Init(&hopamp2) != HAL_OK)
-    {
-        Error_Handler();
-    }
-    /* USER CODE BEGIN OPAMP2_Init 2 */
+  /* USER CODE END OPAMP2_Init 1 */
+  hopamp2.Instance = OPAMP2;
+  hopamp2.Init.Mode = OPAMP_FOLLOWER_MODE;
+  hopamp2.Init.NonInvertingInput = OPAMP_NONINVERTINGINPUT_IO0;
+  hopamp2.Init.TimerControlledMuxmode = OPAMP_TIMERCONTROLLEDMUXMODE_DISABLE;
+  hopamp2.Init.UserTrimming = OPAMP_TRIMMING_FACTORY;
+  if (HAL_OPAMP_Init(&hopamp2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN OPAMP2_Init 2 */
 
-    /* USER CODE END OPAMP2_Init 2 */
+  /* USER CODE END OPAMP2_Init 2 */
+
 }
 
 /**
- * @brief OPAMP3 Initialization Function
- * @param None
- * @retval None
- */
+  * @brief OPAMP3 Initialization Function
+  * @param None
+  * @retval None
+  */
 static void MX_OPAMP3_Init(void)
 {
 
-    /* USER CODE BEGIN OPAMP3_Init 0 */
+  /* USER CODE BEGIN OPAMP3_Init 0 */
 
-    /* USER CODE END OPAMP3_Init 0 */
+  /* USER CODE END OPAMP3_Init 0 */
 
-    /* USER CODE BEGIN OPAMP3_Init 1 */
+  /* USER CODE BEGIN OPAMP3_Init 1 */
 
-    /* USER CODE END OPAMP3_Init 1 */
-    hopamp3.Instance = OPAMP3;
-    hopamp3.Init.Mode = OPAMP_FOLLOWER_MODE;
-    hopamp3.Init.NonInvertingInput = OPAMP_NONINVERTINGINPUT_IO1;
-    hopamp3.Init.TimerControlledMuxmode = OPAMP_TIMERCONTROLLEDMUXMODE_DISABLE;
-    hopamp3.Init.UserTrimming = OPAMP_TRIMMING_FACTORY;
-    if (HAL_OPAMP_Init(&hopamp3) != HAL_OK)
-    {
-        Error_Handler();
-    }
-    /* USER CODE BEGIN OPAMP3_Init 2 */
+  /* USER CODE END OPAMP3_Init 1 */
+  hopamp3.Instance = OPAMP3;
+  hopamp3.Init.Mode = OPAMP_FOLLOWER_MODE;
+  hopamp3.Init.NonInvertingInput = OPAMP_NONINVERTINGINPUT_IO1;
+  hopamp3.Init.TimerControlledMuxmode = OPAMP_TIMERCONTROLLEDMUXMODE_DISABLE;
+  hopamp3.Init.UserTrimming = OPAMP_TRIMMING_FACTORY;
+  if (HAL_OPAMP_Init(&hopamp3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN OPAMP3_Init 2 */
 
-    /* USER CODE END OPAMP3_Init 2 */
+  /* USER CODE END OPAMP3_Init 2 */
+
 }
 
 /**
- * @brief TIM2 Initialization Function
- * @param None
- * @retval None
- */
+  * @brief TIM2 Initialization Function
+  * @param None
+  * @retval None
+  */
 static void MX_TIM2_Init(void)
 {
 
-    /* USER CODE BEGIN TIM2_Init 0 */
+  /* USER CODE BEGIN TIM2_Init 0 */
 
-    /* USER CODE END TIM2_Init 0 */
+  /* USER CODE END TIM2_Init 0 */
 
-    TIM_ClockConfigTypeDef sClockSourceConfig = {0};
-    TIM_MasterConfigTypeDef sMasterConfig = {0};
-    TIM_OC_InitTypeDef sConfigOC = {0};
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
 
-    /* USER CODE BEGIN TIM2_Init 1 */
+  /* USER CODE BEGIN TIM2_Init 1 */
 
-    /* USER CODE END TIM2_Init 1 */
-    htim2.Instance = TIM2;
-    htim2.Init.Prescaler = 0;
-    htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-    htim2.Init.Period = 1184;
-    htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-    htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-    if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
-    {
-        Error_Handler();
-    }
-    sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-    if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
-    {
-        Error_Handler();
-    }
-    if (HAL_TIM_OC_Init(&htim2) != HAL_OK)
-    {
-        Error_Handler();
-    }
-    sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
-    sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-    if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
-    {
-        Error_Handler();
-    }
-    sConfigOC.OCMode = TIM_OCMODE_TIMING;
-    sConfigOC.Pulse = 0;
-    sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
-    sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-    if (HAL_TIM_OC_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
-    {
-        Error_Handler();
-    }
-    /* USER CODE BEGIN TIM2_Init 2 */
+  /* USER CODE END TIM2_Init 1 */
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 0;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 1184;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_OC_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_TIMING;
+  sConfigOC.Pulse = 0;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_OC_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM2_Init 2 */
 
-    /* USER CODE END TIM2_Init 2 */
+  /* USER CODE END TIM2_Init 2 */
+
 }
 
 /**
- * @brief USART2 Initialization Function
- * @param None
- * @retval None
- */
+  * @brief USART2 Initialization Function
+  * @param None
+  * @retval None
+  */
 static void MX_USART2_UART_Init(void)
 {
 
-    /* USER CODE BEGIN USART2_Init 0 */
+  /* USER CODE BEGIN USART2_Init 0 */
 
-    /* USER CODE END USART2_Init 0 */
+  /* USER CODE END USART2_Init 0 */
 
-    /* USER CODE BEGIN USART2_Init 1 */
+  /* USER CODE BEGIN USART2_Init 1 */
 
-    /* USER CODE END USART2_Init 1 */
-    huart2.Instance = USART2;
-    huart2.Init.BaudRate = 115200;
-    huart2.Init.WordLength = UART_WORDLENGTH_8B;
-    huart2.Init.StopBits = UART_STOPBITS_1;
-    huart2.Init.Parity = UART_PARITY_NONE;
-    huart2.Init.Mode = UART_MODE_TX_RX;
-    huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-    huart2.Init.OverSampling = UART_OVERSAMPLING_16;
-    huart2.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
-    huart2.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
-    if (HAL_UART_Init(&huart2) != HAL_OK)
-    {
-        Error_Handler();
-    }
-    /* USER CODE BEGIN USART2_Init 2 */
+  /* USER CODE END USART2_Init 1 */
+  huart2.Instance = USART2;
+  huart2.Init.BaudRate = 115200;
+  huart2.Init.WordLength = UART_WORDLENGTH_8B;
+  huart2.Init.StopBits = UART_STOPBITS_1;
+  huart2.Init.Parity = UART_PARITY_NONE;
+  huart2.Init.Mode = UART_MODE_TX_RX;
+  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+  huart2.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
+  huart2.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+  if (HAL_UART_Init(&huart2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART2_Init 2 */
 
-    /* USER CODE END USART2_Init 2 */
+  /* USER CODE END USART2_Init 2 */
+
 }
 
 /**
- * Enable DMA controller clock
- */
+  * Enable DMA controller clock
+  */
 static void MX_DMA_Init(void)
 {
 
-    /* DMA controller clock enable */
-    __HAL_RCC_DMA1_CLK_ENABLE();
-    __HAL_RCC_DMA2_CLK_ENABLE();
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA1_CLK_ENABLE();
+  __HAL_RCC_DMA2_CLK_ENABLE();
 
-    /* DMA interrupt init */
-    /* DMA1_Channel3_IRQn interrupt configuration */
-    HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 5, 0);
-    HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
-    /* DMA2_Channel5_IRQn interrupt configuration */
-    HAL_NVIC_SetPriority(DMA2_Channel5_IRQn, 5, 0);
-    HAL_NVIC_EnableIRQ(DMA2_Channel5_IRQn);
+  /* DMA interrupt init */
+  /* DMA1_Channel3_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
+  /* DMA2_Channel5_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Channel5_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Channel5_IRQn);
+
 }
 
 /**
- * @brief GPIO Initialization Function
- * @param None
- * @retval None
- */
+  * @brief GPIO Initialization Function
+  * @param None
+  * @retval None
+  */
 static void MX_GPIO_Init(void)
 {
-    GPIO_InitTypeDef GPIO_InitStruct = {0};
-    /* USER CODE BEGIN MX_GPIO_Init_1 */
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+  /* USER CODE BEGIN MX_GPIO_Init_1 */
 
-    /* USER CODE END MX_GPIO_Init_1 */
+  /* USER CODE END MX_GPIO_Init_1 */
 
-    /* GPIO Ports Clock Enable */
-    __HAL_RCC_GPIOC_CLK_ENABLE();
-    __HAL_RCC_GPIOF_CLK_ENABLE();
-    __HAL_RCC_GPIOA_CLK_ENABLE();
-    __HAL_RCC_GPIOB_CLK_ENABLE();
+  /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOC_CLK_ENABLE();
+  __HAL_RCC_GPIOF_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
 
-    /*Configure GPIO pin Output Level */
-    HAL_GPIO_WritePin(LED_STATUS_GPIO_Port, LED_STATUS_Pin, GPIO_PIN_RESET);
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(LED_STATUS_GPIO_Port, LED_STATUS_Pin, GPIO_PIN_RESET);
 
-    /*Configure GPIO pin : B1_Pin */
-    GPIO_InitStruct.Pin = B1_Pin;
-    GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
-    GPIO_InitStruct.Pull = GPIO_NOPULL;
-    HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(STATUS_LED_GPIO_Port, STATUS_LED_Pin, GPIO_PIN_RESET);
 
-    /*Configure GPIO pin : LED_STATUS_Pin */
-    GPIO_InitStruct.Pin = LED_STATUS_Pin;
-    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-    GPIO_InitStruct.Pull = GPIO_NOPULL;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-    HAL_GPIO_Init(LED_STATUS_GPIO_Port, &GPIO_InitStruct);
+  /*Configure GPIO pin : B1_Pin */
+  GPIO_InitStruct.Pin = B1_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
 
-    /* EXTI interrupt init*/
-    HAL_NVIC_SetPriority(EXTI15_10_IRQn, 5, 0);
-    HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
+  /*Configure GPIO pin : LED_STATUS_Pin */
+  GPIO_InitStruct.Pin = LED_STATUS_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_MEDIUM;
+  HAL_GPIO_Init(LED_STATUS_GPIO_Port, &GPIO_InitStruct);
 
-    /* USER CODE BEGIN MX_GPIO_Init_2 */
+  /*Configure GPIO pin : STATUS_LED_Pin */
+  GPIO_InitStruct.Pin = STATUS_LED_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_MEDIUM;
+  HAL_GPIO_Init(STATUS_LED_GPIO_Port, &GPIO_InitStruct);
 
-    /* USER CODE END MX_GPIO_Init_2 */
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
+
+  /* USER CODE BEGIN MX_GPIO_Init_2 */
+
+  /* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
@@ -1390,6 +1878,38 @@ void HAL_DAC_ConvCpltCallbackCh1(DAC_HandleTypeDef *hdac)
     }
 }
 
+void HAL_I2C_MasterTxCpltCallback(I2C_HandleTypeDef *hi2c)
+{
+    if (hi2c->Instance == I2C1)
+    {
+        peripheral_on_i2c_tx_complete(&peripheral_dispatch_context, &peripheral_dispatch_ops, hi2c);
+    }
+}
+
+void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *hi2c)
+{
+    if (hi2c->Instance == I2C1)
+    {
+        peripheral_on_i2c_rx_complete(&peripheral_dispatch_context, &peripheral_dispatch_ops, hi2c);
+    }
+}
+
+void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c)
+{
+    if (hi2c->Instance == I2C1)
+    {
+        peripheral_on_i2c_error(&peripheral_dispatch_context, &peripheral_dispatch_ops, hi2c);
+    }
+}
+
+void HAL_I2C_AbortCpltCallback(I2C_HandleTypeDef *hi2c)
+{
+    if (hi2c->Instance == I2C1)
+    {
+        peripheral_on_i2c_abort_complete(&peripheral_dispatch_context, &peripheral_dispatch_ops, hi2c);
+    }
+}
+
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartDefaultTask */
@@ -1399,68 +1919,68 @@ void HAL_DAC_ConvCpltCallbackCh1(DAC_HandleTypeDef *hdac)
  * @retval None
  */
 /* USER CODE END Header_StartDefaultTask */
-void StartDefaultTask(void const *argument)
+void StartDefaultTask(void const * argument)
 {
-    /* USER CODE BEGIN 5 */
-    (void)argument;
+  /* USER CODE BEGIN 5 */
+  (void)argument;
 
-    for (;;)
-    {
-        HAL_GPIO_TogglePin(LED_STATUS_GPIO_Port, LED_STATUS_Pin);
-        osDelay(read_heartbeat_period_ms());
-    }
-    /* USER CODE END 5 */
+  for (;;)
+  {
+      HAL_GPIO_TogglePin(LED_STATUS_GPIO_Port, LED_STATUS_Pin);
+      osDelay(read_heartbeat_period_ms());
+  }
+  /* USER CODE END 5 */
 }
 
 /**
- * @brief  Period elapsed callback in non blocking mode
- * @note   This function is called  when TIM1 interrupt took place, inside
- * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
- * a global variable "uwTick" used as application time base.
- * @param  htim : TIM handle
- * @retval None
- */
+  * @brief  Period elapsed callback in non blocking mode
+  * @note   This function is called  when TIM1 interrupt took place, inside
+  * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
+  * a global variable "uwTick" used as application time base.
+  * @param  htim : TIM handle
+  * @retval None
+  */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-    /* USER CODE BEGIN Callback 0 */
+  /* USER CODE BEGIN Callback 0 */
 
-    /* USER CODE END Callback 0 */
-    if (htim->Instance == TIM1)
-    {
-        HAL_IncTick();
-    }
-    /* USER CODE BEGIN Callback 1 */
+  /* USER CODE END Callback 0 */
+  if (htim->Instance == TIM1)
+  {
+    HAL_IncTick();
+  }
+  /* USER CODE BEGIN Callback 1 */
 
-    /* USER CODE END Callback 1 */
+  /* USER CODE END Callback 1 */
 }
 
 /**
- * @brief  This function is executed in case of error occurrence.
- * @retval None
- */
+  * @brief  This function is executed in case of error occurrence.
+  * @retval None
+  */
 void Error_Handler(void)
 {
-    /* USER CODE BEGIN Error_Handler_Debug */
-    /* User can add his own implementation to report the HAL error return state */
-    __disable_irq();
-    while (1)
-    {
+  /* USER CODE BEGIN Error_Handler_Debug */
+  /* User can add his own implementation to report the HAL error return state */
+  __disable_irq();
+  while (1)
+  {
     }
-    /* USER CODE END Error_Handler_Debug */
+  /* USER CODE END Error_Handler_Debug */
 }
 #ifdef USE_FULL_ASSERT
 /**
- * @brief  Reports the name of the source file and the source line number
- *         where the assert_param error has occurred.
- * @param  file: pointer to the source file name
- * @param  line: assert_param error line source number
- * @retval None
- */
+  * @brief  Reports the name of the source file and the source line number
+  *         where the assert_param error has occurred.
+  * @param  file: pointer to the source file name
+  * @param  line: assert_param error line source number
+  * @retval None
+  */
 void assert_failed(uint8_t *file, uint32_t line)
 {
-    /* USER CODE BEGIN 6 */
-    /* User can add his own implementation to report the file name and line number,
-       ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
-    /* USER CODE END 6 */
+  /* USER CODE BEGIN 6 */
+  /* User can add his own implementation to report the file name and line number,
+     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+  /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */

@@ -53,6 +53,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ../app/src/effects_model.c
     ../app/src/effects_pipeline.c
     ../app/src/effects_task.c
+    ../app/src/fault_handler.c
     ../app/src/i2c_handler.c
     ../app/src/peripheral_dispatch.c
     ../app/src/pot_task.c

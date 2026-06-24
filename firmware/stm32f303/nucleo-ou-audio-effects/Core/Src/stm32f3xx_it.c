@@ -22,6 +22,7 @@
 #include "stm32f3xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "fault_handler.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -57,6 +58,7 @@
 /* External variables --------------------------------------------------------*/
 extern DMA_HandleTypeDef hdma_adc3;
 extern DMA_HandleTypeDef hdma_dac1_ch1;
+extern I2C_HandleTypeDef hi2c1;
 extern TIM_HandleTypeDef htim2;
 extern TIM_HandleTypeDef htim1;
 
@@ -88,7 +90,14 @@ void NMI_Handler(void)
 void HardFault_Handler(void)
 {
   /* USER CODE BEGIN HardFault_IRQn 0 */
-
+  __asm volatile(
+      "mrs r0, msp             \n"
+      "mrs r1, psp             \n"
+      "mov r2, lr              \n"
+      "mov r3, %[type]         \n"
+      "b   fault_handler_dump  \n"
+      :
+      : [type] "i"(FAULT_TYPE_HARD_FAULT));
   /* USER CODE END HardFault_IRQn 0 */
   while (1)
   {
@@ -103,7 +112,14 @@ void HardFault_Handler(void)
 void MemManage_Handler(void)
 {
   /* USER CODE BEGIN MemoryManagement_IRQn 0 */
-
+  __asm volatile(
+      "mrs r0, msp             \n"
+      "mrs r1, psp             \n"
+      "mov r2, lr              \n"
+      "mov r3, %[type]         \n"
+      "b   fault_handler_dump  \n"
+      :
+      : [type] "i"(FAULT_TYPE_MEM_MANAGE));
   /* USER CODE END MemoryManagement_IRQn 0 */
   while (1)
   {
@@ -118,7 +134,14 @@ void MemManage_Handler(void)
 void BusFault_Handler(void)
 {
   /* USER CODE BEGIN BusFault_IRQn 0 */
-
+  __asm volatile(
+      "mrs r0, msp             \n"
+      "mrs r1, psp             \n"
+      "mov r2, lr              \n"
+      "mov r3, %[type]         \n"
+      "b   fault_handler_dump  \n"
+      :
+      : [type] "i"(FAULT_TYPE_BUS_FAULT));
   /* USER CODE END BusFault_IRQn 0 */
   while (1)
   {
@@ -133,7 +156,14 @@ void BusFault_Handler(void)
 void UsageFault_Handler(void)
 {
   /* USER CODE BEGIN UsageFault_IRQn 0 */
-
+  __asm volatile(
+      "mrs r0, msp             \n"
+      "mrs r1, psp             \n"
+      "mov r2, lr              \n"
+      "mov r3, %[type]         \n"
+      "b   fault_handler_dump  \n"
+      :
+      : [type] "i"(FAULT_TYPE_USAGE_FAULT));
   /* USER CODE END UsageFault_IRQn 0 */
   while (1)
   {
@@ -202,6 +232,34 @@ void TIM2_IRQHandler(void)
   /* USER CODE BEGIN TIM2_IRQn 1 */
 
   /* USER CODE END TIM2_IRQn 1 */
+}
+
+/**
+  * @brief This function handles I2C1 event global interrupt / I2C1 wake-up interrupt through EXTI line 23.
+  */
+void I2C1_EV_IRQHandler(void)
+{
+  /* USER CODE BEGIN I2C1_EV_IRQn 0 */
+
+  /* USER CODE END I2C1_EV_IRQn 0 */
+  HAL_I2C_EV_IRQHandler(&hi2c1);
+  /* USER CODE BEGIN I2C1_EV_IRQn 1 */
+
+  /* USER CODE END I2C1_EV_IRQn 1 */
+}
+
+/**
+  * @brief This function handles I2C1 error interrupt.
+  */
+void I2C1_ER_IRQHandler(void)
+{
+  /* USER CODE BEGIN I2C1_ER_IRQn 0 */
+
+  /* USER CODE END I2C1_ER_IRQn 0 */
+  HAL_I2C_ER_IRQHandler(&hi2c1);
+  /* USER CODE BEGIN I2C1_ER_IRQn 1 */
+
+  /* USER CODE END I2C1_ER_IRQn 1 */
 }
 
 /**

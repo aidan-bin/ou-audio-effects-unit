@@ -43,6 +43,14 @@ typedef struct
     uint16_t test_output_frequency_hz;
     uint16_t test_output_amplitude;
 
+    uint8_t i2c_scanned_addrs[128];
+    size_t i2c_scanned_count;
+    uint8_t i2c_last_address;
+    uint8_t i2c_transfer_tx_buf[64];
+    size_t i2c_transfer_tx_len;
+    uint8_t i2c_transfer_rx_buf[64];
+    size_t i2c_transfer_rx_len;
+
     bool reboot_called;
 } CliCoreTestContext;
 
@@ -305,6 +313,50 @@ static bool test_get_output_status(CliTestModeStatus *status_out, void *context)
     return !ctx->fail_service;
 }
 
+static bool i2c_ping_mock(uint8_t address, void *context)
+{
+    CliCoreTestContext *ctx = (CliCoreTestContext *)context;
+    ctx->i2c_last_address = address;
+    return !ctx->fail_service;
+}
+
+static bool i2c_transfer_mock(uint8_t address, const uint8_t *tx_data, size_t tx_len,
+                              uint8_t *rx_data, size_t *rx_len, uint32_t timeout_ms,
+                              void *context)
+{
+    CliCoreTestContext *ctx = (CliCoreTestContext *)context;
+    (void)timeout_ms;
+    ctx->i2c_last_address = address;
+    if (tx_data != NULL && tx_len > 0)
+    {
+        size_t copy = tx_len < sizeof(ctx->i2c_transfer_tx_buf) ? tx_len : sizeof(ctx->i2c_transfer_tx_buf);
+        memcpy(ctx->i2c_transfer_tx_buf, tx_data, copy);
+        ctx->i2c_transfer_tx_len = copy;
+    }
+    else
+    {
+        ctx->i2c_transfer_tx_len = 0;
+    }
+    if (rx_data != NULL && rx_len != NULL && *rx_len > 0)
+    {
+        size_t copy = *rx_len < sizeof(ctx->i2c_transfer_rx_buf) ? *rx_len : sizeof(ctx->i2c_transfer_rx_buf);
+        memcpy(rx_data, ctx->i2c_transfer_rx_buf, copy);
+        *rx_len = copy;
+    }
+    return !ctx->fail_service;
+}
+
+static bool i2c_scan_mock(uint8_t start_addr, uint8_t end_addr,
+                          uint8_t *found_addrs, size_t *count,
+                          size_t max_count, void *context)
+{
+    CliCoreTestContext *ctx = (CliCoreTestContext *)context;
+    size_t to_copy = ctx->i2c_scanned_count < max_count ? ctx->i2c_scanned_count : max_count;
+    memcpy(found_addrs, ctx->i2c_scanned_addrs, to_copy);
+    *count = to_copy;
+    return !ctx->fail_service;
+}
+
 static bool system_reboot(void *context)
 {
     CliCoreTestContext *ctx = (CliCoreTestContext *)context;
@@ -343,6 +395,9 @@ static CliServices make_services(CliCoreTestContext *ctx)
         .test_set_output_frequency_hz = test_set_output_frequency_hz,
         .test_set_output_amplitude = test_set_output_amplitude,
         .test_get_output_status = test_get_output_status,
+        .i2c_ping = i2c_ping_mock,
+        .i2c_transfer = i2c_transfer_mock,
+        .i2c_scan = i2c_scan_mock,
         .system_reboot = system_reboot,
         .context = ctx,
     };
@@ -621,6 +676,93 @@ static void test_reboot_command(void)
     expect_true(strstr(ctx.output, "reboot ok") != NULL, "reboot writes confirmation");
 }
 
+static void test_i2c_commands(void)
+{
+    CliCoreTestContext ctx = {0};
+    CliServices services = make_services(&ctx);
+    CliIo io = make_io(&ctx);
+
+    expect_eq_u32(CLI_STATUS_OK,
+                  cli_core_process_line("i2c ping 0x50", &services, &io),
+                  "i2c ping succeeds");
+    expect_eq_u8(0x50, ctx.i2c_last_address, "i2c ping address captured");
+    expect_true(strstr(ctx.output, "i2c ping ok") != NULL, "i2c ping writes ok");
+
+    ctx.output_used = 0;
+    ctx.output[0] = '\0';
+    ctx.fail_service = true;
+    expect_eq_u32(CLI_STATUS_SERVICE_ERROR,
+                  cli_core_process_line("i2c ping 0x50", &services, &io),
+                  "i2c ping fails on service error");
+    ctx.fail_service = false;
+
+    ctx.output_used = 0;
+    ctx.output[0] = '\0';
+    expect_eq_u32(CLI_STATUS_INVALID_ARGUMENTS,
+                  cli_core_process_line("i2c ping", &services, &io),
+                  "i2c ping with no addr returns invalid args");
+
+    ctx.output_used = 0;
+    ctx.output[0] = '\0';
+    expect_eq_u32(CLI_STATUS_PARSE_ERROR,
+                  cli_core_process_line("i2c ping xx", &services, &io),
+                  "i2c ping with non-numeric addr returns parse error");
+
+    ctx.output_used = 0;
+    ctx.output[0] = '\0';
+    ctx.i2c_transfer_rx_buf[0] = 0xDE;
+    ctx.i2c_transfer_rx_buf[1] = 0xAD;
+    ctx.i2c_transfer_rx_len = 2;
+    expect_eq_u32(CLI_STATUS_OK,
+                  cli_core_process_line("i2c read 0x50 0x00 2", &services, &io),
+                  "i2c read succeeds");
+    expect_true(strstr(ctx.output, "DE") != NULL, "i2c read data DE");
+    expect_true(strstr(ctx.output, "AD") != NULL, "i2c read data AD");
+
+    ctx.output_used = 0;
+    ctx.output[0] = '\0';
+    expect_eq_u32(CLI_STATUS_OK,
+                  cli_core_process_line("i2c write 0x50 0x00 DEAD", &services, &io),
+                  "i2c write succeeds");
+    expect_true(ctx.i2c_transfer_tx_len >= 3, "i2c write includes reg + data");
+    expect_eq_u8(0x00, ctx.i2c_transfer_tx_buf[0], "i2c write first byte is reg");
+
+    ctx.output_used = 0;
+    ctx.output[0] = '\0';
+    expect_eq_u32(CLI_STATUS_OK,
+                  cli_core_process_line("i2c send 0x50 DEADBEEF", &services, &io),
+                  "i2c send succeeds");
+    expect_eq_u8(0x50, ctx.i2c_last_address, "i2c send address");
+
+    ctx.output_used = 0;
+    ctx.output[0] = '\0';
+    ctx.i2c_transfer_rx_buf[0] = 0xCA;
+    ctx.i2c_transfer_rx_buf[1] = 0xFE;
+    ctx.i2c_transfer_rx_len = 2;
+    expect_eq_u32(CLI_STATUS_OK,
+                  cli_core_process_line("i2c recv 0x50 2", &services, &io),
+                  "i2c recv succeeds");
+    expect_true(strstr(ctx.output, "CA") != NULL, "i2c recv data CA");
+    expect_true(strstr(ctx.output, "FE") != NULL, "i2c recv data FE");
+
+    ctx.output_used = 0;
+    ctx.output[0] = '\0';
+    ctx.i2c_scanned_addrs[0] = 0x3C;
+    ctx.i2c_scanned_addrs[1] = 0x50;
+    ctx.i2c_scanned_count = 2;
+    expect_eq_u32(CLI_STATUS_OK,
+                  cli_core_process_line("i2c scan", &services, &io),
+                  "i2c scan succeeds");
+    expect_true(strstr(ctx.output, "0x3C") != NULL, "i2c scan found 0x3C");
+    expect_true(strstr(ctx.output, "0x50") != NULL, "i2c scan found 0x50");
+
+    ctx.output_used = 0;
+    ctx.output[0] = '\0';
+    expect_eq_u32(CLI_STATUS_OK,
+                  cli_core_process_line("i2c scan 0x10 0x20", &services, &io),
+                  "i2c scan with range succeeds");
+}
+
 static void test_error_paths(void)
 {
     CliCoreTestContext ctx = {0};
@@ -657,6 +799,7 @@ int main(void)
     test_test_input_mode_commands();
     test_test_output_mode_commands();
     test_reboot_command();
+    test_i2c_commands();
     test_error_paths();
 
     if (failures != 0)
