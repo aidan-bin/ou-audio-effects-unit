@@ -43,6 +43,7 @@
 #include "peripheral_dispatch.h"
 #include "rom_handler.h"
 #include "rom_task_support.h"
+#include "usbd_cdc_if.h"
 
 /* USER CODE END Includes */
 
@@ -62,6 +63,7 @@
 #define HEARTBEAT_PERIOD_MS_MIN 50U
 #define HEARTBEAT_PERIOD_MS_MAX 5000U
 #define EFFECTS_RUNTIME_LOG_EVERY_FAILURES 10U
+#define CLI_USB_RX_BYTE_QUEUE_CAPACITY 256U
 
 /* USER CODE END PD */
 
@@ -149,6 +151,11 @@ static SemaphoreHandle_t i2c_mutex = NULL;
 static PeripheralDispatchContext peripheral_dispatch_context;
 static PeripheralDispatchOps peripheral_dispatch_ops;
 
+static uint8_t cli_usb_rx_bytes[CLI_USB_RX_BYTE_QUEUE_CAPACITY];
+static uint16_t cli_usb_rx_head;
+static uint16_t cli_usb_rx_tail;
+static uint16_t cli_usb_rx_count;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -217,6 +224,9 @@ static bool cli_uart_write(const char *text, void *context);
 static void cli_service_lock(void *context);
 static void cli_service_unlock(void *context);
 static void cli_uart_recover_rx_errors(void);
+static bool cli_usb_write(const char *text, void *context);
+static bool cli_usb_rx_queue_pop_byte(uint8_t *byte_out);
+static bool cli_dual_write(const char *text, void *context);
 static void cli_system_reboot(void *context);
 static void init_cli_service_adapter(void);
 static void init_effects_defaults(void);
@@ -526,6 +536,11 @@ static void effects_task_panic_write(const char *text, void *context)
     {
         (void)HAL_UART_Transmit(&huart2, (uint8_t *)text, strlen(text), 25);
     }
+
+    if (text != NULL)
+    {
+        (void)CDC_Transmit_FS((uint8_t *)text, (uint16_t)strlen(text));
+    }
 }
 
 static bool boot_uart_write(const char *text)
@@ -707,6 +722,10 @@ static void init_cli_service_adapter(void)
         .context = &cli_service_adapter_context,
     };
     log_configure(&log_ops);
+
+    cli_usb_rx_head = 0;
+    cli_usb_rx_tail = 0;
+    cli_usb_rx_count = 0;
 }
 
 static void init_effects_defaults(void)
@@ -795,7 +814,6 @@ static uint32_t read_heartbeat_period_ms(void)
 void startEffectsTask(void const *argument)
 {
     (void)argument;
-
     dwt_init();
     (void)log_write(LOG_LEVEL_INFO, "effects task start");
 
@@ -885,7 +903,7 @@ void startCliTask(void const *argument)
 
     cli_service_adapter_bind(&cli_service_adapter_context, &cli_services);
     CliSessionTransport transport = {
-        .write = cli_uart_write,
+        .write = cli_dual_write,
         .context = NULL,
     };
     cli_session_init(&cli_session, &cli_services, &transport);
@@ -894,6 +912,11 @@ void startCliTask(void const *argument)
     for (;;)
     {
         uint8_t byte = 0;
+        while (cli_usb_rx_queue_pop_byte(&byte))
+        {
+            cli_session_push_bytes(&cli_session, &byte, 1);
+        }
+
         while (HAL_UART_Receive(&huart2, &byte, 1, 0) == HAL_OK)
         {
             cli_session_push_bytes(&cli_session, &byte, 1);
@@ -1239,6 +1262,118 @@ void startRomHandlerTask(void const *argument)
             (void)log_write(LOG_LEVEL_WARN, "rom handler: save FAILED");
         }
     }
+}
+
+static bool cli_usb_write(const char *text, void *context)
+{
+    (void)context;
+
+    if (text == NULL)
+    {
+        return false;
+    }
+
+    const size_t length = strlen(text);
+    if (length == 0 || length > UINT16_MAX)
+    {
+        return false;
+    }
+
+    for (uint8_t attempts = 0; attempts < 10; attempts++)
+    {
+        const uint8_t result = CDC_Transmit_FS((uint8_t *)text, (uint16_t)length);
+        if (result == USBD_OK)
+        {
+            return true;
+        }
+
+        if (result != USBD_BUSY)
+        {
+            return false;
+        }
+
+        osDelay(1);
+    }
+
+    return false;
+}
+
+static bool cli_dual_write(const char *text, void *context)
+{
+    (void)context;
+
+    if (text == NULL)
+    {
+        return false;
+    }
+
+    const size_t length = strlen(text);
+    if (length == 0 || length > UINT16_MAX)
+    {
+        return false;
+    }
+
+    bool usb_ok = false;
+    for (uint8_t attempts = 0; attempts < 10; attempts++)
+    {
+        const uint8_t result = CDC_Transmit_FS((uint8_t *)text, (uint16_t)length);
+        if (result == USBD_OK)
+        {
+            usb_ok = true;
+            break;
+        }
+
+        if (result != USBD_BUSY)
+        {
+            break;
+        }
+
+        osDelay(1);
+    }
+
+    (void)HAL_UART_Transmit(&huart2, (uint8_t *)text, (uint16_t)length, 25);
+
+    return usb_ok;
+}
+
+void usb_cdc_rx_bytes_callback(const uint8_t *bytes, uint32_t byte_count)
+{
+    __disable_irq();
+    for (uint32_t i = 0; i < byte_count; i++)
+    {
+        if (cli_usb_rx_count >= CLI_USB_RX_BYTE_QUEUE_CAPACITY)
+        {
+            cli_usb_rx_head = (uint16_t)((cli_usb_rx_head + 1U) % CLI_USB_RX_BYTE_QUEUE_CAPACITY);
+            cli_usb_rx_count--;
+        }
+
+        cli_usb_rx_bytes[cli_usb_rx_tail] = bytes[i];
+        cli_usb_rx_tail = (uint16_t)((cli_usb_rx_tail + 1U) % CLI_USB_RX_BYTE_QUEUE_CAPACITY);
+        cli_usb_rx_count++;
+    }
+    __enable_irq();
+}
+
+static bool cli_usb_rx_queue_pop_byte(uint8_t *byte_out)
+{
+    if (byte_out == NULL)
+    {
+        return false;
+    }
+
+    __disable_irq();
+    if (cli_usb_rx_count == 0)
+    {
+        __enable_irq();
+        return false;
+    }
+
+    *byte_out = cli_usb_rx_bytes[cli_usb_rx_head];
+    cli_usb_rx_head = (uint16_t)((cli_usb_rx_head + 1U) % CLI_USB_RX_BYTE_QUEUE_CAPACITY);
+    cli_usb_rx_count--;
+    __enable_irq();
+
+    return true;
 }
 
 /* USER CODE END 0 */
