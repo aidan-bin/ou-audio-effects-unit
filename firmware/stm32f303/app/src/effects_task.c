@@ -40,7 +40,6 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
     uint16_t *curr_adc_buf = NULL;
     uint16_t *curr_dac_buf = NULL;
     uint16_t *echo_input_buf = NULL;
-    uint16_t *echo_delay_samples_buf = NULL;
     uint16_t *input_buf = NULL;
     uint16_t *output_buf = NULL;
 
@@ -119,7 +118,6 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
 
     if (!ops->wait_for_dac_buffer(ticks_to_wait, &curr_dac_buf, ops->context))
     {
-        (void)log_write(LOG_LEVEL_WARN, "effects task dac wait failed");
         if (curr_adc_buf == task_context->adc_buf_a)
         {
             curr_dac_buf = task_context->dac_buf_a;
@@ -182,22 +180,8 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
         goto cleanup;
     }
 
-    echo_delay_samples_buf =
-        (uint16_t *)ops->alloc(task_context->delay_samples_len * sizeof(uint16_t), ops->context);
-    if (echo_delay_samples_buf == NULL)
-    {
-        (void)log_write(LOG_LEVEL_ERROR, "process_failed: echo_delay_samples_buf alloc");
-        process_failed = true;
-        goto cleanup;
-    }
-
-    if (!ops->dma_copy(task_context->delay_samples_buf, echo_delay_samples_buf,
-                       task_context->delay_samples_len, ticks_to_wait, ops->context))
-    {
-        (void)log_write(LOG_LEVEL_ERROR, "process_failed: echo delay samples dma copy");
-        process_failed = true;
-        goto cleanup;
-    }
+    input_buf = curr_adc_buf;
+    output_buf = curr_dac_buf;
 
     if (effects_pipeline_sync_params(task_context->pipeline, &latched_effects_params) != 0)
     {
@@ -205,9 +189,6 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
         process_failed = true;
         goto cleanup;
     }
-
-    input_buf = curr_adc_buf;
-    output_buf = curr_dac_buf;
 
     for (int i = 0; i < NUM_EFFECTS; i++)
     {
@@ -246,7 +227,7 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
             if (num_delay_samples > 0)
             {
                 if (!ops->dma_copy(
-                        &echo_delay_samples_buf[task_context->delay_samples_len - num_delay_samples],
+                        &task_context->delay_samples_buf[task_context->delay_samples_len - num_delay_samples],
                         echo_input_buf, num_delay_samples, ticks_to_wait, ops->context))
                 {
                     (void)log_write(LOG_LEVEL_ERROR, "process_failed: echo delay history dma copy");
@@ -300,10 +281,6 @@ cleanup:
     if (echo_input_buf != NULL)
     {
         ops->free(echo_input_buf, ops->context);
-    }
-    if (echo_delay_samples_buf != NULL)
-    {
-        ops->free(echo_delay_samples_buf, ops->context);
     }
 
     if (!process_failed && ops->replace_output_for_testing != NULL &&

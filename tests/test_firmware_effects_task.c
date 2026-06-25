@@ -306,6 +306,7 @@ static void test_effects_task_rejects_stray_adc_notification(void)
     uint16_t dac_a[4] = {0};
     uint16_t dac_b[4] = {0};
     uint16_t delay_samples[8] = {0};
+    uint16_t echo_delay_samples[8] = {0};
     uint16_t stray[4] = {0};
 
     EffectsTaskContext task_context = {
@@ -568,6 +569,90 @@ static void test_effects_task_uses_matching_dac_buffer_when_wait_times_out(void)
     }
 }
 
+static void test_effects_task_echo_delay_history_from_buffer(void)
+{
+    EffectsPipeline pipeline;
+    expect_true(effects_pipeline_init(&pipeline) == 0, "pipeline init succeeds");
+
+    EffectsPipeline expected_pipeline;
+    expect_true(effects_pipeline_init(&expected_pipeline) == 0, "expected pipeline init succeeds");
+
+    uint16_t adc_a[4] = {0};
+    uint16_t adc_b[4] = {0};
+    uint16_t dac_a[4] = {0};
+    uint16_t dac_b[4] = {0};
+    uint16_t delay_samples[8] = {
+        (uint16_t)(X_AXIS + 100),
+        (uint16_t)(X_AXIS + 200),
+        (uint16_t)(X_AXIS + 300),
+        (uint16_t)(X_AXIS + 400),
+        (uint16_t)(X_AXIS + 500),
+        (uint16_t)(X_AXIS + 600),
+        (uint16_t)(X_AXIS + 700),
+        (uint16_t)(X_AXIS + 800),
+    };
+
+    EffectsTaskContext task_context = {
+        .pipeline = &pipeline,
+        .effects_state = NULL,
+        .effects_params = NULL,
+        .adc_buf_a = adc_a,
+        .adc_buf_b = adc_b,
+        .dac_buf_a = dac_a,
+        .dac_buf_b = dac_b,
+        .delay_samples_buf = delay_samples,
+        .sample_buf_len = 4,
+        .delay_samples_len = 8,
+        .sampling_period_us = 25,
+        .processing_slack_ms = 1,
+    };
+
+    EffectsTaskTestOpsState ops_state = {0};
+    ops_state.wait_for_adc_succeeds = true;
+    ops_state.wait_for_dac_succeeds = true;
+    ops_state.dma_copy_succeeds = true;
+    ops_state.replace_input_for_testing_succeeds = true;
+    ops_state.replace_input_value = (uint16_t)(X_AXIS + 1000);
+    ops_state.adc_buffer_to_return = adc_a;
+    ops_state.dac_buffer_to_return = dac_a;
+
+    effects_state_set_default_order(&ops_state.latched_state);
+    memset(ops_state.latched_state.is_enabled, 0, sizeof(ops_state.latched_state.is_enabled));
+    ops_state.latched_state.is_enabled[ECHO] = true;
+
+    memset(&ops_state.latched_params, 0, sizeof(ops_state.latched_params));
+    ops_state.latched_params.echo.delay_samples = 4;
+    ops_state.latched_params.echo.pre_delay = 1;
+    ops_state.latched_params.echo.density = 0x100;
+    ops_state.latched_params.echo.attack = 0x100;
+    ops_state.latched_params.echo.decay = 0;
+
+    EffectsTaskOps ops = make_ops(&ops_state);
+
+    bool step_ok = effects_task_step(&task_context, &ops);
+    expect_true(step_ok, "echo effects task step succeeds");
+    expect_eq_u32(1, ops_state.frame_reports, "frame report callback called on success");
+    expect_true(ops_state.outstanding_allocs == 0, "echo alloc/free balanced");
+
+    uint16_t echo_input_buf[8];
+    memcpy(echo_input_buf, &delay_samples[4], 4 * sizeof(uint16_t));
+    for (size_t i = 0; i < 4; i++)
+    {
+        echo_input_buf[4 + i] = ops_state.replace_input_value;
+    }
+
+    uint16_t expected[4] = {0};
+    expect_true(effects_pipeline_sync_params(&expected_pipeline, &ops_state.latched_params) == 0,
+                "expected pipeline sync succeeds");
+    expect_true(effects_pipeline_process(&expected_pipeline, ECHO, echo_input_buf, expected, 4) == 0,
+                "expected echo process succeeds");
+
+    for (size_t i = 0; i < 4; i++)
+    {
+        expect_eq_u16(expected[i], dac_a[i], "echo output matches oracle");
+    }
+}
+
 int main(void)
 {
     test_effects_task_happy_path_matches_pipeline();
@@ -576,6 +661,7 @@ int main(void)
     test_effects_task_reports_failure_when_test_replace_fails();
     test_effects_task_output_replacement_overwrites_dac_buffer();
     test_effects_task_uses_matching_dac_buffer_when_wait_times_out();
+    test_effects_task_echo_delay_history_from_buffer();
 
     if (failures != 0)
     {
