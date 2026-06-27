@@ -7,6 +7,7 @@
 
 #include "cli_core.h"
 #include "effects_model.h"
+#include "usb_audio_stream.h"
 
 #define CLI_POT_COUNT 4
 #define CLI_SWITCH_COUNT 3
@@ -134,6 +135,8 @@ typedef struct
     uint32_t sampling_period_us;
     uint32_t delay_samples_len;
     uint32_t processing_slack_ms;
+
+    UsbAudioStream *audio_stream;
 } CliServiceAdapter;
 
 void cli_service_adapter_init(CliServiceAdapter *context, EffectsState *state,
@@ -178,5 +181,8 @@ void cli_service_adapter_set_audio_info(CliServiceAdapter *context,
                                         uint32_t sampling_period_us,
                                         uint32_t delay_samples_len,
                                         uint32_t processing_slack_ms);
+
+void cli_service_adapter_set_audio_stream(CliServiceAdapter *context,
+                                          UsbAudioStream *stream);
 
 #endif

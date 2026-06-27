@@ -8,13 +8,17 @@
 #define SYSINFO_MCU "unknown"
 #endif
 
+#ifndef SYSINFO_VERSION
+#define SYSINFO_VERSION "0.0.0"
+#endif
+
 static const SysinfoEntry entries[] = {
     {"audio_in", "1"},
     {"audio_out", "1"},
-    {"max_payload", "512"},
-    {"version", "1"},
+    {"audio_routing", "dual-cdc"},
     {"board", SYSINFO_BOARD},
     {"mcu", SYSINFO_MCU},
+    {"version", SYSINFO_VERSION},
 };
 
 const SysinfoEntry *sysinfo_get_entries(void)

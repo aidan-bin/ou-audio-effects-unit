@@ -33,9 +33,22 @@ Subsystems include:
 - control tasks for pots, switches, and buttons
 - CLI for live parameter editing and test mode
 - peripheral services for I2C dispatch and ROM support/handlers
-- USB audio streaming with binary frame protocol
+- USB audio streaming
 
 Testing uses a host-mockable HAL/RTOS abstraction layer, with tests in [tests/firmware](../tests/firmware).
+
+### USB
+
+Dual CDC ACM composite with a custom class driver in [usbd_cdc_dual.c](../firmware/stm32f303/app/src/usbd_cdc_dual.c) presenting two virtual COM ports:
+
+- CDC0 (interfaces 0–1, EP1 Bulk OUT/IN, EP2 Interrupt IN) — text CLI
+- CDC1 (interfaces 2–3, EP3 Bulk OUT/IN, EP4 Interrupt IN) — raw int16_t LE audio samples
+
+CLI TX is mirrored to both CDC0 and USART2; CLI RX is merged from both sources into one `CliSession`.
+
+Audio samples pass through ring buffers in [usb_audio_stream.c](../firmware/stm32f303/app/src/usb_audio_stream.c) (2048 samples each) with no host-side framing.
+
+Host discovery: open CDC0, issue `sysinfo` to read `version`/`routing`/`board`/`mcu`, then stream audio on CDC1.
 
 ## Host Demo Path
 

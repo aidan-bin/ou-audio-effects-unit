@@ -1009,6 +1009,11 @@ void cli_service_adapter_bind_heartbeat_period(CliServiceAdapter *context,
     context->heartbeat.period_max_ms = max_ms;
 }
 
+static bool service_audio_set_input(uint8_t source, void *ctx);
+static bool service_audio_set_output(bool enabled, void *ctx);
+static bool service_audio_get_status(uint8_t *source_out,
+                                     bool *output_enabled_out, void *ctx);
+
 void cli_service_adapter_bind(CliServiceAdapter *context, CliServices *services_out)
 {
     if (context == NULL || services_out == NULL)
@@ -1049,6 +1054,9 @@ void cli_service_adapter_bind(CliServiceAdapter *context, CliServices *services_
     services_out->test_set_output_amplitude = service_test_set_output_amplitude;
     services_out->test_get_output_status = service_test_get_output_status;
     services_out->system_reboot = service_system_reboot;
+    services_out->audio_set_input = service_audio_set_input;
+    services_out->audio_set_output = service_audio_set_output;
+    services_out->audio_get_status = service_audio_get_status;
     services_out->audio_get_info = service_audio_get_info;
     services_out->context = context;
 }
@@ -1405,4 +1413,73 @@ void cli_service_adapter_note_frame_timing(CliServiceAdapter *context, uint32_t 
     }
 
     unlock_ctx(context);
+}
+
+void cli_service_adapter_set_audio_stream(CliServiceAdapter *context,
+                                          UsbAudioStream *stream)
+{
+    if (context != NULL)
+    {
+        lock_ctx(context);
+        context->audio_stream = stream;
+        unlock_ctx(context);
+    }
+}
+
+static bool service_audio_set_input(uint8_t source, void *ctx)
+{
+    CliServiceAdapter *c = (CliServiceAdapter *)ctx;
+    if (c == NULL)
+    {
+        return false;
+    }
+
+    lock_ctx(c);
+    if (source == 0U)
+    {
+        c->test_input.enabled = false;
+    }
+    else
+    {
+        c->test_input.enabled = true;
+        c->test_input.vector = 5U;
+    }
+    unlock_ctx(c);
+    return true;
+}
+
+static bool service_audio_set_output(bool enabled, void *ctx)
+{
+    CliServiceAdapter *c = (CliServiceAdapter *)ctx;
+    if (c == NULL)
+    {
+        return false;
+    }
+
+    lock_ctx(c);
+    if (c->audio_stream != NULL)
+    {
+        c->audio_stream->output_active = enabled;
+    }
+    unlock_ctx(c);
+    return true;
+}
+
+static bool service_audio_get_status(uint8_t *source_out,
+                                     bool *output_enabled_out,
+                                     void *ctx)
+{
+    CliServiceAdapter *c = (CliServiceAdapter *)ctx;
+    if (c == NULL || source_out == NULL || output_enabled_out == NULL)
+    {
+        return false;
+    }
+
+    lock_ctx(c);
+    *source_out =
+        (c->test_input.enabled && c->test_input.vector == 5U) ? 1U : 0U;
+    *output_enabled_out =
+        (c->audio_stream != NULL) ? c->audio_stream->output_active : false;
+    unlock_ctx(c);
+    return true;
 }

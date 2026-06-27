@@ -48,7 +48,7 @@ static const char *command_help_text(const char *command)
 {
     if (command == NULL)
     {
-        return "commands: help ping override config rom log test i2c reboot info sysinfo\n";
+        return "commands: help ping override config rom log audio test i2c reboot info sysinfo\n";
     }
 
     if (strcmp(command, "help") == 0)
@@ -74,6 +74,10 @@ static const char *command_help_text(const char *command)
     if (strcmp(command, "log") == 0)
     {
         return "log enable <0|1> | level <0-255> | stream [0|1] [batch <N>] (q to stop) | stats [reset|timing]\n";
+    }
+    if (strcmp(command, "audio") == 0)
+    {
+        return "audio input adc|usb | output on|off | status\n";
     }
     if (strcmp(command, "test") == 0)
     {
@@ -795,6 +799,100 @@ static CliStatus handle_test_mode(char **tokens,
     return CLI_STATUS_UNKNOWN_COMMAND;
 }
 
+static CliStatus handle_audio(char **tokens,
+                              size_t token_count,
+                              const CliServices *services,
+                              const CliIo *io,
+                              CliCommandResult *result)
+{
+    (void)result;
+
+    if (token_count < 2)
+    {
+        return CLI_STATUS_INVALID_ARGUMENTS;
+    }
+
+    if (strcmp(tokens[1], "status") == 0)
+    {
+        if (token_count != 2)
+        {
+            return CLI_STATUS_INVALID_ARGUMENTS;
+        }
+        if (services->audio_get_status == NULL)
+        {
+            return CLI_STATUS_UNSUPPORTED;
+        }
+        uint8_t source = 0;
+        bool output_enabled = false;
+        if (!services->audio_get_status(&source, &output_enabled,
+                                        services->context))
+        {
+            return CLI_STATUS_SERVICE_ERROR;
+        }
+        char line[64];
+        (void)snprintf(line, sizeof(line),
+                       "audio input=%s output=%s\n",
+                       source == 0U ? "adc" : "usb",
+                       output_enabled ? "on" : "off");
+        return write_line(io, line) ? CLI_STATUS_OK
+                                    : CLI_STATUS_SERVICE_ERROR;
+    }
+
+    if (strcmp(tokens[1], "input") == 0)
+    {
+        if (token_count != 3)
+        {
+            return CLI_STATUS_INVALID_ARGUMENTS;
+        }
+        if (services->audio_set_input == NULL)
+        {
+            return CLI_STATUS_UNSUPPORTED;
+        }
+        uint8_t source = 0xFFU;
+        if (strcmp(tokens[2], "adc") == 0)
+        {
+            source = 0U;
+        }
+        else if (strcmp(tokens[2], "usb") == 0)
+        {
+            source = 1U;
+        }
+        else
+        {
+            return CLI_STATUS_PARSE_ERROR;
+        }
+        if (!services->audio_set_input(source, services->context))
+        {
+            return CLI_STATUS_SERVICE_ERROR;
+        }
+        return CLI_STATUS_OK;
+    }
+
+    if (strcmp(tokens[1], "output") == 0)
+    {
+        if (token_count != 3)
+        {
+            return CLI_STATUS_INVALID_ARGUMENTS;
+        }
+        if (services->audio_set_output == NULL)
+        {
+            return CLI_STATUS_UNSUPPORTED;
+        }
+        bool enabled = false;
+        if (!cli_parse_bool01(tokens[2], &enabled))
+        {
+            return CLI_STATUS_PARSE_ERROR;
+        }
+        if (!services->audio_set_output(enabled, services->context))
+        {
+            return CLI_STATUS_SERVICE_ERROR;
+        }
+        return CLI_STATUS_OK;
+    }
+
+    return CLI_STATUS_UNKNOWN_COMMAND;
+}
+
 static CliStatus handle_test(char **tokens,
                              size_t token_count,
                              const CliServices *services,
@@ -1228,6 +1326,7 @@ CliStatus cli_core_process_line_ex(const char *line,
         {.name = "config", .handler = handle_config},
         {.name = "rom", .handler = handle_rom},
         {.name = "log", .handler = handle_log},
+        {.name = "audio", .handler = handle_audio},
         {.name = "test", .handler = handle_test},
         {.name = "i2c", .handler = handle_i2c},
         {.name = "reboot", .handler = handle_reboot},

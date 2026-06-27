@@ -66,9 +66,9 @@
 #define USBD_LANGID_STRING     1033
 #define USBD_MANUFACTURER_STRING     "ou audio"
 #define USBD_PID_FS     22336
-#define USBD_PRODUCT_STRING_FS     "STM32 Virtual ComPort"
-#define USBD_CONFIGURATION_STRING_FS     "CDC CLI"
-#define USBD_INTERFACE_STRING_FS     "CDC Interface"
+#define USBD_PRODUCT_STRING_FS     "ou-audio-effects"
+#define USBD_CONFIGURATION_STRING_FS     "Dual CDC"
+#define USBD_INTERFACE_STRING_FS     "CDC CLI / CDC Audio"
 
 /* USER CODE BEGIN PRIVATE_DEFINES */
 

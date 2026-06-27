@@ -38,6 +38,7 @@
 #include "effects_task.h"
 #include "test_vector_source.h"
 #include "usb_audio_stream.h"
+#include "usbd_cdc_dual.h"
 
 #include "i2c_handler.h"
 #include "i2c_task_support.h"
@@ -540,7 +541,8 @@ static void effects_task_panic_write(const char *text, void *context)
 
     if (text != NULL)
     {
-        (void)CDC_Transmit_FS((uint8_t *)text, (uint16_t)strlen(text));
+        (void)USBD_CDC_Dual_Transmit_FS_CLI((uint8_t *)text,
+                                            (uint16_t)strlen(text));
     }
 }
 
@@ -915,6 +917,7 @@ void startCliTask(void const *argument)
 
     (void)log_write(LOG_LEVEL_INFO, "cli task start");
 
+    cli_service_adapter_set_audio_stream(&cli_service_adapter_context, &audio_stream);
     cli_service_adapter_bind(&cli_service_adapter_context, &cli_services);
     CliSessionTransport transport = {
         .write = cli_dual_write,
@@ -941,15 +944,18 @@ void startCliTask(void const *argument)
         cli_uart_recover_rx_errors();
         cli_session_poll(&cli_session);
 
-        if (usb_audio_stream_has_tx_frame(&audio_stream))
+        if (audio_stream.output_active &&
+            usb_audio_stream_out_available(&audio_stream) > 0)
         {
-            uint8_t tx_buf[USB_AUDIO_MAX_PAYLOAD + 7U];
-            size_t tx_len = 0;
-            if (usb_audio_stream_get_tx_frame(&audio_stream, tx_buf, &tx_len))
+            int16_t tx_samples[200];
+            size_t popped =
+                usb_audio_stream_pop_samples(&audio_stream, tx_samples, 200);
+            if (popped > 0)
             {
                 for (uint8_t attempts = 0; attempts < 10; attempts++)
                 {
-                    const uint8_t result = CDC_Transmit_FS(tx_buf, (uint16_t)tx_len);
+                    const uint8_t result = USBD_CDC_Dual_Transmit_FS_Audio(
+                        (uint8_t *)tx_samples, (uint16_t)(popped * 2U));
                     if (result == USBD_OK)
                     {
                         break;
@@ -1320,7 +1326,8 @@ static bool cli_dual_write(const char *text, void *context)
     bool usb_ok = false;
     for (uint8_t attempts = 0; attempts < 10; attempts++)
     {
-        const uint8_t result = CDC_Transmit_FS((uint8_t *)text, (uint16_t)length);
+        const uint8_t result =
+            USBD_CDC_Dual_Transmit_FS_CLI((uint8_t *)text, (uint16_t)length);
         if (result == USBD_OK)
         {
             usb_ok = true;
@@ -1342,35 +1349,111 @@ static bool cli_dual_write(const char *text, void *context)
     return usb_ok || uart_ok;
 }
 
-void usb_cdc_rx_bytes_callback(const uint8_t *bytes, uint32_t byte_count)
+/*
+ * CDC0 (CLI) interface callbacks
+ */
+
+static uint8_t UserRxBufferFS_CLI[APP_RX_DATA_SIZE];
+static uint8_t UserTxBufferFS_CLI[APP_TX_DATA_SIZE];
+
+static int8_t CDC_CLI_Init(void)
 {
-    for (uint32_t i = 0; i < byte_count; i++)
-    {
-        if (bytes[i] == USB_AUDIO_SYNC && !usb_audio_stream_is_parsing_frame(&audio_stream))
-        {
-            usb_audio_stream_push_byte(&audio_stream, bytes[i]);
-            continue;
-        }
-
-        if (usb_audio_stream_is_parsing_frame(&audio_stream))
-        {
-            usb_audio_stream_push_byte(&audio_stream, bytes[i]);
-            continue;
-        }
-
-        __disable_irq();
-        if (cli_usb_rx_count >= CLI_USB_RX_BYTE_QUEUE_CAPACITY)
-        {
-            cli_usb_rx_head = (uint16_t)((cli_usb_rx_head + 1U) % CLI_USB_RX_BYTE_QUEUE_CAPACITY);
-            cli_usb_rx_count--;
-        }
-
-        cli_usb_rx_bytes[cli_usb_rx_tail] = bytes[i];
-        cli_usb_rx_tail = (uint16_t)((cli_usb_rx_tail + 1U) % CLI_USB_RX_BYTE_QUEUE_CAPACITY);
-        cli_usb_rx_count++;
-        __enable_irq();
-    }
+    USBD_CDC_Dual_SetRxBuffer_CLI(UserRxBufferFS_CLI);
+    USBD_CDC_Dual_SetTxBuffer_CLI(UserTxBufferFS_CLI, 0);
+    return 0;
 }
+
+static int8_t CDC_CLI_DeInit(void)
+{
+    return 0;
+}
+
+static int8_t CDC_CLI_Control(uint8_t cmd, uint8_t *pbuf, uint16_t length)
+{
+    (void)cmd;
+    (void)pbuf;
+    (void)length;
+    return 0;
+}
+
+static int8_t CDC_CLI_Receive(uint8_t *buf, uint32_t *len)
+{
+    USBD_CDC_Dual_SetRxBuffer_CLI(buf);
+    USBD_CDC_Dual_ReceivePacket_CLI();
+
+    if (buf != NULL && len != NULL)
+    {
+        for (uint32_t i = 0; i < *len; i++)
+        {
+            __disable_irq();
+            if (cli_usb_rx_count >= CLI_USB_RX_BYTE_QUEUE_CAPACITY)
+            {
+                cli_usb_rx_head = (uint16_t)((cli_usb_rx_head + 1U) %
+                                             CLI_USB_RX_BYTE_QUEUE_CAPACITY);
+                cli_usb_rx_count--;
+            }
+            cli_usb_rx_bytes[cli_usb_rx_tail] = buf[i];
+            cli_usb_rx_tail = (uint16_t)((cli_usb_rx_tail + 1U) %
+                                         CLI_USB_RX_BYTE_QUEUE_CAPACITY);
+            cli_usb_rx_count++;
+            __enable_irq();
+        }
+    }
+    return 0;
+}
+
+USBD_CDC_ItfTypeDef USBD_Interface_fops_FS_CLI = {
+    CDC_CLI_Init,
+    CDC_CLI_DeInit,
+    CDC_CLI_Control,
+    CDC_CLI_Receive,
+};
+
+/*
+ * CDC1 (Audio) interface callbacks
+ */
+
+static uint8_t UserRxBufferFS_Audio[APP_RX_DATA_SIZE];
+static uint8_t UserTxBufferFS_Audio[APP_TX_DATA_SIZE];
+
+static int8_t CDC_Audio_Init(void)
+{
+    USBD_CDC_Dual_SetRxBuffer_Audio(UserRxBufferFS_Audio);
+    USBD_CDC_Dual_SetTxBuffer_Audio(UserTxBufferFS_Audio, 0);
+    return 0;
+}
+
+static int8_t CDC_Audio_DeInit(void)
+{
+    return 0;
+}
+
+static int8_t CDC_Audio_Control(uint8_t cmd, uint8_t *pbuf, uint16_t length)
+{
+    (void)cmd;
+    (void)pbuf;
+    (void)length;
+    return 0;
+}
+
+static int8_t CDC_Audio_Receive(uint8_t *buf, uint32_t *len)
+{
+    USBD_CDC_Dual_SetRxBuffer_Audio(buf);
+    USBD_CDC_Dual_ReceivePacket_Audio();
+
+    if (buf != NULL && len != NULL && *len >= 2U)
+    {
+        usb_audio_stream_push_bytes(&audio_stream, buf, *len);
+    }
+    return 0;
+}
+
+USBD_CDC_ItfTypeDef USBD_Interface_fops_FS_Audio = {
+    CDC_Audio_Init,
+    CDC_Audio_DeInit,
+    CDC_Audio_Control,
+    CDC_Audio_Receive,
+};
 
 static bool cli_usb_rx_queue_pop_byte(uint8_t *byte_out)
 {

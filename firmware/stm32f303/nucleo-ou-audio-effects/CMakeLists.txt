@@ -74,6 +74,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ../app/src/effects_task.c
     ../app/src/test_vector_source.c
     ../app/src/usb_audio_stream.c
+    ../app/src/usbd_cdc_dual.c
     ../app/src/sysinfo.c
     ../app/src/i2c_handler.c
     ../app/src/i2c_task_support.c
@@ -98,6 +99,7 @@ target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
     INCLUDE_WAV_LUT
     SYSINFO_BOARD="nucleo-f303re"
     SYSINFO_MCU="stm32f303re"
+    SYSINFO_VERSION="0.1.0"
 )
 
 # Remove wrong libob.a library dependency when using cpp files

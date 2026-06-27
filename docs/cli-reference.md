@@ -81,6 +81,18 @@ EEPROM state persistence.
 - `log stats reset` — reset all counters
 - `log stats timing` — show timing stats (min, max, avg frame time in us, overruns, drops, batch size, queue depth)
 
+### audio
+
+Control audio routing between analog I/O and USB streaming.
+
+- `audio input adc` — effects pipeline fed from ADC (standalone / analog)
+- `audio input usb` — effects pipeline fed from USB CDC audio port (host provides audio)
+- `audio output on` — processed output streamed to host on USB CDC audio port
+- `audio output off` — processed output goes to DAC only (not streamed over USB)
+- `audio status` — show current routing state (`input=adc|usb`, `output=on|off`)
+
+Default: `audio input adc`, `audio output off` (standalone analog mode).
+
 ### reboot
 
 - `reboot` — confirms then resets the device.
@@ -94,8 +106,8 @@ Compile-time system information. One `key=value` per line.
 Includes:
 
 - `audio_in` / `audio_out` — USB audio streaming support flags
-- `max_payload` — maximum USB audio frame payload in bytes
-- `version` — USB audio protocol version
+- `audio_routing` — USB audio protocol hint (`dual-cdc`)
+- `version` — firmware/protocol version string
 - `board` / `mcu` — hardware identifiers set at build time
 
 ### test
