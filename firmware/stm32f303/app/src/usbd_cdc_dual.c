@@ -1,6 +1,8 @@
 #include "usbd_cdc_dual.h"
 #include "usbd_ctlreq.h"
 
+#include <stdbool.h>
+#include <stddef.h>
 #include <string.h>
 
 /* The global device handle (declared in usb_device.c) */
@@ -272,6 +274,37 @@ static int iface_to_instance(uint8_t iface)
 }
 
 /* ------------------------------------------------------------------ */
+/* Endpoint table (open/close order matters and must match descriptors) */
+/* ------------------------------------------------------------------ */
+static const struct
+{
+    uint8_t address;
+    uint8_t type;
+    uint16_t packet_size;
+    bool is_in;
+} cdc_dual_endpoints[] = {
+    {CDC0_IN_EP, USBD_EP_TYPE_BULK, CDC_DUAL_DATA_FS_PACKET_SIZE, true},
+    {CDC0_OUT_EP, USBD_EP_TYPE_BULK, CDC_DUAL_DATA_FS_PACKET_SIZE, false},
+    {CDC0_CMD_EP, USBD_EP_TYPE_INTR, CDC_DUAL_CMD_PACKET_SIZE, true},
+    {CDC1_IN_EP, USBD_EP_TYPE_BULK, CDC_DUAL_DATA_FS_PACKET_SIZE, true},
+    {CDC1_OUT_EP, USBD_EP_TYPE_BULK, CDC_DUAL_DATA_FS_PACKET_SIZE, false},
+    {CDC1_CMD_EP, USBD_EP_TYPE_INTR, CDC_DUAL_CMD_PACKET_SIZE, true},
+};
+
+static void cdc_dual_set_ep_used(USBD_HandleTypeDef *pdev, size_t index, uint8_t used)
+{
+    uint8_t addr = cdc_dual_endpoints[index].address & 0x7FU;
+    if (cdc_dual_endpoints[index].is_in)
+    {
+        pdev->ep_in[addr].is_used = used;
+    }
+    else
+    {
+        pdev->ep_out[addr].is_used = used;
+    }
+}
+
+/* ------------------------------------------------------------------ */
 /* USBD_CDC_Dual_Init                                                 */
 /* ------------------------------------------------------------------ */
 static uint8_t USBD_CDC_Dual_Init(USBD_HandleTypeDef *pdev,
@@ -284,31 +317,13 @@ static uint8_t USBD_CDC_Dual_Init(USBD_HandleTypeDef *pdev,
     memset(hdual, 0, sizeof(*hdual));
     pdev->pClassData = hdual;
 
-    /* Open CDC0 endpoints */
-    USBD_LL_OpenEP(pdev, CDC0_IN_EP, USBD_EP_TYPE_BULK,
-                   CDC_DUAL_DATA_FS_PACKET_SIZE);
-    pdev->ep_in[CDC0_IN_EP & 0x7FU].is_used = 1U;
-
-    USBD_LL_OpenEP(pdev, CDC0_OUT_EP, USBD_EP_TYPE_BULK,
-                   CDC_DUAL_DATA_FS_PACKET_SIZE);
-    pdev->ep_out[CDC0_OUT_EP & 0x7FU].is_used = 1U;
-
-    USBD_LL_OpenEP(pdev, CDC0_CMD_EP, USBD_EP_TYPE_INTR,
-                   CDC_DUAL_CMD_PACKET_SIZE);
-    pdev->ep_in[CDC0_CMD_EP & 0x7FU].is_used = 1U;
-
-    /* Open CDC1 endpoints */
-    USBD_LL_OpenEP(pdev, CDC1_IN_EP, USBD_EP_TYPE_BULK,
-                   CDC_DUAL_DATA_FS_PACKET_SIZE);
-    pdev->ep_in[CDC1_IN_EP & 0x7FU].is_used = 1U;
-
-    USBD_LL_OpenEP(pdev, CDC1_OUT_EP, USBD_EP_TYPE_BULK,
-                   CDC_DUAL_DATA_FS_PACKET_SIZE);
-    pdev->ep_out[CDC1_OUT_EP & 0x7FU].is_used = 1U;
-
-    USBD_LL_OpenEP(pdev, CDC1_CMD_EP, USBD_EP_TYPE_INTR,
-                   CDC_DUAL_CMD_PACKET_SIZE);
-    pdev->ep_in[CDC1_CMD_EP & 0x7FU].is_used = 1U;
+    /* Open all CDC0/CDC1 endpoints */
+    for (size_t i = 0; i < sizeof(cdc_dual_endpoints) / sizeof(cdc_dual_endpoints[0]); i++)
+    {
+        USBD_LL_OpenEP(pdev, cdc_dual_endpoints[i].address, cdc_dual_endpoints[i].type,
+                       cdc_dual_endpoints[i].packet_size);
+        cdc_dual_set_ep_used(pdev, i, 1U);
+    }
 
     /* Init Tx/Rx states */
     hdual->cli_tx_state = 0U;
@@ -343,21 +358,12 @@ static uint8_t USBD_CDC_Dual_DeInit(USBD_HandleTypeDef *pdev,
 {
     (void)cfgidx;
 
-    /* Close CDC0 endpoints */
-    USBD_LL_CloseEP(pdev, CDC0_IN_EP);
-    pdev->ep_in[CDC0_IN_EP & 0x7FU].is_used = 0U;
-    USBD_LL_CloseEP(pdev, CDC0_OUT_EP);
-    pdev->ep_out[CDC0_OUT_EP & 0x7FU].is_used = 0U;
-    USBD_LL_CloseEP(pdev, CDC0_CMD_EP);
-    pdev->ep_in[CDC0_CMD_EP & 0x7FU].is_used = 0U;
-
-    /* Close CDC1 endpoints */
-    USBD_LL_CloseEP(pdev, CDC1_IN_EP);
-    pdev->ep_in[CDC1_IN_EP & 0x7FU].is_used = 0U;
-    USBD_LL_CloseEP(pdev, CDC1_OUT_EP);
-    pdev->ep_out[CDC1_OUT_EP & 0x7FU].is_used = 0U;
-    USBD_LL_CloseEP(pdev, CDC1_CMD_EP);
-    pdev->ep_in[CDC1_CMD_EP & 0x7FU].is_used = 0U;
+    /* Close all CDC0/CDC1 endpoints */
+    for (size_t i = 0; i < sizeof(cdc_dual_endpoints) / sizeof(cdc_dual_endpoints[0]); i++)
+    {
+        USBD_LL_CloseEP(pdev, cdc_dual_endpoints[i].address);
+        cdc_dual_set_ep_used(pdev, i, 0U);
+    }
 
     USBD_CDC_Dual_HandleTypeDef *hdual = get_dual(pdev);
     if (hdual != NULL)
