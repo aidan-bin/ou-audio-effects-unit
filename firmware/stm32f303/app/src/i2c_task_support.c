@@ -16,17 +16,7 @@ static bool semaphore_take_adapter(void *semaphore_handle, uint32_t timeout_tick
 
 static void drain_semaphore(osSemaphoreId semaphore_handle)
 {
-    PeripheralDispatchOps ops = {
-        .semaphore_take = semaphore_take_adapter,
-        .task_notify_from_isr = NULL,
-        .semaphore_give_from_isr = NULL,
-        .dma_start_it = NULL,
-        .adc_config_channel = NULL,
-        .adc_start_it = NULL,
-        .adc_get_value = NULL,
-        .i2c_signal_completion_from_isr = NULL,
-        .context = NULL,
-    };
+    PeripheralDispatchOps ops = {.semaphore_take = semaphore_take_adapter};
 
     peripheral_drain_semaphore(semaphore_handle, &ops);
 }
