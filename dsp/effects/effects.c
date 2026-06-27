@@ -6,9 +6,6 @@
 static int32_t saturate_amplitude(int32_t num, size_t max);
 static int32_t saturate_min(int32_t num, int32_t min);
 static uint16_t saturate_u16(int32_t num);
-static size_t clamp_qn(size_t num);
-static size_t clamp_range(size_t num, size_t min, size_t max);
-static size_t clamp_min(size_t num, size_t min);
 
 /* Buffered overdrive/distortion:
  * - Distortion/overdrive clips input signal to a threshold, which makes it resemble a square
@@ -167,34 +164,4 @@ static uint16_t saturate_u16(int32_t num)
     }
 
     return (uint16_t)num;
-}
-
-static size_t clamp_qn(size_t num)
-{
-    return clamp_range(num, 0, (1U << FIXED_POINT_Q));
-}
-
-static size_t clamp_range(size_t num, size_t min, size_t max)
-{
-    if (num < min)
-    {
-        return min;
-    }
-
-    if (num > max)
-    {
-        return max;
-    }
-
-    return num;
-}
-
-static size_t clamp_min(size_t num, size_t min)
-{
-    if (num < min)
-    {
-        return min;
-    }
-
-    return num;
 }

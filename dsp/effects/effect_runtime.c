@@ -1,9 +1,8 @@
 #include "effect_runtime.h"
+#include "fast_math.h"
 
 #include <string.h>
 
-static size_t clamp_range(size_t value, size_t min, size_t max);
-static size_t clamp_qn(size_t value);
 static OverdriveParam normalize_overdrive_params(const OverdriveParam *param);
 static EchoParam normalize_echo_params(const EchoParam *param);
 static CompressionParam normalize_compression_params(const CompressionParam *param);
@@ -210,26 +209,6 @@ int effect_handle_process(const EffectHandle *handle, const uint16_t *in_buf, ui
     }
 
     return effect_instance_process(&handle->instance, in_buf, out_buf, num_samples);
-}
-
-static size_t clamp_range(size_t value, size_t min, size_t max)
-{
-    if (value < min)
-    {
-        return min;
-    }
-
-    if (value > max)
-    {
-        return max;
-    }
-
-    return value;
-}
-
-static size_t clamp_qn(size_t value)
-{
-    return clamp_range(value, 0, (1U << FIXED_POINT_Q));
 }
 
 static OverdriveParam normalize_overdrive_params(const OverdriveParam *param)

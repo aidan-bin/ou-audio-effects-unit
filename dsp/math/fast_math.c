@@ -30,3 +30,33 @@ int16_t q_tanh(int16_t x)
 
     return (int16_t)((a << FIXED_POINT_Q) / b);
 }
+
+size_t clamp_range(size_t value, size_t min, size_t max)
+{
+    if (value < min)
+    {
+        return min;
+    }
+
+    if (value > max)
+    {
+        return max;
+    }
+
+    return value;
+}
+
+size_t clamp_qn(size_t value)
+{
+    return clamp_range(value, 0, (1U << FIXED_POINT_Q));
+}
+
+size_t clamp_min(size_t value, size_t min)
+{
+    if (value < min)
+    {
+        return min;
+    }
+
+    return value;
+}
