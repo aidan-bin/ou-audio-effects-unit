@@ -16,7 +16,7 @@ def _load_effects_library():
 
     raise RuntimeError(
         "Could not find the effects shared library. "
-        "Run ./scripts/build.sh from the repository root first."
+        "Run ./scripts/run.sh build-demo from the repository root first."
     )
 
 

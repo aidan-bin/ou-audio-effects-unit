@@ -10,7 +10,7 @@ STM32 audio effects project with fixed-point DSP in C, STM32 firmware, a Python 
 - [firmware](firmware): STM32 target firmware
     - [custom board firmware](firmware/stm32f303/cubemx): CubeMX project for custom board
     - [nucleo firmware](firmware/stm32f303/nucleo-ou-audio-effects): CubeMX project for Nucleo F303RE
-- [host](host): host-side demo tooling and HIL CLI tools
+- [host](host): host-side demo tooling
 - [hardware](hardware): board and analog design assets
 - [tests](tests): test assets
 - [docs](docs): setup, architecture, bring-up notes
@@ -92,22 +92,3 @@ Dependency check:
 ## Hardware
 
 Board assets are under [hardware/STM32AudioEffects](hardware/STM32AudioEffects), with analog simulation files under [hardware/LTspice](hardware/LTspice).
-
-## Live Demo
-
-```sh
-python host/python-cli/live_mic_effects.py
-```
-
-Streams your microphone through the effects pipeline in realtime over USB and plays the result through your speakers.
-
-Keybindings:
-
-| Key | Action |
-|-----|--------|
-| `1` `2` `3` | Switch active effect (overdrive / echo / compression) |
-| `↑` `↓`    | Adjust primary parameter of active effect |
-| `e`         | Toggle active effect on/off |
-| `i`         | Print current params |
-| `s`         | Print sysinfo |
-| `q`         | Quit |
