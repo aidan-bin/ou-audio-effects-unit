@@ -10,6 +10,10 @@
 
 #define Q16_ONE (1UL << 16)
 
+#ifdef INCLUDE_WAV_LUT
+#include "test_vector_wav.h"
+#endif
+
 static const int16_t sine_lut[] = {
     0,
     12539,
@@ -84,6 +88,9 @@ void test_vector_source_init(TestVectorSource *source, uint32_t sample_rate_hz)
     source->sample_rate_hz = sample_rate_hz == 0U ? TEST_VECTOR_DEFAULT_SAMPLE_RATE_HZ : sample_rate_hz;
     source->phase_q16 = 0U;
     source->sweep_freq_hz = TEST_VECTOR_SWEEP_MIN_HZ;
+    source->wav_index = 0U;
+    source->impulse_counter = 0U;
+    source->impulse_fired = false;
 }
 
 bool test_vector_source_fill_buffer(TestVectorSource *source, const CliTestModeStatus *status,
@@ -97,6 +104,115 @@ bool test_vector_source_fill_buffer(TestVectorSource *source, const CliTestModeS
     if (!status->enabled)
     {
         return true;
+    }
+
+    if (status->vector == TEST_VECTOR_USB_STREAM)
+    {
+        if (source->stream_pop == NULL)
+        {
+            return false;
+        }
+
+        for (size_t i = 0; i < count; i++)
+        {
+            int16_t sample = 0;
+            if (source->stream_pop(&sample, source->stream_context))
+            {
+                int32_t scaled = (int32_t)((sample * (int32_t)status->amplitude) / INT16_MAX);
+                buf[i] = clamp_u16_from_i32((int32_t)X_AXIS + scaled);
+            }
+            else
+            {
+                buf[i] = (uint16_t)X_AXIS;
+            }
+        }
+
+        return true;
+    }
+
+    if (status->vector == TEST_VECTOR_IMPULSE)
+    {
+        uint32_t freq_hz = (uint32_t)status->frequency_hz;
+        for (size_t i = 0; i < count; i++)
+        {
+            bool do_impulse = false;
+            if (freq_hz == 0U)
+            {
+                if (!source->impulse_fired)
+                {
+                    do_impulse = true;
+                    source->impulse_fired = true;
+                }
+            }
+            else
+            {
+                source->impulse_counter++;
+                uint32_t period_samples = source->sample_rate_hz / freq_hz;
+                if (period_samples == 0U)
+                {
+                    period_samples = 1U;
+                }
+                if (source->impulse_counter >= period_samples)
+                {
+                    do_impulse = true;
+                    source->impulse_counter = 0U;
+                }
+            }
+
+            if (do_impulse)
+            {
+                int32_t scaled = (int32_t)(((int32_t)INT16_MAX * (int32_t)status->amplitude) / INT16_MAX);
+                buf[i] = clamp_u16_from_i32((int32_t)X_AXIS + scaled);
+            }
+            else
+            {
+                buf[i] = (uint16_t)X_AXIS;
+            }
+        }
+
+        return true;
+    }
+
+    if (status->vector == TEST_VECTOR_WAV)
+    {
+#ifndef INCLUDE_WAV_LUT
+        for (size_t i = 0; i < count; i++)
+        {
+            buf[i] = (uint16_t)X_AXIS;
+        }
+        return true;
+#else
+        uint32_t rate_mult = (uint32_t)status->frequency_hz;
+        if (rate_mult == 0U)
+        {
+            rate_mult = TEST_VECTOR_WAV_DEFAULT_FREQ;
+        }
+
+        uint32_t phase_step =
+            (uint32_t)(((uint64_t)WAV_LUT_SAMPLE_RATE * (uint64_t)WAV_LUT_LEN * Q16_ONE) /
+                       (uint64_t)source->sample_rate_hz);
+        if (rate_mult != TEST_VECTOR_WAV_DEFAULT_FREQ)
+        {
+            phase_step =
+                (uint32_t)(((uint64_t)phase_step * (uint64_t)rate_mult) / TEST_VECTOR_WAV_DEFAULT_FREQ);
+        }
+
+        if (phase_step == 0U)
+        {
+            phase_step = 1U;
+        }
+
+        for (size_t i = 0; i < count; i++)
+        {
+            uint32_t idx = (source->phase_q16 >> 16) % (uint32_t)WAV_LUT_LEN;
+            int32_t sample = wav_lut[idx];
+            int32_t scaled = (int32_t)((sample * (int32_t)status->amplitude) / INT16_MAX);
+            buf[i] = clamp_u16_from_i32((int32_t)X_AXIS + scaled);
+            source->phase_q16 += phase_step;
+        }
+
+        return true;
+#endif
     }
 
     const int16_t *lut = status->vector == TEST_VECTOR_USER ? user_lut : sine_lut;

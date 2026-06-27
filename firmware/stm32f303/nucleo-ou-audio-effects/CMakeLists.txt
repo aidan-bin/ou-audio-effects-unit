@@ -31,6 +31,25 @@ message("Build type: " ${CMAKE_BUILD_TYPE})
 # Enable CMake support for ASM and C languages
 enable_language(C ASM)
 
+# Generate WAV lookup table header from demo audio file
+set(WAV_LUT_INPUT  "${CMAKE_CURRENT_SOURCE_DIR}/../../../host/python-demo/MoodySlide2_110.wav")
+set(WAV_LUT_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/../../../scripts/wav_to_lut.py")
+set(WAV_LUT_OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/../app/include/test_vector_wav.h")
+
+add_custom_command(
+    OUTPUT ${WAV_LUT_OUTPUT}
+    COMMAND python3 ${WAV_LUT_SCRIPT}
+        --input ${WAV_LUT_INPUT}
+        --output ${WAV_LUT_OUTPUT}
+        --rate 8000
+        --duration 5
+        --name wav_lut
+    DEPENDS ${WAV_LUT_SCRIPT} ${WAV_LUT_INPUT}
+    COMMENT "Generating WAV LUT: ${WAV_LUT_OUTPUT}"
+)
+
+add_custom_target(generate_wav_lut DEPENDS ${WAV_LUT_OUTPUT})
+
 # Create an executable object type
 add_executable(${CMAKE_PROJECT_NAME})
 
@@ -54,6 +73,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ../app/src/effects_pipeline.c
     ../app/src/effects_task.c
     ../app/src/test_vector_source.c
+    ../app/src/usb_audio_stream.c
+    ../app/src/sysinfo.c
     ../app/src/i2c_handler.c
     ../app/src/i2c_task_support.c
     ../app/src/peripheral_dispatch.c
@@ -74,11 +95,15 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
 
 # Add project symbols (macros)
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
-    # Add user defined symbols
+    INCLUDE_WAV_LUT
+    SYSINFO_BOARD="nucleo-f303re"
+    SYSINFO_MCU="stm32f303re"
 )
 
 # Remove wrong libob.a library dependency when using cpp files
 list(REMOVE_ITEM CMAKE_C_IMPLICIT_LINK_LIBRARIES ob)
+
+add_dependencies(${CMAKE_PROJECT_NAME} generate_wav_lut)
 
 # Add linked libraries
 target_link_libraries(${CMAKE_PROJECT_NAME}

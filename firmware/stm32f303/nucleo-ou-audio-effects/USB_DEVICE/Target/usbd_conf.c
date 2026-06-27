@@ -617,14 +617,8 @@ void HAL_PCDEx_SetConnectionState(PCD_HandleTypeDef *hpcd, uint8_t state)
 #endif /* USE_HAL_PCD_REGISTER_CALLBACKS */
 {
   /* USER CODE BEGIN 6 */
-  if (state == 1)
-  {
-      /* Configure Low connection state. */
-  }
-  else
-  {
-      /* Configure High connection state. */
-  }
+  (void)hpcd;
+  (void)state;
   /* USER CODE END 6 */
 }
 

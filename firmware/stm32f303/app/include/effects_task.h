@@ -50,6 +50,7 @@ typedef struct
     uint32_t (*get_timestamp_us)(void *context);
 
     void (*panic_write)(const char *text, void *context);
+    void (*on_output_frame)(const uint16_t *buf, size_t count, void *context);
     void *context;
 } EffectsTaskOps;
 

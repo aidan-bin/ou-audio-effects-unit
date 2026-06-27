@@ -3,7 +3,7 @@
 SCOPE_ROOTS=(dsp firmware/stm32f303/app tests host)
 CUBEMX_SENTINEL="Core/Src/main.c"
 GENERATED_PATH_FRAGMENTS=("/cubemx/" "/nucleo-ou-audio-effects/")
-SCOPE_EXCLUDE_PATTERNS=("host/python-demo")
+SCOPE_EXCLUDE_PATTERNS=("host/python-demo" "firmware/stm32f303/app/include/test_vector_wav.h")
 CUBEMX_USER_CODE_INCLUDE=("Core" "USB_DEVICE" "USB_HOST")
 CUBEMX_USER_CODE_EXCLUDE=("build")
 

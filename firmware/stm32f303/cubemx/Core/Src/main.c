@@ -1892,6 +1892,8 @@ void startDisplayHandlerTask(void const *argument)
     /* Infinite loop */
     for (;;)
     {
+        (void)cli_session_start(&cli_session);
+
         uint8_t byte = 0;
         while (cli_usb_rx_queue_pop_byte(&byte))
         {

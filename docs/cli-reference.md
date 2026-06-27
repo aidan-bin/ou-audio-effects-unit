@@ -76,7 +76,7 @@ EEPROM state persistence.
 
 - `log enable <0|1>` — enable/disable logging
 - `log level <0–255>` — verbosity (0=off, 1=error, 2=warn, 3=info, 4=debug, 5=trace)
-- `log stream [0|1] [batch <N>]` — live profiling stream (see [log stream](#log-stream))
+- `log stream [batch <N>]` — live profiling stream; press `q` to stop (see [log stream](#log-stream))
 - `log stats` — show counters (enabled, stream, level, frames, failures, stepfail, streak)
 - `log stats reset` — reset all counters
 - `log stats timing` — show timing stats (min, max, avg frame time in us, overruns, drops, batch size, queue depth)
@@ -85,12 +85,31 @@ EEPROM state persistence.
 
 - `reboot` — confirms then resets the device.
 
+### sysinfo
+
+Compile-time system information. One `key=value` per line.
+
+- `sysinfo` — prints board, MCU, feature flags, and protocol hints.
+
+Includes:
+
+- `audio_in` / `audio_out` — USB audio streaming support flags
+- `max_payload` — maximum USB audio frame payload in bytes
+- `version` — USB audio protocol version
+- `board` / `mcu` — hardware identifiers set at build time
+
 ### test
 
 Inject test signals in place of ADC input / route to DAC output.
 
 - `test input|output mode <0|1>` — enable/disable
-- `test input|output vector <sine|lut|sweep>` — waveform type
+- `test input|output vector <sine|lut|sweep|wav|impulse|usb>` — waveform type
+    - `sine` — sine wave LUT with linear interpolation
+    - `lut` — user-defined fixed waveform LUT
+    - `sweep` — frequency sweep from 20 Hz to fs/2
+    - `wav` — sequential playback of a compile-time WAV LUT at native rate; `freq` acts as per-mille pitch multiplier (1000 = 1.0x)
+    - `impulse` — single impulse when `freq=0`, or periodic at Hz when `freq>0`; amplitude set via `amp`
+    - `usb` — samples pulled from USB audio input stream ring buffer
 - `test input|output freq <hz>` — min 20
 - `test input|output amp <value>` — max 32767
 - `test input|output status` — show config

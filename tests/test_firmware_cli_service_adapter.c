@@ -288,7 +288,7 @@ static void test_test_input_mode_status_and_validation(void)
     expect_true(services.test_set_input_amplitude((uint16_t)(X_AXIS / 2U), services.context),
                 "set input test amplitude");
 
-    expect_false(services.test_set_input_vector(3, services.context),
+    expect_false(services.test_set_input_vector(99, services.context),
                  "reject invalid input test vector");
     expect_false(services.test_set_input_frequency_hz(10, services.context),
                  "reject too-low input frequency");
@@ -328,7 +328,7 @@ static void test_test_output_mode_status_and_validation(void)
     expect_true(services.test_set_output_amplitude((uint16_t)(X_AXIS / 2U), services.context),
                 "set output test amplitude");
 
-    expect_false(services.test_set_output_vector(3, services.context),
+    expect_false(services.test_set_output_vector(99, services.context),
                  "reject invalid output test vector");
     expect_false(services.test_set_output_frequency_hz(10, services.context),
                  "reject too-low output frequency");

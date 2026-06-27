@@ -490,15 +490,6 @@ static void test_rom_and_log_commands(void)
 
     ctx.output_used = 0;
     ctx.output[0] = '\0';
-    expect_eq_u32(CLI_STATUS_OK,
-                  cli_core_process_line("log stream 0", &services, &io),
-                  "log stream off succeeds");
-    expect_false(ctx.log_stream_enabled, "log stream disabled parsed");
-    expect_true(strstr(ctx.output, "log stream stopped") != NULL,
-                "log stream off emits stopped status");
-
-    ctx.output_used = 0;
-    ctx.output[0] = '\0';
     ctx.log_level = 3;
     ctx.frame_count = 11;
     ctx.failure_count = 2;
@@ -612,7 +603,7 @@ static void test_log_stream_batch_command(void)
     CliIo io = make_io(&ctx);
 
     expect_eq_u32(CLI_STATUS_OK,
-                  cli_core_process_line("log stream 1 batch 5", &services, &io),
+                  cli_core_process_line("log stream batch 5", &services, &io),
                   "log stream batch 5 succeeds");
     expect_true(ctx.log_stream_enabled, "log stream enabled with batch");
     expect_eq_u8(5, ctx.stream_batch_size, "batch size 5 parsed");
@@ -620,32 +611,15 @@ static void test_log_stream_batch_command(void)
     ctx.output_used = 0;
     ctx.output[0] = '\0';
     expect_eq_u32(CLI_STATUS_OK,
-                  cli_core_process_line("log stream 1 batch 1", &services, &io),
+                  cli_core_process_line("log stream batch 1", &services, &io),
                   "log stream batch 1 succeeds");
     expect_eq_u8(1, ctx.stream_batch_size, "batch size 1 parsed");
 
     ctx.output_used = 0;
     ctx.output[0] = '\0';
-    expect_eq_u32(CLI_STATUS_OK,
-                  cli_core_process_line("log stream batch 10", &services, &io),
-                  "log stream batch 10 without bool prefix succeeds");
-    expect_true(ctx.log_stream_enabled, "log stream enabled without bool prefix");
-    expect_eq_u8(10, ctx.stream_batch_size, "batch size 10 parsed");
-
-    ctx.output_used = 0;
-    ctx.output[0] = '\0';
     expect_eq_u32(CLI_STATUS_PARSE_ERROR,
-                  cli_core_process_line("log stream 1 batch 0", &services, &io),
+                  cli_core_process_line("log stream batch 0", &services, &io),
                   "log stream batch 0 rejected as invalid");
-
-    ctx.output_used = 0;
-    ctx.output[0] = '\0';
-    expect_eq_u32(CLI_STATUS_OK,
-                  cli_core_process_line("log stream 0", &services, &io),
-                  "log stream off works independently");
-    expect_false(ctx.log_stream_enabled, "log stream disabled");
-    expect_true(strstr(ctx.output, "logging disabled") != NULL,
-                "log stream off explains logging is disabled");
 }
 
 static void test_log_stats_reset(void)

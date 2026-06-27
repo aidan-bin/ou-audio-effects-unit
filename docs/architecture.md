@@ -31,7 +31,9 @@ Subsystems include:
 
 - effects model/pipeline and audio task
 - control tasks for pots, switches, and buttons
+- CLI for live parameter editing and test mode
 - peripheral services for I2C dispatch and ROM support/handlers
+- USB audio streaming with binary frame protocol
 
 Testing uses a host-mockable HAL/RTOS abstraction layer, with tests in [tests/firmware](../tests/firmware).
 

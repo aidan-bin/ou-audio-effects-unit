@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "sysinfo.h"
+
 #define CONFIG_LINE_BUF_SIZE 48
 #define LOG_LINE_BUF_SIZE 128
 #define LOG_STREAM_BATCH_MAX 255
@@ -33,6 +35,12 @@ static const char *test_vector_name(uint8_t vector)
         return "lut";
     if (vector == 2U)
         return "sweep";
+    if (vector == 3U)
+        return "wav";
+    if (vector == 4U)
+        return "impulse";
+    if (vector == 5U)
+        return "usb";
     return "sine";
 }
 
@@ -40,7 +48,7 @@ static const char *command_help_text(const char *command)
 {
     if (command == NULL)
     {
-        return "commands: help ping override config rom log test i2c reboot info\n";
+        return "commands: help ping override config rom log test i2c reboot info sysinfo\n";
     }
 
     if (strcmp(command, "help") == 0)
@@ -69,7 +77,7 @@ static const char *command_help_text(const char *command)
     }
     if (strcmp(command, "test") == 0)
     {
-        return "test mode <0|1> | vector <sine|lut> | freq <hz> | amp <value> | status\n";
+        return "test mode <0|1> | vector <sine|lut|sweep|wav|impulse|usb> | freq <hz> | amp <value> | status\n";
     }
     if (strcmp(command, "reboot") == 0)
     {
@@ -83,7 +91,10 @@ static const char *command_help_text(const char *command)
     {
         return "info\n";
     }
-
+    if (strcmp(command, "sysinfo") == 0)
+    {
+        return "sysinfo\n";
+    }
     return NULL;
 }
 
@@ -559,20 +570,7 @@ static CliStatus handle_log(char **tokens,
             return CLI_STATUS_UNSUPPORTED;
         }
 
-        bool enabled = true;
         size_t idx = 2;
-        if (token_count > idx)
-        {
-            if (strcmp(tokens[idx], "batch") != 0)
-            {
-                if (!cli_parse_bool01(tokens[idx], &enabled))
-                {
-                    return CLI_STATUS_PARSE_ERROR;
-                }
-                idx++;
-            }
-        }
-
         if (token_count > idx)
         {
             if (token_count != idx + 2 || strcmp(tokens[idx], "batch") != 0)
@@ -594,18 +592,17 @@ static CliStatus handle_log(char **tokens,
             }
         }
 
-        if (!services->log_set_stream(enabled, services->context))
+        if (!services->log_set_stream(true, services->context))
         {
             return CLI_STATUS_SERVICE_ERROR;
         }
 
-        if (!write_line(io, enabled ? "log stream active (press q to stop)\n"
-                                    : "log stream stopped; logging disabled\n"))
+        if (!write_line(io, "log stream active (press q to stop)\n"))
         {
             return CLI_STATUS_SERVICE_ERROR;
         }
 
-        if (enabled && result != NULL)
+        if (result != NULL)
         {
             result->action = CLI_COMMAND_ACTION_ENTER_LOG_STREAM;
         }
@@ -735,6 +732,18 @@ static CliStatus handle_test_mode(char **tokens,
         else if (strcmp(tokens[2], "sweep") == 0)
         {
             vector = 2;
+        }
+        else if (strcmp(tokens[2], "wav") == 0)
+        {
+            vector = 3;
+        }
+        else if (strcmp(tokens[2], "impulse") == 0)
+        {
+            vector = 4;
+        }
+        else if (strcmp(tokens[2], "usb") == 0)
+        {
+            vector = 5;
         }
         else
         {
@@ -1134,6 +1143,38 @@ static CliStatus handle_info(char **tokens,
     return write_line(io, line) ? CLI_STATUS_OK : CLI_STATUS_SERVICE_ERROR;
 }
 
+static CliStatus handle_sysinfo(char **tokens,
+                                size_t token_count,
+                                const CliServices *services,
+                                const CliIo *io,
+                                CliCommandResult *result)
+{
+    (void)tokens;
+    (void)services;
+    (void)result;
+
+    if (token_count != 1)
+    {
+        return CLI_STATUS_INVALID_ARGUMENTS;
+    }
+
+    const SysinfoEntry *entries = sysinfo_get_entries();
+    size_t count = sysinfo_get_entry_count();
+
+    for (size_t i = 0; i < count; i++)
+    {
+        char line[64];
+        (void)snprintf(line, sizeof(line), "%s=%s\n",
+                       entries[i].key, entries[i].value);
+        if (!write_line(io, line))
+        {
+            break;
+        }
+    }
+
+    return CLI_STATUS_OK;
+}
+
 CliStatus cli_core_process_line(const char *line, const CliServices *services, const CliIo *io)
 {
     return cli_core_process_line_ex(line, services, io, NULL);
@@ -1191,6 +1232,7 @@ CliStatus cli_core_process_line_ex(const char *line,
         {.name = "i2c", .handler = handle_i2c},
         {.name = "reboot", .handler = handle_reboot},
         {.name = "info", .handler = handle_info},
+        {.name = "sysinfo", .handler = handle_sysinfo},
     };
 
     CliStatus status = CLI_STATUS_UNKNOWN_COMMAND;

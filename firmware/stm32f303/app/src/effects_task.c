@@ -294,6 +294,11 @@ cleanup:
         process_failed = true;
     }
 
+    if (!process_failed && ops->on_output_frame != NULL)
+    {
+        ops->on_output_frame(curr_dac_buf, task_context->sample_buf_len, ops->context);
+    }
+
     if (process_failed && ops->report_failure != NULL)
     {
         (void)log_write(LOG_LEVEL_ERROR, "effects task frame processing failed");

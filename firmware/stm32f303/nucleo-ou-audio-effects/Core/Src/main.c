@@ -37,6 +37,7 @@
 #include "effects_pipeline.h"
 #include "effects_task.h"
 #include "test_vector_source.h"
+#include "usb_audio_stream.h"
 
 #include "i2c_handler.h"
 #include "i2c_task_support.h"
@@ -118,6 +119,7 @@ static CliServices cli_services;
 static CliSession cli_session;
 static TestVectorSource test_vector_source;
 static TestVectorSource test_vector_source_output;
+static UsbAudioStream audio_stream;
 
 static volatile bool b1_pressed = false;
 
@@ -192,6 +194,7 @@ static void effects_task_log_runtime_stats(const char *reason, uint8_t level);
 static uint32_t effects_task_get_timestamp_us(void *context);
 static void effects_task_on_frame_end(uint32_t frame_time_us, bool overrun, void *context);
 static void effects_task_panic_write(const char *text, void *context);
+static void effects_task_on_output_frame(const uint16_t *buf, size_t count, void *context);
 
 static void dwt_init(void);
 static uint32_t dwt_get_timestamp_us(void);
@@ -220,13 +223,11 @@ static bool log_write_line(const char *line, void *context);
 
 static void notify_task_from_isr(osThreadId task_handle);
 static void effects_task_record_buffer_event_from_isr(EffectsBufferEvent event);
-static bool cli_uart_write(const char *text, void *context);
+static bool cli_dual_write(const char *text, void *context);
+static bool cli_usb_rx_queue_pop_byte(uint8_t *byte_out);
 static void cli_service_lock(void *context);
 static void cli_service_unlock(void *context);
 static void cli_uart_recover_rx_errors(void);
-static bool cli_usb_write(const char *text, void *context);
-static bool cli_usb_rx_queue_pop_byte(uint8_t *byte_out);
-static bool cli_dual_write(const char *text, void *context);
 static void cli_system_reboot(void *context);
 static void init_cli_service_adapter(void);
 static void init_effects_defaults(void);
@@ -543,6 +544,28 @@ static void effects_task_panic_write(const char *text, void *context)
     }
 }
 
+static void effects_task_on_output_frame(const uint16_t *buf, size_t count, void *context)
+{
+    (void)context;
+    if (buf == NULL || count == 0)
+    {
+        return;
+    }
+
+    for (size_t i = 0; i < count; i++)
+    {
+        int32_t centered = (int32_t)buf[i] - (int32_t)X_AXIS;
+        int16_t sample = (int16_t)(centered > INT16_MAX ? INT16_MAX : (centered < INT16_MIN ? INT16_MIN : centered));
+        usb_audio_stream_push_sample(&audio_stream, sample);
+    }
+}
+
+static bool test_vector_stream_pop_sample(int16_t *sample, void *context)
+{
+    (void)context;
+    return usb_audio_stream_pop_sample(&audio_stream, sample);
+}
+
 static bool boot_uart_write(const char *text)
 {
     if (text == NULL)
@@ -607,23 +630,6 @@ static void effects_task_record_buffer_event_from_isr(EffectsBufferEvent event)
     }
 
     taskEXIT_CRITICAL_FROM_ISR(saved_interrupt_mask);
-}
-
-static bool cli_uart_write(const char *text, void *context)
-{
-    (void)context;
-    if (text == NULL)
-    {
-        return false;
-    }
-
-    const size_t length = strlen(text);
-    if (length == 0 || length > UINT16_MAX)
-    {
-        return false;
-    }
-
-    return HAL_UART_Transmit(&huart2, (uint8_t *)text, (uint16_t)length, 25) == HAL_OK;
 }
 
 static void cli_service_lock(void *context)
@@ -726,6 +732,8 @@ static void init_cli_service_adapter(void)
     cli_usb_rx_head = 0;
     cli_usb_rx_tail = 0;
     cli_usb_rx_count = 0;
+
+    usb_audio_stream_init(&audio_stream);
 }
 
 static void init_effects_defaults(void)
@@ -856,6 +864,11 @@ void startEffectsTask(void const *argument)
                                 ? 40500U
                                 : (1000000U / task_context.sampling_period_us));
 
+    test_vector_source.stream_pop = test_vector_stream_pop_sample;
+    test_vector_source.stream_context = NULL;
+    test_vector_source_output.stream_pop = test_vector_stream_pop_sample;
+    test_vector_source_output.stream_context = NULL;
+
     EffectsTaskOps task_ops = {
         .wait_for_adc_buffer = effects_task_wait_for_adc_buffer,
         .wait_for_dac_buffer = effects_task_wait_for_dac_buffer,
@@ -872,6 +885,7 @@ void startEffectsTask(void const *argument)
         .on_frame_end = effects_task_on_frame_end,
         .get_timestamp_us = effects_task_get_timestamp_us,
         .panic_write = effects_task_panic_write,
+        .on_output_frame = effects_task_on_output_frame,
         .context = &cli_service_adapter_context,
     };
 
@@ -911,6 +925,8 @@ void startCliTask(void const *argument)
 
     for (;;)
     {
+        (void)cli_session_start(&cli_session);
+
         uint8_t byte = 0;
         while (cli_usb_rx_queue_pop_byte(&byte))
         {
@@ -924,6 +940,28 @@ void startCliTask(void const *argument)
 
         cli_uart_recover_rx_errors();
         cli_session_poll(&cli_session);
+
+        if (usb_audio_stream_has_tx_frame(&audio_stream))
+        {
+            uint8_t tx_buf[USB_AUDIO_MAX_PAYLOAD + 7U];
+            size_t tx_len = 0;
+            if (usb_audio_stream_get_tx_frame(&audio_stream, tx_buf, &tx_len))
+            {
+                for (uint8_t attempts = 0; attempts < 10; attempts++)
+                {
+                    const uint8_t result = CDC_Transmit_FS(tx_buf, (uint16_t)tx_len);
+                    if (result == USBD_OK)
+                    {
+                        break;
+                    }
+                    if (result != USBD_BUSY)
+                    {
+                        break;
+                    }
+                    osDelay(1);
+                }
+            }
+        }
 
         osDelay(1);
     }
@@ -1264,40 +1302,6 @@ void startRomHandlerTask(void const *argument)
     }
 }
 
-static bool cli_usb_write(const char *text, void *context)
-{
-    (void)context;
-
-    if (text == NULL)
-    {
-        return false;
-    }
-
-    const size_t length = strlen(text);
-    if (length == 0 || length > UINT16_MAX)
-    {
-        return false;
-    }
-
-    for (uint8_t attempts = 0; attempts < 10; attempts++)
-    {
-        const uint8_t result = CDC_Transmit_FS((uint8_t *)text, (uint16_t)length);
-        if (result == USBD_OK)
-        {
-            return true;
-        }
-
-        if (result != USBD_BUSY)
-        {
-            return false;
-        }
-
-        osDelay(1);
-    }
-
-    return false;
-}
-
 static bool cli_dual_write(const char *text, void *context)
 {
     (void)context;
@@ -1331,16 +1335,30 @@ static bool cli_dual_write(const char *text, void *context)
         osDelay(1);
     }
 
-    (void)HAL_UART_Transmit(&huart2, (uint8_t *)text, (uint16_t)length, 25);
+    HAL_StatusTypeDef uart_status =
+        HAL_UART_Transmit(&huart2, (uint8_t *)text, (uint16_t)length, 25);
+    bool uart_ok = (uart_status == HAL_OK);
 
-    return usb_ok;
+    return usb_ok || uart_ok;
 }
 
 void usb_cdc_rx_bytes_callback(const uint8_t *bytes, uint32_t byte_count)
 {
-    __disable_irq();
     for (uint32_t i = 0; i < byte_count; i++)
     {
+        if (bytes[i] == USB_AUDIO_SYNC && !usb_audio_stream_is_parsing_frame(&audio_stream))
+        {
+            usb_audio_stream_push_byte(&audio_stream, bytes[i]);
+            continue;
+        }
+
+        if (usb_audio_stream_is_parsing_frame(&audio_stream))
+        {
+            usb_audio_stream_push_byte(&audio_stream, bytes[i]);
+            continue;
+        }
+
+        __disable_irq();
         if (cli_usb_rx_count >= CLI_USB_RX_BYTE_QUEUE_CAPACITY)
         {
             cli_usb_rx_head = (uint16_t)((cli_usb_rx_head + 1U) % CLI_USB_RX_BYTE_QUEUE_CAPACITY);
@@ -1350,8 +1368,8 @@ void usb_cdc_rx_bytes_callback(const uint8_t *bytes, uint32_t byte_count)
         cli_usb_rx_bytes[cli_usb_rx_tail] = bytes[i];
         cli_usb_rx_tail = (uint16_t)((cli_usb_rx_tail + 1U) % CLI_USB_RX_BYTE_QUEUE_CAPACITY);
         cli_usb_rx_count++;
+        __enable_irq();
     }
-    __enable_irq();
 }
 
 static bool cli_usb_rx_queue_pop_byte(uint8_t *byte_out)

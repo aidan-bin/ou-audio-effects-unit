@@ -186,6 +186,91 @@ static void test_sweep_rms_consistent_across_bands(void)
     }
 }
 
+static void test_impulse_one_shot_produces_single_pulse(void)
+{
+    TestVectorSource src;
+    test_vector_source_init(&src, SWEEP_SAMPLE_RATE);
+
+    CliTestModeStatus status = {.enabled = true, .vector = TEST_VECTOR_IMPULSE, .frequency_hz = 0, .amplitude = INT16_MAX};
+    uint16_t buf[4] = {0};
+
+    expect_true(test_vector_source_fill_buffer(&src, &status, buf, 4),
+                "impulse one-shot returns true");
+    expect_eq_u16((uint16_t)(X_AXIS + INT16_MAX), buf[0],
+                  "impulse at first sample has max amplitude");
+
+    src.phase_q16 = 0;
+    expect_true(test_vector_source_fill_buffer(&src, &status, buf, 4),
+                "impulse second call returns true");
+    expect_eq_u16((uint16_t)X_AXIS, buf[0],
+                  "impulse second call is silent");
+    expect_eq_u16((uint16_t)X_AXIS, buf[1],
+                  "impulse second call is silent");
+}
+
+static void test_impulse_periodic(void)
+{
+    TestVectorSource src;
+    test_vector_source_init(&src, SWEEP_SAMPLE_RATE);
+
+    CliTestModeStatus status = {.enabled = true, .vector = TEST_VECTOR_IMPULSE, .frequency_hz = SWEEP_SAMPLE_RATE / 4U, .amplitude = INT16_MAX};
+    uint16_t buf[8] = {0};
+
+    expect_true(test_vector_source_fill_buffer(&src, &status, buf, 8),
+                "impulse periodic returns true");
+
+    int impulse_count = 0;
+    for (size_t i = 0; i < 8; i++)
+    {
+        if (buf[i] != (uint16_t)X_AXIS)
+        {
+            impulse_count++;
+        }
+    }
+    expect_true(impulse_count >= 1, "impulse periodic produced at least one pulse");
+}
+
+static bool test_stream_pop(int16_t *sample, void *context)
+{
+    (void)context;
+    *sample = 1000;
+    return true;
+}
+
+static void test_usb_stream_fills_from_callback(void)
+{
+    TestVectorSource src;
+    test_vector_source_init(&src, SWEEP_SAMPLE_RATE);
+
+    src.stream_pop = test_stream_pop;
+    src.stream_context = NULL;
+
+    CliTestModeStatus status = {.enabled = true, .vector = TEST_VECTOR_USB_STREAM, .amplitude = INT16_MAX};
+    uint16_t buf[4] = {0};
+
+    expect_true(test_vector_source_fill_buffer(&src, &status, buf, 4),
+                "usb stream fill returns true");
+    expect_true(buf[0] >= (uint16_t)X_AXIS,
+                "usb stream sample is at or above x-axis");
+    expect_true(buf[0] <= (uint16_t)X_AXIS + 2000,
+                "usb stream sample is within expected range");
+}
+
+static void test_usb_stream_null_callback_fails(void)
+{
+    TestVectorSource src;
+    test_vector_source_init(&src, SWEEP_SAMPLE_RATE);
+
+    src.stream_pop = NULL;
+    src.stream_context = NULL;
+
+    CliTestModeStatus status = {.enabled = true, .vector = TEST_VECTOR_USB_STREAM, .amplitude = INT16_MAX};
+    uint16_t buf[4] = {0xABCD, 0xABCD, 0xABCD, 0xABCD};
+
+    expect_false(test_vector_source_fill_buffer(&src, &status, buf, 4),
+                 "usb stream with null callback fails");
+}
+
 int main(void)
 {
     test_init_sets_default_sample_rate();
@@ -194,6 +279,10 @@ int main(void)
     test_fill_disabled_returns_true_no_writes();
     test_sine_rms_consistent_across_frequencies();
     test_sweep_rms_consistent_across_bands();
+    test_impulse_one_shot_produces_single_pulse();
+    test_impulse_periodic();
+    test_usb_stream_fills_from_callback();
+    test_usb_stream_null_callback_fails();
 
     if (failures != 0)
     {
