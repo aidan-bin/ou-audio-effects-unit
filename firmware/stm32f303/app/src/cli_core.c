@@ -29,6 +29,26 @@ static bool write_line(const CliIo *io, const char *line)
     return io != NULL && io->write != NULL && io->write(line, io->context);
 }
 
+// Formats "<prefix>" followed by each byte rendered with byte_format, stopping
+// before the line buffer overflows (reserve = worst-case bytes per entry).
+static CliStatus write_byte_list(const CliIo *io, const char *prefix, const char *byte_format,
+                                 size_t reserve, const uint8_t *data, size_t count)
+{
+    char line[256];
+    size_t used = (size_t)snprintf(line, sizeof(line), "%s", prefix);
+    for (size_t i = 0; i < count && used + reserve < sizeof(line); i++)
+    {
+        used += (size_t)snprintf(&line[used], sizeof(line) - used, byte_format, data[i]);
+    }
+    snprintf(&line[used], sizeof(line) - used, "\n");
+    return write_line(io, line) ? CLI_STATUS_OK : CLI_STATUS_SERVICE_ERROR;
+}
+
+static bool parse_u32_max(const char *token, uint32_t max, uint32_t *out)
+{
+    return cli_parse_u32(token, out) && *out <= max;
+}
+
 // Single source of truth for test-vector name <-> id, used by both the status
 // formatter and the "test vector <name>" parser.
 static const struct
@@ -1013,14 +1033,7 @@ static CliStatus handle_i2c(char **tokens,
             return CLI_STATUS_SERVICE_ERROR;
         }
 
-        char line[256];
-        size_t used = (size_t)snprintf(line, sizeof(line), "i2c scan");
-        for (size_t i = 0; i < count && used + 6 < sizeof(line); i++)
-        {
-            used += (size_t)snprintf(&line[used], sizeof(line) - used, " 0x%02X", found[i]);
-        }
-        snprintf(&line[used], sizeof(line) - used, "\n");
-        return write_line(io, line) ? CLI_STATUS_OK : CLI_STATUS_SERVICE_ERROR;
+        return write_byte_list(io, "i2c scan", " 0x%02X", 6, found, count);
     }
 
     if (strcmp(tokens[1], "ping") == 0)
@@ -1035,7 +1048,7 @@ static CliStatus handle_i2c(char **tokens,
         }
 
         uint32_t addr = 0;
-        if (!cli_parse_u32(tokens[2], &addr) || addr > 0x7F)
+        if (!parse_u32_max(tokens[2], 0x7F, &addr))
         {
             return CLI_STATUS_PARSE_ERROR;
         }
@@ -1060,8 +1073,7 @@ static CliStatus handle_i2c(char **tokens,
         }
 
         uint32_t addr = 0, reg = 0;
-        if (!cli_parse_u32(tokens[2], &addr) || addr > 0x7F ||
-            !cli_parse_u32(tokens[3], &reg) || reg > 0xFF)
+        if (!parse_u32_max(tokens[2], 0x7F, &addr) || !parse_u32_max(tokens[3], 0xFF, &reg))
         {
             return CLI_STATUS_PARSE_ERROR;
         }
@@ -1084,14 +1096,7 @@ static CliStatus handle_i2c(char **tokens,
             return CLI_STATUS_SERVICE_ERROR;
         }
 
-        char line[256];
-        size_t used = (size_t)snprintf(line, sizeof(line), "i2c data");
-        for (size_t i = 0; i < rx_len && used + 4 < sizeof(line); i++)
-        {
-            used += (size_t)snprintf(&line[used], sizeof(line) - used, " %02X", rx_buf[i]);
-        }
-        snprintf(&line[used], sizeof(line) - used, "\n");
-        return write_line(io, line) ? CLI_STATUS_OK : CLI_STATUS_SERVICE_ERROR;
+        return write_byte_list(io, "i2c data", " %02X", 4, rx_buf, rx_len);
     }
 
     if (strcmp(tokens[1], "write") == 0)
@@ -1106,8 +1111,7 @@ static CliStatus handle_i2c(char **tokens,
         }
 
         uint32_t addr = 0, reg = 0;
-        if (!cli_parse_u32(tokens[2], &addr) || addr > 0x7F ||
-            !cli_parse_u32(tokens[3], &reg) || reg > 0xFF)
+        if (!parse_u32_max(tokens[2], 0x7F, &addr) || !parse_u32_max(tokens[3], 0xFF, &reg))
         {
             return CLI_STATUS_PARSE_ERROR;
         }
@@ -1143,7 +1147,7 @@ static CliStatus handle_i2c(char **tokens,
         }
 
         uint32_t addr = 0;
-        if (!cli_parse_u32(tokens[2], &addr) || addr > 0x7F)
+        if (!parse_u32_max(tokens[2], 0x7F, &addr))
         {
             return CLI_STATUS_PARSE_ERROR;
         }
@@ -1176,7 +1180,7 @@ static CliStatus handle_i2c(char **tokens,
         }
 
         uint32_t addr = 0, len = 0;
-        if (!cli_parse_u32(tokens[2], &addr) || addr > 0x7F ||
+        if (!parse_u32_max(tokens[2], 0x7F, &addr) ||
             !cli_parse_u32(tokens[3], &len) || len == 0 || len > 64)
         {
             return CLI_STATUS_PARSE_ERROR;
@@ -1190,14 +1194,7 @@ static CliStatus handle_i2c(char **tokens,
             return CLI_STATUS_SERVICE_ERROR;
         }
 
-        char line[256];
-        size_t used = (size_t)snprintf(line, sizeof(line), "i2c data");
-        for (size_t i = 0; i < rx_len && used + 4 < sizeof(line); i++)
-        {
-            used += (size_t)snprintf(&line[used], sizeof(line) - used, " %02X", rx_buf[i]);
-        }
-        snprintf(&line[used], sizeof(line) - used, "\n");
-        return write_line(io, line) ? CLI_STATUS_OK : CLI_STATUS_SERVICE_ERROR;
+        return write_byte_list(io, "i2c data", " %02X", 4, rx_buf, rx_len);
     }
 
     return CLI_STATUS_UNKNOWN_COMMAND;
