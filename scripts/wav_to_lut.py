@@ -23,13 +23,16 @@ def read_wav(path):
 
     if sampwidth == 2:
         import array
+
         samples = array.array("h", raw)
     elif sampwidth == 1:
         import array
+
         samples_8 = array.array("b", raw)
         samples = array.array("h", (s * 256 for s in samples_8))
     elif sampwidth == 4:
         import array
+
         samples_32 = array.array("i", raw)
         samples = array.array("h", (max(-32768, min(32767, s >> 16)) for s in samples_32))
     else:
@@ -107,27 +110,31 @@ def main():
     parser = argparse.ArgumentParser(description="Convert WAV to C header LUT")
     parser.add_argument("--input", required=True, help="Input WAV file path")
     parser.add_argument("--output", required=True, help="Output C header file path")
-    parser.add_argument("--rate", type=int, default=8000,
-                        help="Target sample rate in Hz (default: 8000)")
-    parser.add_argument("--duration", type=float, default=5.0,
-                        help="Duration to extract in seconds (default: 5.0)")
-    parser.add_argument("--start", type=float, default=0.0,
-                        help="Start offset in seconds (default: 0.0)")
-    parser.add_argument("--name", default="wav_lut",
-                        help="Array name (default: wav_lut)")
+    parser.add_argument(
+        "--rate", type=int, default=8000, help="Target sample rate in Hz (default: 8000)"
+    )
+    parser.add_argument(
+        "--duration", type=float, default=5.0, help="Duration to extract in seconds (default: 5.0)"
+    )
+    parser.add_argument(
+        "--start", type=float, default=0.0, help="Start offset in seconds (default: 0.0)"
+    )
+    parser.add_argument("--name", default="wav_lut", help="Array name (default: wav_lut)")
     args = parser.parse_args()
 
     input_path = Path(args.input).resolve()
     output_path = Path(args.output)
     repo_root = Path(__file__).resolve().parent.parent
-    source_rel = input_path.relative_to(repo_root) if input_path.is_relative_to(repo_root) else input_path
+    source_rel = (
+        input_path.relative_to(repo_root) if input_path.is_relative_to(repo_root) else input_path
+    )
 
     if not input_path.exists():
         print(f"Error: input file not found: {args.input}", file=sys.stderr)
         sys.exit(1)
 
     if args.rate < 1000:
-        print(f"Error: target rate must be >= 1000 Hz", file=sys.stderr)
+        print("Error: target rate must be >= 1000 Hz", file=sys.stderr)
         sys.exit(1)
 
     if args.duration <= 0:
@@ -136,14 +143,16 @@ def main():
 
     print(f"Reading {input_path}...")
     samples, src_rate = read_wav(input_path)
-    print(f"  Source: {len(samples)} samples, {src_rate} Hz, {len(samples)/src_rate:.2f}s")
+    print(f"  Source: {len(samples)} samples, {src_rate} Hz, {len(samples) / src_rate:.2f}s")
 
     start_sample = int(args.start * src_rate)
     duration_samples = int(args.duration * src_rate)
     start_sample = max(0, min(start_sample, len(samples)))
     end_sample = min(start_sample + duration_samples, len(samples))
     samples = samples[start_sample:end_sample]
-    print(f"  Extracted: {len(samples)} samples ({args.start:.2f}s - {args.start + args.duration:.2f}s)")
+    print(
+        f"  Extracted: {len(samples)} samples ({args.start:.2f}s - {args.start + args.duration:.2f}s)"
+    )
 
     if args.rate != src_rate:
         print(f"  Resampling to {args.rate} Hz...")
@@ -152,7 +161,9 @@ def main():
     actual_duration = len(samples) / args.rate
     print(f"  Output: {len(samples)} samples, {args.rate} Hz, {actual_duration:.2f}s")
 
-    header = write_header(samples, args.name, str(output_path), str(source_rel), args.rate, actual_duration)
+    header = write_header(
+        samples, args.name, str(output_path), str(source_rel), args.rate, actual_duration
+    )
 
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)

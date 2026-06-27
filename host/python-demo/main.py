@@ -1,18 +1,19 @@
-from PyQt5 import QtWidgets, uic
+import sys
+import wave
+from pathlib import Path
+
+import effects
+import matplotlib.pyplot as plt
 import numpy as np
+import sounddevice as sd
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
-import matplotlib.pyplot as plt
-import sounddevice as sd
-import wave
-import effects
-import sys
-from pathlib import Path
+from PyQt5 import QtWidgets, uic
 
 
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
-        super(MainWindow, self).__init__()
+        super().__init__()
         ui_path = Path(__file__).resolve().parent / "demo.ui"
         self.ui = uic.loadUi(str(ui_path), self)
 
@@ -34,7 +35,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.layout.addWidget(self.toolbar)
         self.ui.frame.setLayout(self.layout)
 
-        plt.rcParams.update({'font.size': 20})
+        plt.rcParams.update({"font.size": 20})
         self.plot()
 
         self.ui.resetPushButton.clicked.connect(self.reset_handler)
@@ -46,7 +47,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.openFilePushButton.clicked.connect(self.open_file_handler)
 
     def _scale_q(self, value):
-        return int(value * 2 ** effects.FIXED_POINT_Q)
+        return int(value * 2**effects.FIXED_POINT_Q)
 
     def _update_effect_params(self):
         self.overdrive_param.level = self.ui.overdriveLevelSpinBox.value()
@@ -86,7 +87,9 @@ class MainWindow(QtWidgets.QMainWindow):
         freq = 2 * np.pi / self.ui.frequencySpinBox.value()
         amp = self.ui.sinAmplitudeSpinBox.value()
         phase = self.ui.phaseSpinBox.value() * 2 * np.pi / self.ui.frequencySpinBox.value()
-        component = np.asarray([round(amp * np.sin(freq * i + phase), 4) for i in range(num_samples)])
+        component = np.asarray(
+            [round(amp * np.sin(freq * i + phase), 4) for i in range(num_samples)]
+        )
         self.input_signal = self._append_signal(self.input_signal, component)
 
     def _add_constant(self, num_samples):
@@ -133,7 +136,7 @@ class MainWindow(QtWidgets.QMainWindow):
         ax.plot(self.input_signal.tolist(), label="input")
         ax.plot(self.output_signal.tolist(), label="output")
         ax.legend()
-        plt.setp(ax.get_xticklabels(), rotation=30, horizontalalignment='right', fontsize='x-small')
+        plt.setp(ax.get_xticklabels(), rotation=30, horizontalalignment="right", fontsize="x-small")
 
         self.canvas.draw()
 
@@ -209,7 +212,9 @@ class MainWindow(QtWidgets.QMainWindow):
         sd.stop()
 
     def open_file_handler(self):
-        file_name, _filter = QtWidgets.QFileDialog.getOpenFileName(self, "Open audio file", ".", "Audio files (*.wav)")
+        file_name, _filter = QtWidgets.QFileDialog.getOpenFileName(
+            self, "Open audio file", ".", "Audio files (*.wav)"
+        )
 
         if file_name:
             self._load_wave_file(file_name)

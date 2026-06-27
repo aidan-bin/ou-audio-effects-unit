@@ -21,7 +21,7 @@ def parse_ranges(file_path: Path, lines: list[str]) -> list[tuple[int, int]]:
         if begin:
             if open_line:
                 raise ValueError(
-                    f"{file_path}:{i}: nested USER CODE BEGIN before USER CODE END for section \"{open_label}\""
+                    f'{file_path}:{i}: nested USER CODE BEGIN before USER CODE END for section "{open_label}"'
                 )
             open_line = i
             open_label = begin.group(1).strip()
@@ -36,7 +36,7 @@ def parse_ranges(file_path: Path, lines: list[str]) -> list[tuple[int, int]]:
             raise ValueError(f"{file_path}:{i}: USER CODE END without matching USER CODE BEGIN")
         if end_label != open_label:
             raise ValueError(
-                f"{file_path}:{i}: USER CODE marker mismatch: BEGIN \"{open_label}\" vs END \"{end_label}\""
+                f'{file_path}:{i}: USER CODE marker mismatch: BEGIN "{open_label}" vs END "{end_label}"'
             )
 
         start, stop = open_line + 1, i - 1
@@ -46,7 +46,9 @@ def parse_ranges(file_path: Path, lines: list[str]) -> list[tuple[int, int]]:
         open_label = ""
 
     if open_line:
-        raise ValueError(f"{file_path}:{open_line}: USER CODE BEGIN \"{open_label}\" missing USER CODE END")
+        raise ValueError(
+            f'{file_path}:{open_line}: USER CODE BEGIN "{open_label}" missing USER CODE END'
+        )
 
     return ranges
 
@@ -60,7 +62,8 @@ def trimmed_ranges(lines: list[str], ranges: list[tuple[int, int]]) -> list[tupl
         while stop >= start and SKIP_RE.match(lines[stop - 1]):
             stop -= 1
         if start <= stop and any(
-            not SKIP_RE.match(line) and not COMMENT_RE.match(line) for line in lines[start - 1 : stop]
+            not SKIP_RE.match(line) and not COMMENT_RE.match(line)
+            for line in lines[start - 1 : stop]
         ):
             out.append((start, stop))
 

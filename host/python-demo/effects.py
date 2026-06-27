@@ -39,10 +39,12 @@ class OverdriveParam(ctypes.Structure):
     ]
 
     def __str__(self):
-        return f"level = {self.level}\n" + \
-               f"gain = {self.gain}\n" + \
-               f"tone = {self.tone}\n" + \
-               f"mix = {self.mix}"
+        return (
+            f"level = {self.level}\n"
+            + f"gain = {self.gain}\n"
+            + f"tone = {self.tone}\n"
+            + f"mix = {self.mix}"
+        )
 
 
 class EchoParam(ctypes.Structure):
@@ -55,11 +57,13 @@ class EchoParam(ctypes.Structure):
     ]
 
     def __str__(self):
-        return f"delay_samples = {self.delay_samples}\n" + \
-               f"pre_delay = {self.pre_delay}\n" + \
-               f"density = {self.density}\n" + \
-               f"attack = {self.attack}\n" + \
-               f"decay = {self.decay}"
+        return (
+            f"delay_samples = {self.delay_samples}\n"
+            + f"pre_delay = {self.pre_delay}\n"
+            + f"density = {self.density}\n"
+            + f"attack = {self.attack}\n"
+            + f"decay = {self.decay}"
+        )
 
 
 class CompressionParam(ctypes.Structure):
@@ -69,8 +73,7 @@ class CompressionParam(ctypes.Structure):
     ]
 
     def __str__(self):
-        return f"threshold = {self.threshold}\n" + \
-               f"ratio = {self.ratio}"
+        return f"threshold = {self.threshold}\n" + f"ratio = {self.ratio}"
 
 
 class EffectParams(ctypes.Union):
@@ -143,17 +146,23 @@ class EffectRuntime:
             raise RuntimeError("Failed to reset effect runtime")
 
     def set_overdrive(self, param):
-        result = libeffects.effect_handle_set_overdrive_params(ctypes.byref(self.handle), ctypes.byref(param))
+        result = libeffects.effect_handle_set_overdrive_params(
+            ctypes.byref(self.handle), ctypes.byref(param)
+        )
         if result != 0:
             raise RuntimeError("Failed to set overdrive parameters")
 
     def set_echo(self, param):
-        result = libeffects.effect_handle_set_echo_params(ctypes.byref(self.handle), ctypes.byref(param))
+        result = libeffects.effect_handle_set_echo_params(
+            ctypes.byref(self.handle), ctypes.byref(param)
+        )
         if result != 0:
             raise RuntimeError("Failed to set echo parameters")
 
     def set_compression(self, param):
-        result = libeffects.effect_handle_set_compression_params(ctypes.byref(self.handle), ctypes.byref(param))
+        result = libeffects.effect_handle_set_compression_params(
+            ctypes.byref(self.handle), ctypes.byref(param)
+        )
         if result != 0:
             raise RuntimeError("Failed to set compression parameters")
 

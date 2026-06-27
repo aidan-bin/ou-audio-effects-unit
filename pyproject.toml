@@ -1,0 +1,22 @@
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.format]
+quote-style = "double"
+docstring-code-format = true
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort (import ordering)
+    "N",   # pep8-naming
+    "UP",  # pyupgrade (modern Python syntax)
+    "SIM", # flake8-simplify
+    "C4",  # flake8-comprehensions
+    "DTZ", # flake8-datetimez
+]
+ignore = [
+    "SIM108", # Allow if/else over ternary when clearer
+]
