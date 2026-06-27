@@ -190,49 +190,25 @@ run_lint() {
 		grep -Fq "$absolute_file" "$compile_db_file" || grep -Fq "$file" "$compile_db_file"
 	}
 
-	resolve_cubemx_compile_db_dir() {
+	resolve_generated_compile_db_dir() {
+		local env_var_name="$1"
+		local project_dir="$2"
 		local candidate
 
-		if [[ -n "${CUBEMX_LINT_BUILD_DIR:-}" ]]; then
-			candidate="$CUBEMX_LINT_BUILD_DIR"
+		if [[ -n "${!env_var_name:-}" ]]; then
+			candidate="${!env_var_name}"
 			if [[ -f "$candidate/compile_commands.json" ]]; then
 				echo "$candidate"
 				return 0
 			fi
-			echo "Configured CUBEMX_LINT_BUILD_DIR has no compile_commands.json: $candidate"
+			echo "Configured $env_var_name has no compile_commands.json: $candidate"
 			return 1
 		fi
 
 		for candidate in \
-			firmware/stm32f303/cubemx/build/Debug \
-			firmware/stm32f303/cubemx/build/Release \
-			firmware/stm32f303/cubemx/build; do
-			if [[ -f "$candidate/compile_commands.json" ]]; then
-				echo "$candidate"
-				return 0
-			fi
-		done
-
-		return 1
-	}
-
-	resolve_nucleo_compile_db_dir() {
-		local candidate
-
-		if [[ -n "${NUCLEO_LINT_BUILD_DIR:-}" ]]; then
-			candidate="$NUCLEO_LINT_BUILD_DIR"
-			if [[ -f "$candidate/compile_commands.json" ]]; then
-				echo "$candidate"
-				return 0
-			fi
-			echo "Configured NUCLEO_LINT_BUILD_DIR has no compile_commands.json: $candidate"
-			return 1
-		fi
-
-		for candidate in \
-			firmware/stm32f303/nucleo-ou-audio-effects/build/Debug \
-			firmware/stm32f303/nucleo-ou-audio-effects/build/Release \
-			firmware/stm32f303/nucleo-ou-audio-effects/build; do
+			"$project_dir/build/Debug" \
+			"$project_dir/build/Release" \
+			"$project_dir/build"; do
 			if [[ -f "$candidate/compile_commands.json" ]]; then
 				echo "$candidate"
 				return 0
@@ -345,13 +321,13 @@ run_lint() {
 			sed -E '/^[0-9]+ warnings generated\.$/d'
 	}
 
-	if ! cubemx_compile_db_dir="$(resolve_cubemx_compile_db_dir)"; then
+	if ! cubemx_compile_db_dir="$(resolve_generated_compile_db_dir CUBEMX_LINT_BUILD_DIR firmware/stm32f303/cubemx)"; then
 		echo "Missing CubeMX compile database (expected under firmware/stm32f303/cubemx/build or via CUBEMX_LINT_BUILD_DIR)."
 		echo "Configure or regenerate the CubeMX build tree to enable USER CODE lint gating."
 		return 1
 	fi
 
-	if ! nucleo_compile_db_dir="$(resolve_nucleo_compile_db_dir)"; then
+	if ! nucleo_compile_db_dir="$(resolve_generated_compile_db_dir NUCLEO_LINT_BUILD_DIR firmware/stm32f303/nucleo-ou-audio-effects)"; then
 		echo "Missing Nucleo compile database (expected under firmware/stm32f303/nucleo-ou-audio-effects/build or via NUCLEO_LINT_BUILD_DIR)."
 		echo "Configure or regenerate the Nucleo build tree to enable USER CODE lint gating."
 		return 1
