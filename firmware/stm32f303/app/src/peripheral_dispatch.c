@@ -4,6 +4,17 @@
 
 #include "log.h"
 
+// Bails out of the calling ISR hook unless the dispatch context, ops table, and
+// the named ops callback are all present.
+#define REQUIRE_OPS(dispatch, ops, callback)                                       \
+    do                                                                             \
+    {                                                                              \
+        if ((dispatch) == NULL || (ops) == NULL || (ops)->callback == NULL)        \
+        {                                                                          \
+            return;                                                                \
+        }                                                                          \
+    } while (0)
+
 void peripheral_drain_semaphore(void *semaphore_handle, const PeripheralDispatchOps *ops)
 {
     if (semaphore_handle == NULL || ops == NULL || ops->semaphore_take == NULL)
@@ -57,10 +68,7 @@ bool peripheral_start_adc_conversion_it(void *adc_handle, void *config,
 void peripheral_on_gpio_exti(const PeripheralDispatchContext *dispatch,
                              const PeripheralDispatchOps *ops, uint16_t gpio_pin)
 {
-    if (dispatch == NULL || ops == NULL || ops->task_notify_from_isr == NULL)
-    {
-        return;
-    }
+    REQUIRE_OPS(dispatch, ops, task_notify_from_isr);
 
     ops->task_notify_from_isr(dispatch->btn_handler_task_handle, (uint32_t)gpio_pin, ops->context);
 }
@@ -68,10 +76,7 @@ void peripheral_on_gpio_exti(const PeripheralDispatchContext *dispatch,
 void peripheral_on_adc_half_complete(const PeripheralDispatchContext *dispatch,
                                      const PeripheralDispatchOps *ops, void *adc_handle)
 {
-    if (dispatch == NULL || ops == NULL || ops->task_notify_from_isr == NULL)
-    {
-        return;
-    }
+    REQUIRE_OPS(dispatch, ops, task_notify_from_isr);
 
     if (adc_handle == dispatch->effects_adc_handle)
     {
@@ -83,10 +88,7 @@ void peripheral_on_adc_half_complete(const PeripheralDispatchContext *dispatch,
 void peripheral_on_adc_complete(const PeripheralDispatchContext *dispatch,
                                 const PeripheralDispatchOps *ops, void *adc_handle)
 {
-    if (dispatch == NULL || ops == NULL || ops->task_notify_from_isr == NULL)
-    {
-        return;
-    }
+    REQUIRE_OPS(dispatch, ops, task_notify_from_isr);
 
     if (adc_handle == dispatch->pot_adc_handle)
     {
@@ -112,10 +114,7 @@ void peripheral_on_dac_half_complete(const PeripheralDispatchContext *dispatch,
 {
     (void)dac_handle;
 
-    if (dispatch == NULL || ops == NULL || ops->task_notify_from_isr == NULL)
-    {
-        return;
-    }
+    REQUIRE_OPS(dispatch, ops, task_notify_from_isr);
 
     ops->task_notify_from_isr(dispatch->effects_task_handle, (uint32_t)(uintptr_t)dispatch->dac_buf_a,
                               ops->context);
@@ -126,80 +125,61 @@ void peripheral_on_dac_complete(const PeripheralDispatchContext *dispatch,
 {
     (void)dac_handle;
 
-    if (dispatch == NULL || ops == NULL || ops->task_notify_from_isr == NULL)
-    {
-        return;
-    }
+    REQUIRE_OPS(dispatch, ops, task_notify_from_isr);
 
     ops->task_notify_from_isr(dispatch->effects_task_handle, (uint32_t)(uintptr_t)dispatch->dac_buf_b,
                               ops->context);
 }
 
-void peripheral_on_i2c_tx_complete(const PeripheralDispatchContext *dispatch,
-                                   const PeripheralDispatchOps *ops, void *i2c_handle)
+// Signals I2C completion to the task-support layer when the interrupt belongs to
+// the tracked I2C handle, optionally logging a warning first.
+static void peripheral_signal_i2c(const PeripheralDispatchContext *dispatch,
+                                  const PeripheralDispatchOps *ops, void *i2c_handle, bool error,
+                                  const char *log_message)
 {
-    if (dispatch == NULL || ops == NULL || ops->i2c_signal_completion_from_isr == NULL)
+    REQUIRE_OPS(dispatch, ops, i2c_signal_completion_from_isr);
+
+    if (i2c_handle != dispatch->i2c_handle)
     {
         return;
     }
 
-    if (i2c_handle == dispatch->i2c_handle)
+    if (log_message != NULL)
     {
-        ops->i2c_signal_completion_from_isr(dispatch->i2c_task_support_context, false, ops->context);
+        (void)log_write(LOG_LEVEL_WARN, log_message);
     }
+
+    ops->i2c_signal_completion_from_isr(dispatch->i2c_task_support_context, error, ops->context);
+}
+
+void peripheral_on_i2c_tx_complete(const PeripheralDispatchContext *dispatch,
+                                   const PeripheralDispatchOps *ops, void *i2c_handle)
+{
+    peripheral_signal_i2c(dispatch, ops, i2c_handle, false, NULL);
 }
 
 void peripheral_on_i2c_rx_complete(const PeripheralDispatchContext *dispatch,
                                    const PeripheralDispatchOps *ops, void *i2c_handle)
 {
-    if (dispatch == NULL || ops == NULL || ops->i2c_signal_completion_from_isr == NULL)
-    {
-        return;
-    }
-
-    if (i2c_handle == dispatch->i2c_handle)
-    {
-        ops->i2c_signal_completion_from_isr(dispatch->i2c_task_support_context, false, ops->context);
-    }
+    peripheral_signal_i2c(dispatch, ops, i2c_handle, false, NULL);
 }
 
 void peripheral_on_i2c_error(const PeripheralDispatchContext *dispatch,
                              const PeripheralDispatchOps *ops, void *i2c_handle)
 {
-    if (dispatch == NULL || ops == NULL || ops->i2c_signal_completion_from_isr == NULL)
-    {
-        return;
-    }
-
-    if (i2c_handle == dispatch->i2c_handle)
-    {
-        (void)log_write(LOG_LEVEL_WARN, "i2c error callback");
-        ops->i2c_signal_completion_from_isr(dispatch->i2c_task_support_context, true, ops->context);
-    }
+    peripheral_signal_i2c(dispatch, ops, i2c_handle, true, "i2c error callback");
 }
 
 void peripheral_on_i2c_abort_complete(const PeripheralDispatchContext *dispatch,
                                       const PeripheralDispatchOps *ops, void *i2c_handle)
 {
-    if (dispatch == NULL || ops == NULL || ops->i2c_signal_completion_from_isr == NULL)
-    {
-        return;
-    }
-
-    if (i2c_handle == dispatch->i2c_handle)
-    {
-        (void)log_write(LOG_LEVEL_WARN, "i2c abort callback");
-        ops->i2c_signal_completion_from_isr(dispatch->i2c_task_support_context, true, ops->context);
-    }
+    peripheral_signal_i2c(dispatch, ops, i2c_handle, true, "i2c abort callback");
 }
 
 void peripheral_on_dma_complete(const PeripheralDispatchContext *dispatch,
                                 const PeripheralDispatchOps *ops, void *dma_handle)
 {
-    if (dispatch == NULL || ops == NULL || ops->semaphore_give_from_isr == NULL)
-    {
-        return;
-    }
+    REQUIRE_OPS(dispatch, ops, semaphore_give_from_isr);
 
     if (dma_handle == dispatch->mem_to_mem_dma_handle)
     {
