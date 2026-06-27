@@ -29,19 +29,40 @@ static bool write_line(const CliIo *io, const char *line)
     return io != NULL && io->write != NULL && io->write(line, io->context);
 }
 
+// Single source of truth for test-vector name <-> id, used by both the status
+// formatter and the "test vector <name>" parser.
+static const struct
+{
+    const char *name;
+    uint8_t id;
+} TEST_VECTORS[] = {
+    {"sine", 0U},    {"lut", 1U},     {"sweep", 2U},
+    {"wav", 3U},     {"impulse", 4U}, {"usb", 5U},
+};
+
 static const char *test_vector_name(uint8_t vector)
 {
-    if (vector == 1U)
-        return "lut";
-    if (vector == 2U)
-        return "sweep";
-    if (vector == 3U)
-        return "wav";
-    if (vector == 4U)
-        return "impulse";
-    if (vector == 5U)
-        return "usb";
+    for (size_t i = 0; i < sizeof(TEST_VECTORS) / sizeof(TEST_VECTORS[0]); i++)
+    {
+        if (TEST_VECTORS[i].id == vector)
+        {
+            return TEST_VECTORS[i].name;
+        }
+    }
     return "sine";
+}
+
+static bool test_vector_id(const char *name, uint8_t *vector_out)
+{
+    for (size_t i = 0; i < sizeof(TEST_VECTORS) / sizeof(TEST_VECTORS[0]); i++)
+    {
+        if (strcmp(TEST_VECTORS[i].name, name) == 0)
+        {
+            *vector_out = TEST_VECTORS[i].id;
+            return true;
+        }
+    }
+    return false;
 }
 
 static const char *command_help_text(const char *command)
@@ -725,31 +746,7 @@ static CliStatus handle_test_mode(char **tokens,
         }
 
         uint8_t vector = 0;
-        if (strcmp(tokens[2], "sine") == 0)
-        {
-            vector = 0;
-        }
-        else if (strcmp(tokens[2], "lut") == 0)
-        {
-            vector = 1;
-        }
-        else if (strcmp(tokens[2], "sweep") == 0)
-        {
-            vector = 2;
-        }
-        else if (strcmp(tokens[2], "wav") == 0)
-        {
-            vector = 3;
-        }
-        else if (strcmp(tokens[2], "impulse") == 0)
-        {
-            vector = 4;
-        }
-        else if (strcmp(tokens[2], "usb") == 0)
-        {
-            vector = 5;
-        }
-        else
+        if (!test_vector_id(tokens[2], &vector))
         {
             return CLI_STATUS_PARSE_ERROR;
         }
