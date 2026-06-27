@@ -248,9 +248,6 @@ void cli_session_init(CliSession *session, const CliServices *services,
     session->services = services;
     session->core_io.write = session_core_write;
     session->core_io.context = session;
-    session->command_stream_mode = false;
-    session->escape_sequence_active = false;
-    session->escape_sequence_csi = false;
 }
 
 bool cli_session_start(CliSession *session)
