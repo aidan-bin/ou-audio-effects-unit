@@ -62,22 +62,7 @@ I2CHandlerResult i2c_handler_process_message(const I2CHandlerMessage *message,
 
     if (!message_valid(message, ops, context))
     {
-        if (message->p_failed != NULL)
-        {
-            *(message->p_failed) = true;
-        }
-
-        if (!message->rx_tx_bar && message->payload != NULL && ops->free_payload != NULL)
-        {
-            ops->free_payload(message->payload, context);
-        }
-
-        if (ops->signal_source_completion != NULL)
-        {
-            ops->signal_source_completion(message->source_task, context);
-        }
-
-        return I2C_HANDLER_RESULT_INVALID_MESSAGE;
+        return finish_message(message, true, I2C_HANDLER_RESULT_INVALID_MESSAGE, ops, context);
     }
 
     uint32_t remaining_budget_ms = config->drop_budget_ms;
