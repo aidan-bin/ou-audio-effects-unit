@@ -1,6 +1,7 @@
 #include "cli_service_adapter.h"
 
 #include <limits.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -43,6 +44,67 @@ static bool assign_bounded_size_t(int32_t value, size_t min, size_t max, size_t 
     return true;
 }
 
+// Maps a "group.field" config key to byte offsets of the current value and its
+// min/max bounds within EffectsParams, so a single getter/setter can serve all
+// keys. PARAM_ENTRY composes the EffectsParams group offset with the field
+// offset inside the parameter struct.
+typedef struct
+{
+    const char *key;
+    size_t value_offset;
+    size_t min_offset;
+    size_t max_offset;
+} ParamMapping;
+
+#define PARAM_ENTRY(key, group, group_min, group_max, group_type, field)            \
+    {                                                                               \
+        (key), offsetof(EffectsParams, group) + offsetof(group_type, field),        \
+            offsetof(EffectsParams, group_min) + offsetof(group_type, field),       \
+            offsetof(EffectsParams, group_max) + offsetof(group_type, field)        \
+    }
+
+#define OVERDRIVE_ENTRY(key, field) \
+    PARAM_ENTRY(key, overdrive, overdrive_min, overdrive_max, OverdriveParam, field)
+#define ECHO_ENTRY(key, field) PARAM_ENTRY(key, echo, echo_min, echo_max, EchoParam, field)
+#define COMPRESSION_ENTRY(key, field) \
+    PARAM_ENTRY(key, compression, compression_min, compression_max, CompressionParam, field)
+
+static const ParamMapping PARAM_MAP[] = {
+    OVERDRIVE_ENTRY("overdrive.gain", gain),
+    OVERDRIVE_ENTRY("overdrive.level", level),
+    OVERDRIVE_ENTRY("overdrive.tone", tone),
+    OVERDRIVE_ENTRY("overdrive.mix", mix),
+    ECHO_ENTRY("echo.delay_samples", delay_samples),
+    ECHO_ENTRY("echo.pre_delay", pre_delay),
+    ECHO_ENTRY("echo.density", density),
+    ECHO_ENTRY("echo.attack", attack),
+    ECHO_ENTRY("echo.decay", decay),
+    COMPRESSION_ENTRY("compression.threshold", threshold),
+    COMPRESSION_ENTRY("compression.ratio", ratio),
+};
+
+#undef PARAM_ENTRY
+#undef OVERDRIVE_ENTRY
+#undef ECHO_ENTRY
+#undef COMPRESSION_ENTRY
+
+static size_t param_value_at(const EffectsParams *params, size_t offset)
+{
+    return *(const size_t *)((const char *)params + offset);
+}
+
+static const ParamMapping *find_param_mapping(const char *key)
+{
+    for (size_t i = 0; i < sizeof(PARAM_MAP) / sizeof(PARAM_MAP[0]); i++)
+    {
+        if (strcmp(PARAM_MAP[i].key, key) == 0)
+        {
+            return &PARAM_MAP[i];
+        }
+    }
+    return NULL;
+}
+
 static bool set_param_value(EffectsParams *params, const char *key, int32_t value)
 {
     if (params == NULL || key == NULL)
@@ -50,126 +112,31 @@ static bool set_param_value(EffectsParams *params, const char *key, int32_t valu
         return false;
     }
 
-    if (strcmp(key, "overdrive.gain") == 0)
+    const ParamMapping *mapping = find_param_mapping(key);
+    if (mapping == NULL)
     {
-        return assign_bounded_size_t(value, params->overdrive_min.gain, params->overdrive_max.gain,
-                                     &params->overdrive.gain);
-    }
-    if (strcmp(key, "overdrive.level") == 0)
-    {
-        return assign_bounded_size_t(value, params->overdrive_min.level, params->overdrive_max.level,
-                                     &params->overdrive.level);
-    }
-    if (strcmp(key, "overdrive.tone") == 0)
-    {
-        return assign_bounded_size_t(value, params->overdrive_min.tone, params->overdrive_max.tone,
-                                     &params->overdrive.tone);
-    }
-    if (strcmp(key, "overdrive.mix") == 0)
-    {
-        return assign_bounded_size_t(value, params->overdrive_min.mix, params->overdrive_max.mix,
-                                     &params->overdrive.mix);
+        return false;
     }
 
-    if (strcmp(key, "echo.delay_samples") == 0)
-    {
-        return assign_bounded_size_t(value, params->echo_min.delay_samples,
-                                     params->echo_max.delay_samples, &params->echo.delay_samples);
-    }
-    if (strcmp(key, "echo.pre_delay") == 0)
-    {
-        return assign_bounded_size_t(value, params->echo_min.pre_delay, params->echo_max.pre_delay,
-                                     &params->echo.pre_delay);
-    }
-    if (strcmp(key, "echo.density") == 0)
-    {
-        return assign_bounded_size_t(value, params->echo_min.density, params->echo_max.density,
-                                     &params->echo.density);
-    }
-    if (strcmp(key, "echo.attack") == 0)
-    {
-        return assign_bounded_size_t(value, params->echo_min.attack, params->echo_max.attack,
-                                     &params->echo.attack);
-    }
-    if (strcmp(key, "echo.decay") == 0)
-    {
-        return assign_bounded_size_t(value, params->echo_min.decay, params->echo_max.decay,
-                                     &params->echo.decay);
-    }
-
-    if (strcmp(key, "compression.threshold") == 0)
-    {
-        return assign_bounded_size_t(value, params->compression_min.threshold,
-                                     params->compression_max.threshold,
-                                     &params->compression.threshold);
-    }
-    if (strcmp(key, "compression.ratio") == 0)
-    {
-        return assign_bounded_size_t(value, params->compression_min.ratio,
-                                     params->compression_max.ratio, &params->compression.ratio);
-    }
-
-    return false;
+    return assign_bounded_size_t(value, param_value_at(params, mapping->min_offset),
+                                 param_value_at(params, mapping->max_offset),
+                                 (size_t *)((char *)params + mapping->value_offset));
 }
 
 static bool get_param_value(const EffectsParams *params, const char *key, int32_t *value_out)
 {
-    size_t value = 0;
-
     if (params == NULL || key == NULL || value_out == NULL)
     {
         return false;
     }
 
-    if (strcmp(key, "overdrive.gain") == 0)
-    {
-        value = params->overdrive.gain;
-    }
-    else if (strcmp(key, "overdrive.level") == 0)
-    {
-        value = params->overdrive.level;
-    }
-    else if (strcmp(key, "overdrive.tone") == 0)
-    {
-        value = params->overdrive.tone;
-    }
-    else if (strcmp(key, "overdrive.mix") == 0)
-    {
-        value = params->overdrive.mix;
-    }
-    else if (strcmp(key, "echo.delay_samples") == 0)
-    {
-        value = params->echo.delay_samples;
-    }
-    else if (strcmp(key, "echo.pre_delay") == 0)
-    {
-        value = params->echo.pre_delay;
-    }
-    else if (strcmp(key, "echo.density") == 0)
-    {
-        value = params->echo.density;
-    }
-    else if (strcmp(key, "echo.attack") == 0)
-    {
-        value = params->echo.attack;
-    }
-    else if (strcmp(key, "echo.decay") == 0)
-    {
-        value = params->echo.decay;
-    }
-    else if (strcmp(key, "compression.threshold") == 0)
-    {
-        value = params->compression.threshold;
-    }
-    else if (strcmp(key, "compression.ratio") == 0)
-    {
-        value = params->compression.ratio;
-    }
-    else
+    const ParamMapping *mapping = find_param_mapping(key);
+    if (mapping == NULL)
     {
         return false;
     }
 
+    size_t value = param_value_at(params, mapping->value_offset);
     if (value > (size_t)INT32_MAX)
     {
         return false;
@@ -178,6 +145,18 @@ static bool get_param_value(const EffectsParams *params, const char *key, int32_
     *value_out = (int32_t)value;
     return true;
 }
+
+// "state.enable.*" keys all toggle one entry of EffectsState::is_enabled, so a
+// table keyed by effect collapses the otherwise-identical handlers.
+static const struct
+{
+    const char *key;
+    Effect effect;
+} STATE_ENABLE_MAP[] = {
+    {"state.enable.overdrive", OVERDRIVE},
+    {"state.enable.echo", ECHO},
+    {"state.enable.compression", COMPRESSION},
+};
 
 static bool set_state_value(EffectsState *state, const char *key, int32_t value)
 {
@@ -196,32 +175,17 @@ static bool set_state_value(EffectsState *state, const char *key, int32_t value)
         return true;
     }
 
-    if (strcmp(key, "state.enable.overdrive") == 0)
+    for (size_t i = 0; i < sizeof(STATE_ENABLE_MAP) / sizeof(STATE_ENABLE_MAP[0]); i++)
     {
-        if (value < 0 || value > 1)
+        if (strcmp(key, STATE_ENABLE_MAP[i].key) == 0)
         {
-            return false;
+            if (value < 0 || value > 1)
+            {
+                return false;
+            }
+            state->is_enabled[STATE_ENABLE_MAP[i].effect] = value == 1;
+            return true;
         }
-        state->is_enabled[OVERDRIVE] = value == 1;
-        return true;
-    }
-    if (strcmp(key, "state.enable.echo") == 0)
-    {
-        if (value < 0 || value > 1)
-        {
-            return false;
-        }
-        state->is_enabled[ECHO] = value == 1;
-        return true;
-    }
-    if (strcmp(key, "state.enable.compression") == 0)
-    {
-        if (value < 0 || value > 1)
-        {
-            return false;
-        }
-        state->is_enabled[COMPRESSION] = value == 1;
-        return true;
     }
 
     return false;
@@ -240,20 +204,13 @@ static bool get_state_value(const EffectsState *state, const char *key, int32_t 
         return true;
     }
 
-    if (strcmp(key, "state.enable.overdrive") == 0)
+    for (size_t i = 0; i < sizeof(STATE_ENABLE_MAP) / sizeof(STATE_ENABLE_MAP[0]); i++)
     {
-        *value_out = state->is_enabled[OVERDRIVE] ? 1 : 0;
-        return true;
-    }
-    if (strcmp(key, "state.enable.echo") == 0)
-    {
-        *value_out = state->is_enabled[ECHO] ? 1 : 0;
-        return true;
-    }
-    if (strcmp(key, "state.enable.compression") == 0)
-    {
-        *value_out = state->is_enabled[COMPRESSION] ? 1 : 0;
-        return true;
+        if (strcmp(key, STATE_ENABLE_MAP[i].key) == 0)
+        {
+            *value_out = state->is_enabled[STATE_ENABLE_MAP[i].effect] ? 1 : 0;
+            return true;
+        }
     }
 
     return false;
