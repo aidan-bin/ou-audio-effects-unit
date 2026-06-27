@@ -159,142 +159,11 @@ __ALIGN_BEGIN static uint8_t USBD_CDC_Dual_CfgFSDesc[USB_CDC_DUAL_CONFIG_DESC_SI
         0x00, /* bInterval */
 };
 
-/* Other-speed descriptor (HS capable device reporting FS config).  */
+/* Other-speed descriptor (HS-capable device reporting FS config). Generated on
+ * demand from the FS descriptor, which is byte-identical apart from the
+ * descriptor-type field, so the two never drift out of sync. */
 __ALIGN_BEGIN static uint8_t
-    USBD_CDC_Dual_OtherSpeedCfgDesc[USB_CDC_DUAL_CONFIG_DESC_SIZ] __ALIGN_END =
-        {
-            0x09,
-            USB_DESC_TYPE_OTHER_SPEED_CONFIGURATION,
-            USB_CDC_DUAL_CONFIG_DESC_SIZ,
-            0x00,
-            0x04,
-            0x01,
-            0x00,
-            0xC0,
-            0x32,
-
-            /* CDC0 Comm */
-            0x09,
-            0x04,
-            0x00,
-            0x00,
-            0x01,
-            0x02,
-            0x02,
-            0x01,
-            0x00,
-            0x05,
-            0x24,
-            0x00,
-            0x10,
-            0x01,
-            0x05,
-            0x24,
-            0x01,
-            0x00,
-            0x01,
-            0x04,
-            0x24,
-            0x02,
-            0x02,
-            0x05,
-            0x24,
-            0x06,
-            0x00,
-            0x01,
-            0x07,
-            0x05,
-            CDC0_CMD_EP,
-            0x03,
-            LOBYTE(CDC_DUAL_CMD_PACKET_SIZE),
-            HIBYTE(CDC_DUAL_CMD_PACKET_SIZE),
-            0x10,
-            /* CDC0 Data */
-            0x09,
-            0x04,
-            0x01,
-            0x00,
-            0x02,
-            0x0A,
-            0x00,
-            0x00,
-            0x00,
-            0x07,
-            0x05,
-            CDC0_OUT_EP,
-            0x02,
-            0x40,
-            0x00,
-            0x00,
-            0x07,
-            0x05,
-            CDC0_IN_EP,
-            0x02,
-            0x40,
-            0x00,
-            0x00,
-
-            /* CDC1 Comm */
-            0x09,
-            0x04,
-            0x02,
-            0x00,
-            0x01,
-            0x02,
-            0x02,
-            0x01,
-            0x00,
-            0x05,
-            0x24,
-            0x00,
-            0x10,
-            0x01,
-            0x05,
-            0x24,
-            0x01,
-            0x00,
-            0x03,
-            0x04,
-            0x24,
-            0x02,
-            0x02,
-            0x05,
-            0x24,
-            0x06,
-            0x02,
-            0x03,
-            0x07,
-            0x05,
-            CDC1_CMD_EP,
-            0x03,
-            LOBYTE(CDC_DUAL_CMD_PACKET_SIZE),
-            HIBYTE(CDC_DUAL_CMD_PACKET_SIZE),
-            0x10,
-            /* CDC1 Data */
-            0x09,
-            0x04,
-            0x03,
-            0x00,
-            0x02,
-            0x0A,
-            0x00,
-            0x00,
-            0x00,
-            0x07,
-            0x05,
-            CDC1_OUT_EP,
-            0x02,
-            0x40,
-            0x00,
-            0x00,
-            0x07,
-            0x05,
-            CDC1_IN_EP,
-            0x02,
-            0x40,
-            0x00,
-            0x00,
-};
+    USBD_CDC_Dual_OtherSpeedCfgDesc[USB_CDC_DUAL_CONFIG_DESC_SIZ] __ALIGN_END;
 
 /* Device Qualifier descriptor */
 __ALIGN_BEGIN static uint8_t USBD_CDC_Dual_DeviceQualifierDesc
@@ -761,6 +630,12 @@ static uint8_t *USBD_CDC_Dual_GetHSCfgDesc(uint16_t *length)
 
 static uint8_t *USBD_CDC_Dual_GetOtherSpeedCfgDesc(uint16_t *length)
 {
+    /* Same layout as the FS config descriptor, only the descriptor-type byte
+     * differs, so copy and patch rather than maintaining a second copy. */
+    memcpy(USBD_CDC_Dual_OtherSpeedCfgDesc, USBD_CDC_Dual_CfgFSDesc,
+           sizeof(USBD_CDC_Dual_OtherSpeedCfgDesc));
+    USBD_CDC_Dual_OtherSpeedCfgDesc[1] = USB_DESC_TYPE_OTHER_SPEED_CONFIGURATION;
+
     *length = sizeof(USBD_CDC_Dual_OtherSpeedCfgDesc);
     return USBD_CDC_Dual_OtherSpeedCfgDesc;
 }
