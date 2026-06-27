@@ -56,7 +56,7 @@ function(ou_add_firmware_app_test test_basename)
             ${OU_FIRMWARE_APP_INCLUDE_DIR}
     )
 
-    target_link_libraries(${test_target} PRIVATE ou_firmware_app)
+    target_link_libraries(${test_target} PRIVATE ou_firmware_app ${ARGN})
     ou_link_math_library(${test_target})
 
     add_test(NAME ${test_target} COMMAND ${test_target})
@@ -124,7 +124,7 @@ endif()
 add_library(ou_firmware_app STATIC ${OU_FIRMWARE_APP_SOURCES})
 target_include_directories(ou_firmware_app
     PUBLIC
-    ${OU_FIRMWARE_APP_INCLUDE_DIR}
+        ${OU_FIRMWARE_APP_INCLUDE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/dsp/effects
 )
 
@@ -183,18 +183,7 @@ if(OU_BUILD_TESTS)
     add_test(NAME ou_firmware_peripheral_mocks_tests COMMAND ou_firmware_peripheral_mocks_tests)
     list(APPEND OU_TEST_BUILD_TARGETS ou_firmware_peripheral_mocks_tests)
 
-    add_executable(ou_firmware_i2c_handler_tests
-        tests/test_firmware_i2c_handler.c
-    )
-
-    target_include_directories(ou_firmware_i2c_handler_tests
-        PRIVATE
-            ${OU_FIRMWARE_APP_INCLUDE_DIR}
-    )
-
-    target_link_libraries(ou_firmware_i2c_handler_tests PRIVATE ou_firmware_app ou_firmware_mocks)
-    ou_link_math_library(ou_firmware_i2c_handler_tests)
-    add_test(NAME ou_firmware_i2c_handler_tests COMMAND ou_firmware_i2c_handler_tests)
+    ou_add_firmware_app_test(i2c_handler ou_firmware_mocks)
     list(APPEND OU_TEST_BUILD_TARGETS ou_firmware_i2c_handler_tests)
 
     add_custom_target(ou_build_tests DEPENDS ${OU_TEST_BUILD_TARGETS})
