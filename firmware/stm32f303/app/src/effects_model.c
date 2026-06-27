@@ -120,82 +120,60 @@ void effects_state_apply_switches(EffectsState *state, bool switch_a_enabled, bo
     state->is_enabled[state->ordered[2]] = switch_c_enabled;
 }
 
+#define NUM_POTS 4
+
+// Maps a (effect, pot) pair to the EffectsParams field it drives, plus its
+// min/max bounds, by byte offset. Entries with assignable == false are valid
+// pots that intentionally drive nothing (e.g. compression pots 2 and 3).
+typedef struct
+{
+    bool assignable;
+    size_t value_offset;
+    size_t min_offset;
+    size_t max_offset;
+} PotMapping;
+
+#define POT_FIELD(group, group_min, group_max, group_type, field)              \
+    {                                                                          \
+        true, offsetof(EffectsParams, group) + offsetof(group_type, field),    \
+            offsetof(EffectsParams, group_min) + offsetof(group_type, field),  \
+            offsetof(EffectsParams, group_max) + offsetof(group_type, field)   \
+    }
+#define POT_OVERDRIVE(field) POT_FIELD(overdrive, overdrive_min, overdrive_max, OverdriveParam, field)
+#define POT_ECHO(field) POT_FIELD(echo, echo_min, echo_max, EchoParam, field)
+#define POT_COMPRESSION(field) \
+    POT_FIELD(compression, compression_min, compression_max, CompressionParam, field)
+#define POT_UNUSED {false, 0, 0, 0}
+
+static const PotMapping POT_MAP[NUM_EFFECTS][NUM_POTS] = {
+    [OVERDRIVE] = {POT_OVERDRIVE(gain), POT_OVERDRIVE(level), POT_OVERDRIVE(tone),
+                   POT_OVERDRIVE(mix)},
+    [ECHO] = {POT_ECHO(pre_delay), POT_ECHO(density), POT_ECHO(attack), POT_ECHO(decay)},
+    [COMPRESSION] = {POT_COMPRESSION(threshold), POT_COMPRESSION(ratio), POT_UNUSED, POT_UNUSED},
+};
+
+#undef POT_FIELD
+#undef POT_OVERDRIVE
+#undef POT_ECHO
+#undef POT_COMPRESSION
+#undef POT_UNUSED
+
 bool effects_params_apply_pot_sample(EffectsParams *params, Effect active_effect, uint8_t pot_index,
                                      uint32_t adc_value, uint32_t adc_max)
 {
-    if (params == NULL)
+    if (params == NULL || !effect_is_valid(active_effect) || pot_index >= NUM_POTS)
     {
         return false;
     }
 
-    switch (active_effect)
+    const PotMapping *mapping = &POT_MAP[active_effect][pot_index];
+    if (mapping->assignable)
     {
-    case OVERDRIVE:
-        switch (pot_index)
-        {
-        case 0:
-            params->overdrive.gain = map_adc_to_param(adc_value, params->overdrive_min.gain,
-                                                      params->overdrive_max.gain, adc_max);
-            return true;
-        case 1:
-            params->overdrive.level = map_adc_to_param(adc_value, params->overdrive_min.level,
-                                                       params->overdrive_max.level, adc_max);
-            return true;
-        case 2:
-            params->overdrive.tone = map_adc_to_param(adc_value, params->overdrive_min.tone,
-                                                      params->overdrive_max.tone, adc_max);
-            return true;
-        case 3:
-            params->overdrive.mix = map_adc_to_param(adc_value, params->overdrive_min.mix,
-                                                     params->overdrive_max.mix, adc_max);
-            return true;
-        default:
-            return false;
-        }
-
-    case ECHO:
-        switch (pot_index)
-        {
-        case 0:
-            params->echo.pre_delay = map_adc_to_param(adc_value, params->echo_min.pre_delay,
-                                                      params->echo_max.pre_delay, adc_max);
-            return true;
-        case 1:
-            params->echo.density = map_adc_to_param(adc_value, params->echo_min.density,
-                                                    params->echo_max.density, adc_max);
-            return true;
-        case 2:
-            params->echo.attack =
-                map_adc_to_param(adc_value, params->echo_min.attack, params->echo_max.attack, adc_max);
-            return true;
-        case 3:
-            params->echo.decay =
-                map_adc_to_param(adc_value, params->echo_min.decay, params->echo_max.decay, adc_max);
-            return true;
-        default:
-            return false;
-        }
-
-    case COMPRESSION:
-        switch (pot_index)
-        {
-        case 0:
-            params->compression.threshold =
-                map_adc_to_param(adc_value, params->compression_min.threshold,
-                                 params->compression_max.threshold, adc_max);
-            return true;
-        case 1:
-            params->compression.ratio = map_adc_to_param(adc_value, params->compression_min.ratio,
-                                                         params->compression_max.ratio, adc_max);
-            return true;
-        case 2:
-        case 3:
-            return true;
-        default:
-            return false;
-        }
-
-    default:
-        return false;
+        size_t min = *(size_t *)((char *)params + mapping->min_offset);
+        size_t max = *(size_t *)((char *)params + mapping->max_offset);
+        *(size_t *)((char *)params + mapping->value_offset) =
+            map_adc_to_param(adc_value, min, max, adc_max);
     }
+
+    return true;
 }
