@@ -3,6 +3,7 @@
 #include "stm32f3xx_hal.h"
 
 #include <stdbool.h>
+#include <stddef.h>
 
 static const char *fault_type_names[] = {
     [FAULT_TYPE_HARD_FAULT] = "HARD FAULT",
@@ -89,60 +90,50 @@ static void dump_stacked_frame(const uint32_t *frame, bool is_fpu_stacked)
     uart_send_str("\r\n");
 }
 
+typedef struct
+{
+    uint32_t mask;
+    const char *text;
+} FaultReasonBit;
+
+static void dump_reason_bits(uint32_t status, const FaultReasonBit *bits, size_t count)
+{
+    for (size_t i = 0; i < count; i++)
+    {
+        if (status & bits[i].mask)
+        {
+            uart_send_str(bits[i].text);
+        }
+    }
+}
+
 static void dump_usage_fault_reason(uint32_t cfsr)
 {
-    if (cfsr & SCB_CFSR_UNDEFINSTR_Msk)
-    {
-        uart_send_str("  - UNDEFINSTR (undefined instruction)\r\n");
-    }
-    if (cfsr & SCB_CFSR_INVSTATE_Msk)
-    {
-        uart_send_str("  - INVSTATE (invalid state / EPSR)\r\n");
-    }
-    if (cfsr & SCB_CFSR_INVPC_Msk)
-    {
-        uart_send_str("  - INVPC (invalid PC load)\r\n");
-    }
-    if (cfsr & SCB_CFSR_NOCP_Msk)
-    {
-        uart_send_str("  - NOCP (no coprocessor)\r\n");
-    }
-    if (cfsr & SCB_CFSR_UNALIGNED_Msk)
-    {
-        uart_send_str("  - UNALIGNED (unaligned access)\r\n");
-    }
-    if (cfsr & SCB_CFSR_DIVBYZERO_Msk)
-    {
-        uart_send_str("  - DIVBYZERO (divide by zero)\r\n");
-    }
+    static const FaultReasonBit bits[] = {
+        {SCB_CFSR_UNDEFINSTR_Msk, "  - UNDEFINSTR (undefined instruction)\r\n"},
+        {SCB_CFSR_INVSTATE_Msk, "  - INVSTATE (invalid state / EPSR)\r\n"},
+        {SCB_CFSR_INVPC_Msk, "  - INVPC (invalid PC load)\r\n"},
+        {SCB_CFSR_NOCP_Msk, "  - NOCP (no coprocessor)\r\n"},
+        {SCB_CFSR_UNALIGNED_Msk, "  - UNALIGNED (unaligned access)\r\n"},
+        {SCB_CFSR_DIVBYZERO_Msk, "  - DIVBYZERO (divide by zero)\r\n"},
+    };
+
+    dump_reason_bits(cfsr, bits, sizeof(bits) / sizeof(bits[0]));
 }
 
 static void dump_bus_fault_reason(uint32_t cfsr)
 {
-    if (cfsr & SCB_CFSR_IBUSERR_Msk)
-    {
-        uart_send_str("  - IBUSERR (instruction bus error)\r\n");
-    }
-    if (cfsr & SCB_CFSR_PRECISERR_Msk)
-    {
-        uart_send_str("  - PRECISERR (precise data bus error)\r\n");
-    }
-    if (cfsr & SCB_CFSR_IMPRECISERR_Msk)
-    {
-        uart_send_str("  - IMPRECISERR (imprecise data bus error)\r\n");
-    }
-    if (cfsr & SCB_CFSR_UNSTKERR_Msk)
-    {
-        uart_send_str("  - UNSTKERR (unstacking error)\r\n");
-    }
-    if (cfsr & SCB_CFSR_STKERR_Msk)
-    {
-        uart_send_str("  - STKERR (stacking error)\r\n");
-    }
-    if (cfsr & SCB_CFSR_LSPERR_Msk)
-    {
-        uart_send_str("  - LSPERR (floating-point lazy state preservation)\r\n");
-    }
+    static const FaultReasonBit bits[] = {
+        {SCB_CFSR_IBUSERR_Msk, "  - IBUSERR (instruction bus error)\r\n"},
+        {SCB_CFSR_PRECISERR_Msk, "  - PRECISERR (precise data bus error)\r\n"},
+        {SCB_CFSR_IMPRECISERR_Msk, "  - IMPRECISERR (imprecise data bus error)\r\n"},
+        {SCB_CFSR_UNSTKERR_Msk, "  - UNSTKERR (unstacking error)\r\n"},
+        {SCB_CFSR_STKERR_Msk, "  - STKERR (stacking error)\r\n"},
+        {SCB_CFSR_LSPERR_Msk, "  - LSPERR (floating-point lazy state preservation)\r\n"},
+    };
+
+    dump_reason_bits(cfsr, bits, sizeof(bits) / sizeof(bits[0]));
+
     if (cfsr & SCB_CFSR_BFARVALID_Msk)
     {
         uart_send_str("  - BFARVALID (BFAR holds valid address)\r\n");
@@ -154,26 +145,16 @@ static void dump_bus_fault_reason(uint32_t cfsr)
 
 static void dump_mem_fault_reason(uint32_t cfsr)
 {
-    if (cfsr & SCB_CFSR_IACCVIOL_Msk)
-    {
-        uart_send_str("  - IACCVIOL (instruction access violation)\r\n");
-    }
-    if (cfsr & SCB_CFSR_DACCVIOL_Msk)
-    {
-        uart_send_str("  - DACCVIOL (data access violation)\r\n");
-    }
-    if (cfsr & SCB_CFSR_MUNSTKERR_Msk)
-    {
-        uart_send_str("  - MUNSTKERR (unstacking error)\r\n");
-    }
-    if (cfsr & SCB_CFSR_MSTKERR_Msk)
-    {
-        uart_send_str("  - MSTKERR (stacking error)\r\n");
-    }
-    if (cfsr & SCB_CFSR_MLSPERR_Msk)
-    {
-        uart_send_str("  - MLSPERR (floating-point lazy state preservation)\r\n");
-    }
+    static const FaultReasonBit bits[] = {
+        {SCB_CFSR_IACCVIOL_Msk, "  - IACCVIOL (instruction access violation)\r\n"},
+        {SCB_CFSR_DACCVIOL_Msk, "  - DACCVIOL (data access violation)\r\n"},
+        {SCB_CFSR_MUNSTKERR_Msk, "  - MUNSTKERR (unstacking error)\r\n"},
+        {SCB_CFSR_MSTKERR_Msk, "  - MSTKERR (stacking error)\r\n"},
+        {SCB_CFSR_MLSPERR_Msk, "  - MLSPERR (floating-point lazy state preservation)\r\n"},
+    };
+
+    dump_reason_bits(cfsr, bits, sizeof(bits) / sizeof(bits[0]));
+
     if (cfsr & SCB_CFSR_MMARVALID_Msk)
     {
         uart_send_str("  - MMARVALID (MMFAR holds valid address)\r\n");
@@ -185,20 +166,18 @@ static void dump_mem_fault_reason(uint32_t cfsr)
 
 static void dump_fault_reasons(uint32_t cfsr, uint32_t hfsr)
 {
+    static const FaultReasonBit hfsr_bits[] = {
+        {SCB_HFSR_FORCED_Msk, "  - FORCED (hard fault escalated from configurable fault)\r\n"},
+        {SCB_HFSR_VECTTBL_Msk, "  - VECTTBL (vector table read error)\r\n"},
+    };
+
     uart_send_str("CFSR: ");
     uart_send_hex32(cfsr);
     uart_send_str("  HFSR: ");
     uart_send_hex32(hfsr);
     uart_send_str("\r\n");
 
-    if (hfsr & SCB_HFSR_FORCED_Msk)
-    {
-        uart_send_str("  - FORCED (hard fault escalated from configurable fault)\r\n");
-    }
-    if (hfsr & SCB_HFSR_VECTTBL_Msk)
-    {
-        uart_send_str("  - VECTTBL (vector table read error)\r\n");
-    }
+    dump_reason_bits(hfsr, hfsr_bits, sizeof(hfsr_bits) / sizeof(hfsr_bits[0]));
 
     if (cfsr & 0xFFFF0000UL)
     {
