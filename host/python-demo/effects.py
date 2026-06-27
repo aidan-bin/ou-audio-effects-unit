@@ -41,9 +41,9 @@ class OverdriveParam(ctypes.Structure):
     def __str__(self):
         return (
             f"level = {self.level}\n"
-            + f"gain = {self.gain}\n"
-            + f"tone = {self.tone}\n"
-            + f"mix = {self.mix}"
+            f"gain = {self.gain}\n"
+            f"tone = {self.tone}\n"
+            f"mix = {self.mix}"
         )
 
 
@@ -59,10 +59,10 @@ class EchoParam(ctypes.Structure):
     def __str__(self):
         return (
             f"delay_samples = {self.delay_samples}\n"
-            + f"pre_delay = {self.pre_delay}\n"
-            + f"density = {self.density}\n"
-            + f"attack = {self.attack}\n"
-            + f"decay = {self.decay}"
+            f"pre_delay = {self.pre_delay}\n"
+            f"density = {self.density}\n"
+            f"attack = {self.attack}\n"
+            f"decay = {self.decay}"
         )
 
 
@@ -73,7 +73,7 @@ class CompressionParam(ctypes.Structure):
     ]
 
     def __str__(self):
-        return f"threshold = {self.threshold}\n" + f"ratio = {self.ratio}"
+        return f"threshold = {self.threshold}\nratio = {self.ratio}"
 
 
 class EffectParams(ctypes.Union):
