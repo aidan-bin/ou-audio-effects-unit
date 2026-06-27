@@ -4,6 +4,7 @@
 #include <string.h>
 
 /* The global device handle (declared in usb_device.c) */
+// NOLINTBEGIN(readability-identifier-naming)
 extern USBD_HandleTypeDef hUsbDeviceFS;
 
 /* ------------------------------------------------------------------ */
@@ -334,6 +335,7 @@ static uint8_t *USBD_CDC_Dual_GetFSCfgDesc(uint16_t *length);
 static uint8_t *USBD_CDC_Dual_GetHSCfgDesc(uint16_t *length);
 static uint8_t *USBD_CDC_Dual_GetOtherSpeedCfgDesc(uint16_t *length);
 static uint8_t *USBD_CDC_Dual_GetDeviceQualifierDesc(uint16_t *length);
+// NOLINTEND(readability-identifier-naming)
 
 /* ------------------------------------------------------------------ */
 /* Class callback struct                                              */
@@ -409,6 +411,7 @@ static uint8_t USBD_CDC_Dual_Init(USBD_HandleTypeDef *pdev,
     (void)cfgidx;
 
     USBD_CDC_Dual_HandleTypeDef *hdual = &usbd_cdc_dual_handle;
+    // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
     memset(hdual, 0, sizeof(*hdual));
     pdev->pClassData = hdual;
 
@@ -539,9 +542,10 @@ static uint8_t USBD_CDC_Dual_Setup(USBD_HandleTypeDef *pdev,
                     if (fops != NULL && fops->Control != NULL)
                     {
                         fops->Control(req->bRequest,
-                                      (uint8_t *)(void *)data_buf,
+                                      (uint8_t *)(void *)data_buf, // NOLINT(bugprone-casting-through-void)
                                       req->wLength);
                     }
+                    // NOLINTNEXTLINE(bugprone-casting-through-void)
                     USBD_CtlSendData(pdev, (uint8_t *)(void *)data_buf,
                                      req->wLength);
                 }
@@ -559,7 +563,7 @@ static uint8_t USBD_CDC_Dual_Setup(USBD_HandleTypeDef *pdev,
                             (uint8_t)req->wLength;
                     }
                     USBD_CtlPrepareRx(pdev,
-                                      (uint8_t *)(void *)data_buf,
+                                      (uint8_t *)(void *)data_buf, // NOLINT(bugprone-casting-through-void)
                                       req->wLength);
                 }
             }
@@ -567,6 +571,7 @@ static uint8_t USBD_CDC_Dual_Setup(USBD_HandleTypeDef *pdev,
             {
                 if (fops != NULL && fops->Control != NULL)
                 {
+                    // NOLINTNEXTLINE(bugprone-casting-through-void)
                     fops->Control(req->bRequest, (uint8_t *)(void *)req,
                                   0U);
                 }
@@ -580,6 +585,7 @@ static uint8_t USBD_CDC_Dual_Setup(USBD_HandleTypeDef *pdev,
         case USB_REQ_GET_STATUS:
             if (pdev->dev_state == USBD_STATE_CONFIGURED)
             {
+                // NOLINTNEXTLINE(bugprone-casting-through-void)
                 USBD_CtlSendData(pdev, (uint8_t *)(void *)&status_info,
                                  2U);
             }
@@ -641,7 +647,7 @@ static uint8_t USBD_CDC_Dual_EP0_RxReady(USBD_HandleTypeDef *pdev)
         hdual->cli_fops->Control != NULL)
     {
         hdual->cli_fops->Control(hdual->cli_cmd_op_code,
-                                 (uint8_t *)(void *)hdual->cli_data,
+                                 (uint8_t *)(void *)hdual->cli_data, // NOLINT(bugprone-casting-through-void)
                                  (uint16_t)hdual->cli_cmd_length);
         hdual->cli_cmd_op_code = 0xFFU;
     }
@@ -651,7 +657,7 @@ static uint8_t USBD_CDC_Dual_EP0_RxReady(USBD_HandleTypeDef *pdev)
     {
         hdual->audio_fops->Control(
             hdual->audio_cmd_op_code,
-            (uint8_t *)(void *)hdual->audio_data,
+            (uint8_t *)(void *)hdual->audio_data, // NOLINT(bugprone-casting-through-void)
             (uint16_t)hdual->audio_cmd_length);
         hdual->audio_cmd_op_code = 0xFFU;
     }
