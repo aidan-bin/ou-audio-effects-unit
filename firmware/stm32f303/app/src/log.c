@@ -10,22 +10,17 @@ static LogOps g_log_ops = {0};
 
 const char *log_level_name(LogLevel level)
 {
-    switch (level)
+    static const char *const names[] = {
+        [LOG_LEVEL_OFF] = "off",   [LOG_LEVEL_ERROR] = "error", [LOG_LEVEL_WARN] = "warn",
+        [LOG_LEVEL_INFO] = "info", [LOG_LEVEL_DEBUG] = "debug", [LOG_LEVEL_TRACE] = "trace",
+    };
+
+    if ((size_t)level >= sizeof(names) / sizeof(names[0]))
     {
-    case LOG_LEVEL_ERROR:
-        return "error";
-    case LOG_LEVEL_WARN:
-        return "warn";
-    case LOG_LEVEL_INFO:
-        return "info";
-    case LOG_LEVEL_DEBUG:
-        return "debug";
-    case LOG_LEVEL_TRACE:
-        return "trace";
-    case LOG_LEVEL_OFF:
-    default:
         return "off";
     }
+
+    return names[level];
 }
 
 void log_configure(const LogOps *ops)
