@@ -12,6 +12,17 @@
 #define TEST_STATUS_LINE_BUF_SIZE 112
 #define INFO_LINE_BUF_SIZE 96
 
+// Bails out of the calling handler with CLI_STATUS_UNSUPPORTED when an optional
+// service callback has not been wired up.
+#define REQUIRE_SERVICE(callback)          \
+    do                                     \
+    {                                      \
+        if ((callback) == NULL)            \
+        {                                  \
+            return CLI_STATUS_UNSUPPORTED; \
+        }                                  \
+    } while (0)
+
 typedef CliStatus (*CliCommandHandler)(char **tokens,
                                        size_t token_count,
                                        const CliServices *services,
@@ -173,10 +184,7 @@ static CliStatus handle_reboot(char **tokens,
     (void)token_count;
     (void)result;
 
-    if (services->system_reboot == NULL)
-    {
-        return CLI_STATUS_UNSUPPORTED;
-    }
+    REQUIRE_SERVICE(services->system_reboot);
 
     write_line(io, "reboot ok\n");
     services->system_reboot(services->context);
@@ -246,10 +254,7 @@ static CliStatus handle_override(char **tokens,
 
     if (strcmp(tokens[1], "clear-all") == 0)
     {
-        if (services->clear_all_overrides == NULL)
-        {
-            return CLI_STATUS_UNSUPPORTED;
-        }
+        REQUIRE_SERVICE(services->clear_all_overrides);
 
         if (!services->clear_all_overrides(services->context))
         {
@@ -289,10 +294,7 @@ static CliStatus handle_override(char **tokens,
 
         if (strcmp(tokens[2], "clear") == 0)
         {
-            if (services->clear_pot_override == NULL)
-            {
-                return CLI_STATUS_UNSUPPORTED;
-            }
+            REQUIRE_SERVICE(services->clear_pot_override);
 
             if (!services->clear_pot_override((uint8_t)index, services->context))
             {
@@ -322,10 +324,7 @@ static CliStatus handle_override(char **tokens,
 
         if (strcmp(tokens[2], "clear") == 0)
         {
-            if (services->clear_switch_override == NULL)
-            {
-                return CLI_STATUS_UNSUPPORTED;
-            }
+            REQUIRE_SERVICE(services->clear_switch_override);
 
             if (!services->clear_switch_override((uint8_t)index, services->context))
             {
@@ -358,10 +357,7 @@ static CliStatus handle_config(char **tokens,
             return CLI_STATUS_INVALID_ARGUMENTS;
         }
 
-        if (services->config_set == NULL)
-        {
-            return CLI_STATUS_UNSUPPORTED;
-        }
+        REQUIRE_SERVICE(services->config_set);
 
         int32_t value = 0;
         if (!cli_parse_i32(tokens[3], &value) ||
@@ -379,10 +375,7 @@ static CliStatus handle_config(char **tokens,
             return CLI_STATUS_INVALID_ARGUMENTS;
         }
 
-        if (services->config_get == NULL)
-        {
-            return CLI_STATUS_UNSUPPORTED;
-        }
+        REQUIRE_SERVICE(services->config_get);
 
         int32_t value = 0;
         if (!services->config_get(tokens[2], &value, services->context))
@@ -414,10 +407,7 @@ static CliStatus handle_rom(char **tokens,
 
     if (strcmp(tokens[1], "save-state") == 0)
     {
-        if (services->rom_save_state == NULL)
-        {
-            return CLI_STATUS_UNSUPPORTED;
-        }
+        REQUIRE_SERVICE(services->rom_save_state);
 
         if (!services->rom_save_state(services->context))
         {
@@ -428,10 +418,7 @@ static CliStatus handle_rom(char **tokens,
 
     if (strcmp(tokens[1], "load-state") == 0)
     {
-        if (services->rom_load_state == NULL)
-        {
-            return CLI_STATUS_UNSUPPORTED;
-        }
+        REQUIRE_SERVICE(services->rom_load_state);
 
         if (!services->rom_load_state(services->context))
         {
@@ -447,10 +434,7 @@ static CliStatus handle_rom(char **tokens,
             return CLI_STATUS_INVALID_ARGUMENTS;
         }
 
-        if (services->rom_read_raw == NULL)
-        {
-            return CLI_STATUS_UNSUPPORTED;
-        }
+        REQUIRE_SERVICE(services->rom_read_raw);
 
         uint32_t address = 0;
         uint32_t length = 0;
@@ -486,10 +470,7 @@ static CliStatus handle_rom(char **tokens,
             return CLI_STATUS_INVALID_ARGUMENTS;
         }
 
-        if (services->rom_write_raw == NULL)
-        {
-            return CLI_STATUS_UNSUPPORTED;
-        }
+        REQUIRE_SERVICE(services->rom_write_raw);
 
         uint32_t address = 0;
         if (!cli_parse_u32(tokens[2], &address))
@@ -526,10 +507,7 @@ static CliStatus handle_log(char **tokens,
     {
         if (token_count == 3 && strcmp(tokens[2], "reset") == 0)
         {
-            if (services->log_reset_stats == NULL)
-            {
-                return CLI_STATUS_UNSUPPORTED;
-            }
+            REQUIRE_SERVICE(services->log_reset_stats);
             if (!services->log_reset_stats(services->context))
             {
                 return CLI_STATUS_SERVICE_ERROR;
@@ -539,10 +517,7 @@ static CliStatus handle_log(char **tokens,
 
         if (token_count == 3 && strcmp(tokens[2], "timing") == 0)
         {
-            if (services->log_get_stats == NULL)
-            {
-                return CLI_STATUS_UNSUPPORTED;
-            }
+            REQUIRE_SERVICE(services->log_get_stats);
 
             CliLogStats stats = {0};
             if (!services->log_get_stats(&stats, services->context))
@@ -580,10 +555,7 @@ static CliStatus handle_log(char **tokens,
             return CLI_STATUS_INVALID_ARGUMENTS;
         }
 
-        if (services->log_get_stats == NULL)
-        {
-            return CLI_STATUS_UNSUPPORTED;
-        }
+        REQUIRE_SERVICE(services->log_get_stats);
 
         CliLogStats stats = {0};
         if (!services->log_get_stats(&stats, services->context))
@@ -610,10 +582,7 @@ static CliStatus handle_log(char **tokens,
 
     if (strcmp(tokens[1], "stream") == 0)
     {
-        if (services->log_set_stream == NULL)
-        {
-            return CLI_STATUS_UNSUPPORTED;
-        }
+        REQUIRE_SERVICE(services->log_set_stream);
 
         size_t idx = 2;
         if (token_count > idx)
@@ -627,10 +596,7 @@ static CliStatus handle_log(char **tokens,
             {
                 return CLI_STATUS_PARSE_ERROR;
             }
-            if (services->log_set_stream_batch == NULL)
-            {
-                return CLI_STATUS_UNSUPPORTED;
-            }
+            REQUIRE_SERVICE(services->log_set_stream_batch);
             if (!services->log_set_stream_batch((uint8_t)batch, services->context))
             {
                 return CLI_STATUS_SERVICE_ERROR;
@@ -662,10 +628,7 @@ static CliStatus handle_log(char **tokens,
 
     if (strcmp(tokens[1], "level") == 0)
     {
-        if (services->log_set_level == NULL)
-        {
-            return CLI_STATUS_UNSUPPORTED;
-        }
+        REQUIRE_SERVICE(services->log_set_level);
 
         uint32_t level = 0;
         if (!cli_parse_u32(tokens[2], &level) || level > UINT8_MAX ||
@@ -678,10 +641,7 @@ static CliStatus handle_log(char **tokens,
 
     if (strcmp(tokens[1], "enable") == 0)
     {
-        if (services->log_set_enabled == NULL)
-        {
-            return CLI_STATUS_UNSUPPORTED;
-        }
+        REQUIRE_SERVICE(services->log_set_enabled);
 
         bool enabled = false;
         if (!cli_parse_bool01(tokens[2], &enabled) ||
@@ -717,10 +677,7 @@ static CliStatus handle_test_mode(char **tokens,
             return CLI_STATUS_INVALID_ARGUMENTS;
         }
 
-        if (get_status == NULL)
-        {
-            return CLI_STATUS_UNSUPPORTED;
-        }
+        REQUIRE_SERVICE(get_status);
 
         CliTestModeStatus status = {0};
         if (!get_status(&status, context))
@@ -744,10 +701,7 @@ static CliStatus handle_test_mode(char **tokens,
 
     if (strcmp(tokens[1], "mode") == 0)
     {
-        if (set_mode == NULL)
-        {
-            return CLI_STATUS_UNSUPPORTED;
-        }
+        REQUIRE_SERVICE(set_mode);
 
         bool enabled = false;
         if (!cli_parse_bool01(tokens[2], &enabled) || !set_mode(enabled, context))
@@ -760,10 +714,7 @@ static CliStatus handle_test_mode(char **tokens,
 
     if (strcmp(tokens[1], "vector") == 0)
     {
-        if (set_vector == NULL)
-        {
-            return CLI_STATUS_UNSUPPORTED;
-        }
+        REQUIRE_SERVICE(set_vector);
 
         uint8_t vector = 0;
         if (!test_vector_id(tokens[2], &vector))
@@ -781,10 +732,7 @@ static CliStatus handle_test_mode(char **tokens,
 
     if (strcmp(tokens[1], "freq") == 0)
     {
-        if (set_freq == NULL)
-        {
-            return CLI_STATUS_UNSUPPORTED;
-        }
+        REQUIRE_SERVICE(set_freq);
 
         uint32_t frequency_hz = 0;
         if (!cli_parse_u32(tokens[2], &frequency_hz) || frequency_hz > UINT16_MAX ||
@@ -798,10 +746,7 @@ static CliStatus handle_test_mode(char **tokens,
 
     if (strcmp(tokens[1], "amp") == 0)
     {
-        if (set_amp == NULL)
-        {
-            return CLI_STATUS_UNSUPPORTED;
-        }
+        REQUIRE_SERVICE(set_amp);
 
         uint32_t amplitude = 0;
         if (!cli_parse_u32(tokens[2], &amplitude) || amplitude > UINT16_MAX ||
@@ -835,10 +780,7 @@ static CliStatus handle_audio(char **tokens,
         {
             return CLI_STATUS_INVALID_ARGUMENTS;
         }
-        if (services->audio_get_status == NULL)
-        {
-            return CLI_STATUS_UNSUPPORTED;
-        }
+        REQUIRE_SERVICE(services->audio_get_status);
         uint8_t source = 0;
         bool output_enabled = false;
         if (!services->audio_get_status(&source, &output_enabled,
@@ -861,10 +803,7 @@ static CliStatus handle_audio(char **tokens,
         {
             return CLI_STATUS_INVALID_ARGUMENTS;
         }
-        if (services->audio_set_input == NULL)
-        {
-            return CLI_STATUS_UNSUPPORTED;
-        }
+        REQUIRE_SERVICE(services->audio_set_input);
         uint8_t source = 0xFFU;
         if (strcmp(tokens[2], "adc") == 0)
         {
@@ -891,10 +830,7 @@ static CliStatus handle_audio(char **tokens,
         {
             return CLI_STATUS_INVALID_ARGUMENTS;
         }
-        if (services->audio_set_output == NULL)
-        {
-            return CLI_STATUS_UNSUPPORTED;
-        }
+        REQUIRE_SERVICE(services->audio_set_output);
         bool enabled = false;
         if (!cli_parse_bool01(tokens[2], &enabled))
         {
@@ -999,10 +935,7 @@ static CliStatus handle_i2c(char **tokens,
 
     if (strcmp(tokens[1], "scan") == 0)
     {
-        if (services->i2c_scan == NULL)
-        {
-            return CLI_STATUS_UNSUPPORTED;
-        }
+        REQUIRE_SERVICE(services->i2c_scan);
 
         uint32_t start_addr = 0x03;
         uint32_t end_addr = 0x77;
@@ -1042,10 +975,7 @@ static CliStatus handle_i2c(char **tokens,
         {
             return CLI_STATUS_INVALID_ARGUMENTS;
         }
-        if (services->i2c_ping == NULL)
-        {
-            return CLI_STATUS_UNSUPPORTED;
-        }
+        REQUIRE_SERVICE(services->i2c_ping);
 
         uint32_t addr = 0;
         if (!parse_u32_max(tokens[2], 0x7F, &addr))
@@ -1067,10 +997,7 @@ static CliStatus handle_i2c(char **tokens,
         {
             return CLI_STATUS_INVALID_ARGUMENTS;
         }
-        if (services->i2c_transfer == NULL)
-        {
-            return CLI_STATUS_UNSUPPORTED;
-        }
+        REQUIRE_SERVICE(services->i2c_transfer);
 
         uint32_t addr = 0, reg = 0;
         if (!parse_u32_max(tokens[2], 0x7F, &addr) || !parse_u32_max(tokens[3], 0xFF, &reg))
@@ -1105,10 +1032,7 @@ static CliStatus handle_i2c(char **tokens,
         {
             return CLI_STATUS_INVALID_ARGUMENTS;
         }
-        if (services->i2c_transfer == NULL)
-        {
-            return CLI_STATUS_UNSUPPORTED;
-        }
+        REQUIRE_SERVICE(services->i2c_transfer);
 
         uint32_t addr = 0, reg = 0;
         if (!parse_u32_max(tokens[2], 0x7F, &addr) || !parse_u32_max(tokens[3], 0xFF, &reg))
@@ -1141,10 +1065,7 @@ static CliStatus handle_i2c(char **tokens,
         {
             return CLI_STATUS_INVALID_ARGUMENTS;
         }
-        if (services->i2c_transfer == NULL)
-        {
-            return CLI_STATUS_UNSUPPORTED;
-        }
+        REQUIRE_SERVICE(services->i2c_transfer);
 
         uint32_t addr = 0;
         if (!parse_u32_max(tokens[2], 0x7F, &addr))
@@ -1174,10 +1095,7 @@ static CliStatus handle_i2c(char **tokens,
         {
             return CLI_STATUS_INVALID_ARGUMENTS;
         }
-        if (services->i2c_transfer == NULL)
-        {
-            return CLI_STATUS_UNSUPPORTED;
-        }
+        REQUIRE_SERVICE(services->i2c_transfer);
 
         uint32_t addr = 0, len = 0;
         if (!parse_u32_max(tokens[2], 0x7F, &addr) ||
@@ -1213,10 +1131,7 @@ static CliStatus handle_info(char **tokens,
         return CLI_STATUS_INVALID_ARGUMENTS;
     }
 
-    if (services->audio_get_info == NULL)
-    {
-        return CLI_STATUS_UNSUPPORTED;
-    }
+    REQUIRE_SERVICE(services->audio_get_info);
 
     CliAudioStatus status = {0};
     if (!services->audio_get_info(&status, services->context))
