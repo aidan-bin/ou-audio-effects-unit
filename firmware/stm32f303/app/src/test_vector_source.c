@@ -61,6 +61,23 @@ static uint16_t clamp_u16_from_i32(int32_t value)
     return (uint16_t)value;
 }
 
+// Scales a signed sample by amplitude (relative to INT16_MAX) and centers it on
+// the unsigned X_AXIS midpoint, saturating to the uint16_t range.
+static uint16_t scale_sample(int32_t sample, uint16_t amplitude)
+{
+    int32_t scaled = (int32_t)((sample * (int32_t)amplitude) / INT16_MAX);
+    return clamp_u16_from_i32((int32_t)X_AXIS + scaled);
+}
+
+// Q16 phase increment per output sample for a wavetable of lut_len entries
+// played at freq_units cycles/second, never zero so playback always advances.
+static uint32_t phase_step_q16(uint32_t freq_units, uint32_t lut_len, uint32_t sample_rate_hz)
+{
+    uint32_t step = (uint32_t)(((uint64_t)freq_units * (uint64_t)lut_len * Q16_ONE) /
+                               (uint64_t)sample_rate_hz);
+    return step == 0U ? 1U : step;
+}
+
 static void advance_sweep(TestVectorSource *source, size_t count)
 {
     uint32_t sweep_max_hz = source->sample_rate_hz / 2U;
@@ -118,8 +135,7 @@ bool test_vector_source_fill_buffer(TestVectorSource *source, const CliTestModeS
             int16_t sample = 0;
             if (source->stream_pop(&sample, source->stream_context))
             {
-                int32_t scaled = (int32_t)((sample * (int32_t)status->amplitude) / INT16_MAX);
-                buf[i] = clamp_u16_from_i32((int32_t)X_AXIS + scaled);
+                buf[i] = scale_sample(sample, status->amplitude);
             }
             else
             {
@@ -161,8 +177,7 @@ bool test_vector_source_fill_buffer(TestVectorSource *source, const CliTestModeS
 
             if (do_impulse)
             {
-                int32_t scaled = (int32_t)(((int32_t)INT16_MAX * (int32_t)status->amplitude) / INT16_MAX);
-                buf[i] = clamp_u16_from_i32((int32_t)X_AXIS + scaled);
+                buf[i] = scale_sample(INT16_MAX, status->amplitude);
             }
             else
             {
@@ -206,8 +221,7 @@ bool test_vector_source_fill_buffer(TestVectorSource *source, const CliTestModeS
         {
             uint32_t idx = (source->phase_q16 >> 16) % (uint32_t)WAV_LUT_LEN;
             int32_t sample = wav_lut[idx];
-            int32_t scaled = (int32_t)((sample * (int32_t)status->amplitude) / INT16_MAX);
-            buf[i] = clamp_u16_from_i32((int32_t)X_AXIS + scaled);
+            buf[i] = scale_sample(sample, status->amplitude);
             source->phase_q16 += phase_step;
         }
 
@@ -221,13 +235,7 @@ bool test_vector_source_fill_buffer(TestVectorSource *source, const CliTestModeS
 
     uint32_t freq_hz = status->vector == TEST_VECTOR_SWEEP ? source->sweep_freq_hz : (uint32_t)status->frequency_hz;
 
-    uint32_t phase_step =
-        (uint32_t)(((uint64_t)freq_hz * (uint64_t)lut_size * Q16_ONE) /
-                   (uint64_t)source->sample_rate_hz);
-    if (phase_step == 0U)
-    {
-        phase_step = 1U;
-    }
+    uint32_t phase_step = phase_step_q16(freq_hz, (uint32_t)lut_size, source->sample_rate_hz);
 
     for (size_t i = 0; i < count; i++)
     {
@@ -237,8 +245,7 @@ bool test_vector_source_fill_buffer(TestVectorSource *source, const CliTestModeS
         int32_t a = lut[index0];
         int32_t b = lut[index1];
         int32_t sample = a + (int32_t)(((int64_t)(b - a) * (int64_t)frac) >> 16);
-        int32_t scaled = (int32_t)((sample * (int32_t)status->amplitude) / INT16_MAX);
-        buf[i] = clamp_u16_from_i32((int32_t)X_AXIS + scaled);
+        buf[i] = scale_sample(sample, status->amplitude);
         source->phase_q16 += phase_step;
     }
 
