@@ -20,7 +20,6 @@ extern int failures;
         }                                           \
     } while (0)
 
-
 static inline void expect_true(bool condition, const char *label)
 {
     if (!condition)

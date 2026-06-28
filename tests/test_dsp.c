@@ -166,8 +166,6 @@ static void test_overdrive_full_wet_changes_signal(void)
     }
 }
 
-// Each case clamps one out-of-range param back to a reference param; the
-// buffered output must match the reference output bit-for-bit.
 static void test_overdrive_param_clamps(void)
 {
     const struct
@@ -179,19 +177,24 @@ static void test_overdrive_param_clamps(void)
     } cases[] = {
         {{.level = MAX_OVERDRIVE_LEVEL, .gain = Q_ONE, .tone = Q_ONE, .mix = Q_ONE},
          {.level = MAX_OVERDRIVE_LEVEL, .gain = Q_ONE, .tone = Q_ONE, .mix = Q_ONE + 64},
-         900, "overdrive mix>1 clamps"},
+         900,
+         "overdrive mix>1 clamps"},
         {{.level = MAX_OVERDRIVE_LEVEL, .gain = Q_ONE, .tone = Q_ONE, .mix = Q_ONE},
          {.level = MAX_OVERDRIVE_LEVEL, .gain = Q_ONE + 64, .tone = Q_ONE, .mix = Q_ONE},
-         1100, "overdrive gain>1 clamps"},
+         1100,
+         "overdrive gain>1 clamps"},
         {{.level = MAX_OVERDRIVE_LEVEL, .gain = Q_ONE, .tone = Q_ONE, .mix = Q_ONE},
          {.level = MAX_OVERDRIVE_LEVEL, .gain = Q_ONE, .tone = 0, .mix = Q_ONE},
-         1300, "overdrive tone<1 clamps"},
+         1300,
+         "overdrive tone<1 clamps"},
         {{.level = MAX_OVERDRIVE_LEVEL, .gain = Q_ONE, .tone = Q_ONE, .mix = Q_ONE},
          {.level = (size_t)MAX_OVERDRIVE_LEVEL + 1, .gain = Q_ONE, .tone = Q_ONE, .mix = Q_ONE},
-         1300, "overdrive level>max clamps"},
+         1300,
+         "overdrive level>max clamps"},
         {{.level = MAX_OVERDRIVE_LEVEL, .gain = Q_ONE, .tone = MAX_OVERDRIVE_TONE, .mix = Q_ONE},
          {.level = MAX_OVERDRIVE_LEVEL, .gain = Q_ONE, .tone = MAX_OVERDRIVE_TONE + Q_ONE, .mix = Q_ONE},
-         1300, "overdrive tone>max clamps"},
+         1300,
+         "overdrive tone>max clamps"},
     };
 
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++)

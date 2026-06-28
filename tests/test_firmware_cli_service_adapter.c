@@ -56,7 +56,6 @@ static void set_default_effects_params(EffectsParams *params)
     params->compression_max.ratio = 32;
 }
 
-// Initialize default state/params and bind a freshly-zeroed services table.
 static void setup_adapter(CliServiceAdapter *context, EffectsState *state, EffectsParams *params,
                           CliServices *services, const CliServiceAdapterOps *ops)
 {

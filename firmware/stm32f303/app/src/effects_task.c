@@ -22,8 +22,6 @@ static uint32_t compute_ticks_to_wait(const EffectsTaskContext *task_context,
     return frame_ticks > slack_ticks ? frame_ticks - slack_ticks : 0;
 }
 
-// Logs an optional message, emits the panic string if a panic sink is bound, and
-// returns false so callers can `return fail_frame(...)`. Requires ops != NULL.
 static bool fail_frame(const EffectsTaskOps *ops, LogLevel level, const char *log_msg,
                        const char *panic_msg)
 {

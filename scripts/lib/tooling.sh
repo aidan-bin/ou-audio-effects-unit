@@ -25,4 +25,3 @@ find_versioned_tool() {
 
     return 1
 }
-</content>

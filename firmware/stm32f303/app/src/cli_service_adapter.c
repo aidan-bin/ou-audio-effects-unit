@@ -753,7 +753,7 @@ static bool service_test_set_output_mode(bool enabled, void *ctx)
 {
     CliServiceAdapter *context = (CliServiceAdapter *)ctx;
     return context != NULL && test_set_mode(context, &context->test_output, enabled,
-                                           context->ops.test_set_output_mode);
+                                            context->ops.test_set_output_mode);
 }
 
 static bool service_test_set_output_vector(uint8_t vector, void *ctx)

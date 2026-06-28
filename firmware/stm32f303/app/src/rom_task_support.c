@@ -80,8 +80,6 @@ static void set_write_disable(const RomTaskSupportOps *ops, bool disable_writes)
     }
 }
 
-// Queues a write transfer bracketed by enabling then re-disabling EEPROM writes.
-// Writes are always re-disabled (success or failure); the caller frees the payload.
 static bool queue_write_message(const RomTaskSupportConfig *config, const RomTaskSupportOps *ops,
                                 I2CHandlerMessage *message, uint32_t timeout_ticks,
                                 const char *fail_msg)
