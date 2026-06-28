@@ -22,6 +22,22 @@ static uint32_t compute_ticks_to_wait(const EffectsTaskContext *task_context,
     return frame_ticks > slack_ticks ? frame_ticks - slack_ticks : 0;
 }
 
+// Logs an optional message, emits the panic string if a panic sink is bound, and
+// returns false so callers can `return fail_frame(...)`. Requires ops != NULL.
+static bool fail_frame(const EffectsTaskOps *ops, LogLevel level, const char *log_msg,
+                       const char *panic_msg)
+{
+    if (log_msg != NULL)
+    {
+        (void)log_write(level, log_msg);
+    }
+    if (ops->panic_write != NULL)
+    {
+        ops->panic_write(panic_msg, ops->context);
+    }
+    return false;
+}
+
 bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTaskOps *ops)
 {
     if (task_context == NULL || ops == NULL || task_context->pipeline == NULL ||
@@ -59,33 +75,21 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
 
     if (!ops->wait_for_adc_buffer(INFINITE_TIMEOUT_TICKS, &curr_adc_buf, ops->context))
     {
-        (void)log_write(LOG_LEVEL_WARN, "effects task adc wait failed");
-        if (ops->panic_write != NULL)
-        {
-            ops->panic_write("panic: adc wait failed\n", ops->context);
-        }
-        return false;
+        return fail_frame(ops, LOG_LEVEL_WARN, "effects task adc wait failed",
+                          "panic: adc wait failed\n");
     }
 
     if (curr_adc_buf != task_context->adc_buf_a && curr_adc_buf != task_context->adc_buf_b)
     {
-        (void)log_write(LOG_LEVEL_ERROR, "effects task received invalid adc buffer");
-        if (ops->panic_write != NULL)
-        {
-            ops->panic_write("panic: invalid adc buffer\n", ops->context);
-        }
-        return false;
+        return fail_frame(ops, LOG_LEVEL_ERROR, "effects task received invalid adc buffer",
+                          "panic: invalid adc buffer\n");
     }
 
     if (ops->replace_input_for_testing != NULL &&
         !ops->replace_input_for_testing(curr_adc_buf, task_context->sample_buf_len, ops->context))
     {
-        (void)log_write(LOG_LEVEL_WARN, "effects task test input replacement failed");
-        if (ops->panic_write != NULL)
-        {
-            ops->panic_write("panic: test input replacement failed\n", ops->context);
-        }
-        return false;
+        return fail_frame(ops, LOG_LEVEL_WARN, "effects task test input replacement failed",
+                          "panic: test input replacement failed\n");
     }
 
     if (task_context->delay_samples_len > task_context->sample_buf_len)
@@ -94,12 +98,8 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
         if (!ops->dma_copy(&task_context->delay_samples_buf[task_context->sample_buf_len],
                            task_context->delay_samples_buf, shift_count, ticks_to_wait, ops->context))
         {
-            (void)log_write(LOG_LEVEL_ERROR, "effects task delay sample shift failed");
-            if (ops->panic_write != NULL)
-            {
-                ops->panic_write("panic: delay sample shift failed\n", ops->context);
-            }
-            return false;
+            return fail_frame(ops, LOG_LEVEL_ERROR, "effects task delay sample shift failed",
+                              "panic: delay sample shift failed\n");
         }
     }
 
@@ -108,12 +108,8 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
             &task_context->delay_samples_buf[task_context->delay_samples_len - task_context->sample_buf_len],
             task_context->sample_buf_len, ticks_to_wait, ops->context))
     {
-        (void)log_write(LOG_LEVEL_ERROR, "effects task delay sample capture failed");
-        if (ops->panic_write != NULL)
-        {
-            ops->panic_write("panic: delay sample capture failed\n", ops->context);
-        }
-        return false;
+        return fail_frame(ops, LOG_LEVEL_ERROR, "effects task delay sample capture failed",
+                          "panic: delay sample capture failed\n");
     }
 
     if (!ops->wait_for_dac_buffer(ticks_to_wait, &curr_dac_buf, ops->context))
@@ -128,22 +124,14 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
         }
         else
         {
-            if (ops->panic_write != NULL)
-            {
-                ops->panic_write("panic: dac wait failed\n", ops->context);
-            }
-            return false;
+            return fail_frame(ops, LOG_LEVEL_ERROR, NULL, "panic: dac wait failed\n");
         }
     }
 
     if (curr_dac_buf != task_context->dac_buf_a && curr_dac_buf != task_context->dac_buf_b)
     {
-        (void)log_write(LOG_LEVEL_ERROR, "effects task received invalid dac buffer");
-        if (ops->panic_write != NULL)
-        {
-            ops->panic_write("panic: invalid dac buffer\n", ops->context);
-        }
-        return false;
+        return fail_frame(ops, LOG_LEVEL_ERROR, "effects task received invalid dac buffer",
+                          "panic: invalid dac buffer\n");
     }
 
     if (!ops->read_latched_state(&latched_effects_state, &latched_effects_params, ops->context))
@@ -245,18 +233,9 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
             }
         }
 
-        if (effect == ECHO)
-        {
-            if (effects_pipeline_process(task_context->pipeline, effect, echo_input_buf, output_buf,
-                                         task_context->sample_buf_len) != 0)
-            {
-                (void)log_write(LOG_LEVEL_ERROR, "process_failed: echo pipeline process");
-                process_failed = true;
-                break;
-            }
-        }
-        else if (effects_pipeline_process(task_context->pipeline, effect, input_buf, output_buf,
-                                          task_context->sample_buf_len) != 0)
+        const uint16_t *process_input = (effect == ECHO) ? echo_input_buf : input_buf;
+        if (effects_pipeline_process(task_context->pipeline, effect, process_input, output_buf,
+                                     task_context->sample_buf_len) != 0)
         {
             (void)log_write(LOG_LEVEL_ERROR, "process_failed: effect pipeline process");
             process_failed = true;
