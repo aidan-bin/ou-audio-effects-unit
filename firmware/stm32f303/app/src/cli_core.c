@@ -451,15 +451,7 @@ static CliStatus handle_rom(char **tokens,
             return CLI_STATUS_SERVICE_ERROR;
         }
 
-        char line[(CLI_MAX_ROM_BYTES * 2) + 16];
-        size_t used = (size_t)snprintf(line, sizeof(line), "rom data ");
-        for (size_t i = 0; i < bytes_count && used + 2 < sizeof(line); i++)
-        {
-            used += (size_t)snprintf(&line[used], sizeof(line) - used, "%02X", bytes[i]);
-        }
-        snprintf(&line[used], sizeof(line) - used, "\n");
-        write_line(io, line);
-        return CLI_STATUS_OK;
+        return write_byte_list(io, "rom data ", "%02X", 2, bytes, bytes_count);
     }
 
     if (strcmp(tokens[1], "write") == 0)
