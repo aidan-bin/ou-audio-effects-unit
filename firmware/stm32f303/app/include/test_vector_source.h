@@ -22,7 +22,6 @@ typedef struct
     uint32_t sample_rate_hz;
     uint32_t phase_q16;
     uint32_t sweep_freq_hz;
-    size_t wav_index;
     uint32_t impulse_counter;
     bool impulse_fired;
     bool (*stream_pop)(int16_t *sample, void *context);

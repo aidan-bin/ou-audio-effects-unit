@@ -105,7 +105,6 @@ void test_vector_source_init(TestVectorSource *source, uint32_t sample_rate_hz)
     source->sample_rate_hz = sample_rate_hz == 0U ? TEST_VECTOR_DEFAULT_SAMPLE_RATE_HZ : sample_rate_hz;
     source->phase_q16 = 0U;
     source->sweep_freq_hz = TEST_VECTOR_SWEEP_MIN_HZ;
-    source->wav_index = 0U;
     source->impulse_counter = 0U;
     source->impulse_fired = false;
 }
