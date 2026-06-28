@@ -95,6 +95,14 @@ run_doctor() {
 	check_tool_or_versioned clang-format "Install LLVM clang-format (e.g. brew install llvm)"
 	check_tool_or_versioned clang-tidy "Install LLVM clang-tidy (e.g. brew install llvm)"
 
+	echo "Checking Python formatting and lint dependencies..."
+	if command -v ruff >/dev/null 2>&1 || [[ -x "$REPO_ROOT/.venv/bin/ruff" ]]; then
+		echo "[ok] ruff"
+	else
+		echo "[missing] ruff - Install ruff (e.g. pip install ruff)"
+		missing=1
+	fi
+
 	echo
 	echo "Checking host demo dependencies..."
 	check_tool python3 "Install Python 3"
@@ -126,16 +134,39 @@ ensure_clang_tool() {
 	echo "$tool_bin"
 }
 
+ensure_ruff() {
+	local ruff_bin
+	if command -v ruff >/dev/null 2>&1; then
+		ruff_bin="ruff"
+	elif [[ -x "$REPO_ROOT/.venv/bin/ruff" ]]; then
+		ruff_bin="$REPO_ROOT/.venv/bin/ruff"
+	else
+		echo "ruff not found (install with 'pip install ruff' or ensure .venv/bin/ruff exists)"
+		exit 1
+	fi
+	echo "$ruff_bin"
+}
+
 run_format() {
 	local clang_format_bin
 	clang_format_bin="$(ensure_clang_tool clang-format)"
 	_format_scope "$clang_format_bin" -i
+
+	local ruff_bin
+	ruff_bin="$(ensure_ruff)"
+	echo "Formatting Python files..."
+	"$ruff_bin" format "$REPO_ROOT"
 }
 
 run_format_check() {
 	local clang_format_bin
 	clang_format_bin="$(ensure_clang_tool clang-format)"
 	_format_scope "$clang_format_bin" --dry-run --Werror
+
+	local ruff_bin
+	ruff_bin="$(ensure_ruff)"
+	echo "Checking Python formatting..."
+	"$ruff_bin" format --check "$REPO_ROOT"
 }
 
 _format_scope() {
@@ -168,6 +199,10 @@ run_lint() {
 	local root_compile_db_dir="build"
 	local cubemx_compile_db_dir=""
 	local nucleo_compile_db_dir=""
+
+	local ruff_bin
+	ruff_bin="$(ensure_ruff)"
+	"$ruff_bin" check --quiet "$REPO_ROOT"
 
 	clang_tidy_bin="$(ensure_clang_tool clang-tidy)"
 

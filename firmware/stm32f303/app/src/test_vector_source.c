@@ -70,7 +70,7 @@ static uint16_t scale_sample(int32_t sample, uint16_t amplitude)
 }
 
 // Q16 phase increment per output sample for a wavetable of lut_len entries
-// played at freq_units cycles/second, never zero so playback always advances.
+// played at freq_units cycles/second; never zero so playback always advances.
 static uint32_t phase_step_q16(uint32_t freq_units, uint32_t lut_len, uint32_t sample_rate_hz)
 {
     uint32_t step = (uint32_t)(((uint64_t)freq_units * (uint64_t)lut_len * Q16_ONE) /

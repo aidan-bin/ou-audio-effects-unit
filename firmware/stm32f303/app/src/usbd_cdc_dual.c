@@ -162,8 +162,7 @@ __ALIGN_BEGIN static uint8_t USBD_CDC_Dual_CfgFSDesc[USB_CDC_DUAL_CONFIG_DESC_SI
 };
 
 /* Other-speed descriptor (HS-capable device reporting FS config). Generated on
- * demand from the FS descriptor, which is byte-identical apart from the
- * descriptor-type field, so the two never drift out of sync. */
+ * demand from the FS descriptor. */
 __ALIGN_BEGIN static uint8_t
     USBD_CDC_Dual_OtherSpeedCfgDesc[USB_CDC_DUAL_CONFIG_DESC_SIZ] __ALIGN_END;
 
@@ -636,8 +635,8 @@ static uint8_t *USBD_CDC_Dual_GetHSCfgDesc(uint16_t *length)
 
 static uint8_t *USBD_CDC_Dual_GetOtherSpeedCfgDesc(uint16_t *length)
 {
-    /* Same layout as the FS config descriptor, only the descriptor-type byte
-     * differs, so copy and patch rather than maintaining a second copy. */
+    // Same layout as the FS config descriptor, only the descriptor-type byte differs.
+    // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
     memcpy(USBD_CDC_Dual_OtherSpeedCfgDesc, USBD_CDC_Dual_CfgFSDesc,
            sizeof(USBD_CDC_Dual_OtherSpeedCfgDesc));
     USBD_CDC_Dual_OtherSpeedCfgDesc[1] = USB_DESC_TYPE_OTHER_SPEED_CONFIGURATION;

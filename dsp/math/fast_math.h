@@ -13,7 +13,6 @@
 int16_t q_tanh(int16_t x); // Returns tanh(x in QA) as int16_t QA
 // int16_t q_exp(int16_t x);   // Returns exp(x in QA) as int16_t QA
 
-// Clamp helpers shared by the DSP effect implementations.
 size_t clamp_range(size_t value, size_t min, size_t max); // Clamp to [min, max]
 size_t clamp_qn(size_t value);                            // Clamp to [0, 1.0] in QN
 size_t clamp_min(size_t value, size_t min);               // Clamp to [min, inf)

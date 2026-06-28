@@ -122,9 +122,8 @@ void effects_state_apply_switches(EffectsState *state, bool switch_a_enabled, bo
 
 #define NUM_POTS 4
 
-// Maps a (effect, pot) pair to the EffectsParams field it drives, plus its
-// min/max bounds, by byte offset. Entries with assignable == false are valid
-// pots that intentionally drive nothing (e.g. compression pots 2 and 3).
+// Mapping of each effect's pot parameters to the EffectsParams struct offsets.
+// assignable == false indicates valid pot that drives nothing.
 typedef struct
 {
     bool assignable;
@@ -133,19 +132,18 @@ typedef struct
     size_t max_offset;
 } PotMapping;
 
-#define POT_FIELD(group, group_min, group_max, group_type, field)              \
-    {                                                                          \
-        true, offsetof(EffectsParams, group) + offsetof(group_type, field),    \
-            offsetof(EffectsParams, group_min) + offsetof(group_type, field),  \
-            offsetof(EffectsParams, group_max) + offsetof(group_type, field)   \
-    }
+#define POT_FIELD(group, group_min, group_max, group_type, field)           \
+    {                                                                       \
+        true, offsetof(EffectsParams, group) + offsetof(group_type, field), \
+        offsetof(EffectsParams, group_min) + offsetof(group_type, field),   \
+        offsetof(EffectsParams, group_max) + offsetof(group_type, field)}
 #define POT_OVERDRIVE(field) POT_FIELD(overdrive, overdrive_min, overdrive_max, OverdriveParam, field)
 #define POT_ECHO(field) POT_FIELD(echo, echo_min, echo_max, EchoParam, field)
 #define POT_COMPRESSION(field) \
     POT_FIELD(compression, compression_min, compression_max, CompressionParam, field)
 #define POT_UNUSED {false, 0, 0, 0}
 
-static const PotMapping POT_MAP[NUM_EFFECTS][NUM_POTS] = {
+static const PotMapping pot_map[NUM_EFFECTS][NUM_POTS] = {
     [OVERDRIVE] = {POT_OVERDRIVE(gain), POT_OVERDRIVE(level), POT_OVERDRIVE(tone),
                    POT_OVERDRIVE(mix)},
     [ECHO] = {POT_ECHO(pre_delay), POT_ECHO(density), POT_ECHO(attack), POT_ECHO(decay)},
@@ -166,7 +164,7 @@ bool effects_params_apply_pot_sample(EffectsParams *params, Effect active_effect
         return false;
     }
 
-    const PotMapping *mapping = &POT_MAP[active_effect][pot_index];
+    const PotMapping *mapping = &pot_map[active_effect][pot_index];
     if (mapping->assignable)
     {
         size_t min = *(size_t *)((char *)params + mapping->min_offset);

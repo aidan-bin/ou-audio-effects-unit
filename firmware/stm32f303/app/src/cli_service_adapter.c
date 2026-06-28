@@ -56,12 +56,11 @@ typedef struct
     size_t max_offset;
 } ParamMapping;
 
-#define PARAM_ENTRY(key, group, group_min, group_max, group_type, field)            \
-    {                                                                               \
-        (key), offsetof(EffectsParams, group) + offsetof(group_type, field),        \
-            offsetof(EffectsParams, group_min) + offsetof(group_type, field),       \
-            offsetof(EffectsParams, group_max) + offsetof(group_type, field)        \
-    }
+#define PARAM_ENTRY(key, group, group_min, group_max, group_type, field)     \
+    {                                                                        \
+        (key), offsetof(EffectsParams, group) + offsetof(group_type, field), \
+        offsetof(EffectsParams, group_min) + offsetof(group_type, field),    \
+        offsetof(EffectsParams, group_max) + offsetof(group_type, field)}
 
 #define OVERDRIVE_ENTRY(key, field) \
     PARAM_ENTRY(key, overdrive, overdrive_min, overdrive_max, OverdriveParam, field)
@@ -69,7 +68,7 @@ typedef struct
 #define COMPRESSION_ENTRY(key, field) \
     PARAM_ENTRY(key, compression, compression_min, compression_max, CompressionParam, field)
 
-static const ParamMapping PARAM_MAP[] = {
+static const ParamMapping param_map[] = {
     OVERDRIVE_ENTRY("overdrive.gain", gain),
     OVERDRIVE_ENTRY("overdrive.level", level),
     OVERDRIVE_ENTRY("overdrive.tone", tone),
@@ -95,11 +94,11 @@ static size_t param_value_at(const EffectsParams *params, size_t offset)
 
 static const ParamMapping *find_param_mapping(const char *key)
 {
-    for (size_t i = 0; i < sizeof(PARAM_MAP) / sizeof(PARAM_MAP[0]); i++)
+    for (size_t i = 0; i < sizeof(param_map) / sizeof(param_map[0]); i++)
     {
-        if (strcmp(PARAM_MAP[i].key, key) == 0)
+        if (strcmp(param_map[i].key, key) == 0)
         {
-            return &PARAM_MAP[i];
+            return &param_map[i];
         }
     }
     return NULL;
@@ -152,7 +151,7 @@ static const struct
 {
     const char *key;
     Effect effect;
-} STATE_ENABLE_MAP[] = {
+} state_enable_map[] = {
     {"state.enable.overdrive", OVERDRIVE},
     {"state.enable.echo", ECHO},
     {"state.enable.compression", COMPRESSION},
@@ -175,15 +174,15 @@ static bool set_state_value(EffectsState *state, const char *key, int32_t value)
         return true;
     }
 
-    for (size_t i = 0; i < sizeof(STATE_ENABLE_MAP) / sizeof(STATE_ENABLE_MAP[0]); i++)
+    for (size_t i = 0; i < sizeof(state_enable_map) / sizeof(state_enable_map[0]); i++)
     {
-        if (strcmp(key, STATE_ENABLE_MAP[i].key) == 0)
+        if (strcmp(key, state_enable_map[i].key) == 0)
         {
             if (value < 0 || value > 1)
             {
                 return false;
             }
-            state->is_enabled[STATE_ENABLE_MAP[i].effect] = value == 1;
+            state->is_enabled[state_enable_map[i].effect] = value == 1;
             return true;
         }
     }
@@ -204,11 +203,11 @@ static bool get_state_value(const EffectsState *state, const char *key, int32_t 
         return true;
     }
 
-    for (size_t i = 0; i < sizeof(STATE_ENABLE_MAP) / sizeof(STATE_ENABLE_MAP[0]); i++)
+    for (size_t i = 0; i < sizeof(state_enable_map) / sizeof(state_enable_map[0]); i++)
     {
-        if (strcmp(key, STATE_ENABLE_MAP[i].key) == 0)
+        if (strcmp(key, state_enable_map[i].key) == 0)
         {
-            *value_out = state->is_enabled[STATE_ENABLE_MAP[i].effect] ? 1 : 0;
+            *value_out = state->is_enabled[state_enable_map[i].effect] ? 1 : 0;
             return true;
         }
     }

@@ -151,7 +151,8 @@ def main():
     end_sample = min(start_sample + duration_samples, len(samples))
     samples = samples[start_sample:end_sample]
     print(
-        f"  Extracted: {len(samples)} samples ({args.start:.2f}s - {args.start + args.duration:.2f}s)"
+        f"  Extracted: {len(samples)} samples "
+        f"({args.start:.2f}s - {args.start + args.duration:.2f}s)"
     )
 
     if args.rate != src_rate:

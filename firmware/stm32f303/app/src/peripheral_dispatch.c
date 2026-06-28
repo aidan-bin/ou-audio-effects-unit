@@ -4,15 +4,14 @@
 
 #include "log.h"
 
-// Bails out of the calling ISR hook unless the dispatch context, ops table, and
-// the named ops callback are all present.
-#define REQUIRE_OPS(dispatch, ops, callback)                                       \
-    do                                                                             \
-    {                                                                              \
-        if ((dispatch) == NULL || (ops) == NULL || (ops)->callback == NULL)        \
-        {                                                                          \
-            return;                                                                \
-        }                                                                          \
+// Bail if unsupported ops is requested
+#define REQUIRE_OPS(dispatch, ops, callback)                                \
+    do                                                                      \
+    {                                                                       \
+        if ((dispatch) == NULL || (ops) == NULL || (ops)->callback == NULL) \
+        {                                                                   \
+            return;                                                         \
+        }                                                                   \
     } while (0)
 
 void peripheral_drain_semaphore(void *semaphore_handle, const PeripheralDispatchOps *ops)

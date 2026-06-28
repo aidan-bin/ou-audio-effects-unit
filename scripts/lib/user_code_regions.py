@@ -21,7 +21,8 @@ def parse_ranges(file_path: Path, lines: list[str]) -> list[tuple[int, int]]:
         if begin:
             if open_line:
                 raise ValueError(
-                    f'{file_path}:{i}: nested USER CODE BEGIN before USER CODE END for section "{open_label}"'
+                    f"{file_path}:{i}: nested USER CODE BEGIN before USER CODE END for "
+                    f'section "{open_label}"'
                 )
             open_line = i
             open_label = begin.group(1).strip()
@@ -36,7 +37,8 @@ def parse_ranges(file_path: Path, lines: list[str]) -> list[tuple[int, int]]:
             raise ValueError(f"{file_path}:{i}: USER CODE END without matching USER CODE BEGIN")
         if end_label != open_label:
             raise ValueError(
-                f'{file_path}:{i}: USER CODE marker mismatch: BEGIN "{open_label}" vs END "{end_label}"'
+                f"{file_path}:{i}: USER CODE marker mismatch: "
+                f'BEGIN "{open_label}" vs END "{end_label}"'
             )
 
         start, stop = open_line + 1, i - 1

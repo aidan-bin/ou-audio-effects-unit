@@ -39,12 +39,7 @@ class OverdriveParam(ctypes.Structure):
     ]
 
     def __str__(self):
-        return (
-            f"level = {self.level}\n"
-            f"gain = {self.gain}\n"
-            f"tone = {self.tone}\n"
-            f"mix = {self.mix}"
-        )
+        return f"level = {self.level}\ngain = {self.gain}\ntone = {self.tone}\nmix = {self.mix}"
 
 
 class EchoParam(ctypes.Structure):

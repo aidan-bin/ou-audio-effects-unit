@@ -11,8 +11,12 @@ static LogOps g_log_ops = {0};
 const char *log_level_name(LogLevel level)
 {
     static const char *const names[] = {
-        [LOG_LEVEL_OFF] = "off",   [LOG_LEVEL_ERROR] = "error", [LOG_LEVEL_WARN] = "warn",
-        [LOG_LEVEL_INFO] = "info", [LOG_LEVEL_DEBUG] = "debug", [LOG_LEVEL_TRACE] = "trace",
+        [LOG_LEVEL_OFF] = "off",
+        [LOG_LEVEL_ERROR] = "error",
+        [LOG_LEVEL_WARN] = "warn",
+        [LOG_LEVEL_INFO] = "info",
+        [LOG_LEVEL_DEBUG] = "debug",
+        [LOG_LEVEL_TRACE] = "trace",
     };
 
     if ((size_t)level >= sizeof(names) / sizeof(names[0]))

@@ -12,8 +12,7 @@
 #define TEST_STATUS_LINE_BUF_SIZE 112
 #define INFO_LINE_BUF_SIZE 96
 
-// Bails out of the calling handler with CLI_STATUS_UNSUPPORTED when an optional
-// service callback has not been wired up.
+// Bail if unsupported service is requested
 #define REQUIRE_SERVICE(callback)          \
     do                                     \
     {                                      \
@@ -40,8 +39,6 @@ static bool write_line(const CliIo *io, const char *line)
     return io != NULL && io->write != NULL && io->write(line, io->context);
 }
 
-// Formats "<prefix>" followed by each byte rendered with byte_format, stopping
-// before the line buffer overflows (reserve = worst-case bytes per entry).
 static CliStatus write_byte_list(const CliIo *io, const char *prefix, const char *byte_format,
                                  size_t reserve, const uint8_t *data, size_t count)
 {
@@ -60,24 +57,26 @@ static bool parse_u32_max(const char *token, uint32_t max, uint32_t *out)
     return cli_parse_u32(token, out) && *out <= max;
 }
 
-// Single source of truth for test-vector name <-> id, used by both the status
-// formatter and the "test vector <name>" parser.
 static const struct
 {
     const char *name;
     uint8_t id;
-} TEST_VECTORS[] = {
-    {"sine", 0U},    {"lut", 1U},     {"sweep", 2U},
-    {"wav", 3U},     {"impulse", 4U}, {"usb", 5U},
+} test_vectors[] = {
+    {"sine", 0U},
+    {"lut", 1U},
+    {"sweep", 2U},
+    {"wav", 3U},
+    {"impulse", 4U},
+    {"usb", 5U},
 };
 
 static const char *test_vector_name(uint8_t vector)
 {
-    for (size_t i = 0; i < sizeof(TEST_VECTORS) / sizeof(TEST_VECTORS[0]); i++)
+    for (size_t i = 0; i < sizeof(test_vectors) / sizeof(test_vectors[0]); i++)
     {
-        if (TEST_VECTORS[i].id == vector)
+        if (test_vectors[i].id == vector)
         {
-            return TEST_VECTORS[i].name;
+            return test_vectors[i].name;
         }
     }
     return "sine";
@@ -85,11 +84,11 @@ static const char *test_vector_name(uint8_t vector)
 
 static bool test_vector_id(const char *name, uint8_t *vector_out)
 {
-    for (size_t i = 0; i < sizeof(TEST_VECTORS) / sizeof(TEST_VECTORS[0]); i++)
+    for (size_t i = 0; i < sizeof(test_vectors) / sizeof(test_vectors[0]); i++)
     {
-        if (strcmp(TEST_VECTORS[i].name, name) == 0)
+        if (strcmp(test_vectors[i].name, name) == 0)
         {
-            *vector_out = TEST_VECTORS[i].id;
+            *vector_out = test_vectors[i].id;
             return true;
         }
     }
