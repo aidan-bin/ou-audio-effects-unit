@@ -6,42 +6,11 @@
 #include "effects.h"
 #include "effect_runtime.h"
 #include "fast_math.h"
+#include "harness/expect.h"
 
 #define Q_ONE (1U << FIXED_POINT_Q)
 
-static int failures = 0;
-
-static void expect_eq_u16(uint16_t expected, uint16_t actual, const char *label)
-{
-    if (expected != actual)
-    {
-        fprintf(stderr, "FAIL: %s expected=%u actual=%u\n", label, expected, actual);
-        failures++;
-    }
-}
-
-static void expect_eq_i16(int16_t expected, int16_t actual, const char *label)
-{
-    if (expected != actual)
-    {
-        fprintf(stderr, "FAIL: %s expected=%d actual=%d\n", label, expected, actual);
-        failures++;
-    }
-}
-
-static void expect_eq_u16_array(const uint16_t *expected, const uint16_t *actual, size_t count,
-                                const char *label)
-{
-    for (size_t i = 0; i < count; i++)
-    {
-        if (expected[i] != actual[i])
-        {
-            fprintf(stderr, "FAIL: %s[%zu] expected=%u actual=%u\n", label, i, expected[i],
-                    actual[i]);
-            failures++;
-        }
-    }
-}
+int failures = 0;
 
 static void test_q_tanh_clamps(void)
 {
@@ -1002,20 +971,10 @@ static void test_runtime_overdrive_dispatch_matches_direct(void)
 
     EffectInstance instance;
     effect_instance_init(&instance, EFFECT_TYPE_OVERDRIVE);
-    if (effect_instance_set_overdrive_params(&instance, &param) != 0)
-    {
-        fprintf(stderr, "FAIL: runtime overdrive set params\n");
-        failures++;
-        return;
-    }
+    EXPECT_OK(effect_instance_set_overdrive_params(&instance, &param), "runtime overdrive set params");
 
     uint16_t runtime_output[2] = {0};
-    if (effect_instance_process(&instance, input, runtime_output, 2) != 0)
-    {
-        fprintf(stderr, "FAIL: runtime overdrive process\n");
-        failures++;
-        return;
-    }
+    EXPECT_OK(effect_instance_process(&instance, input, runtime_output, 2), "runtime overdrive process");
 
     expect_eq_u16_array(direct_output, runtime_output, 2, "runtime overdrive dispatch parity");
 }
@@ -1037,20 +996,10 @@ static void test_runtime_compression_dispatch_matches_direct(void)
 
     EffectInstance instance;
     effect_instance_init(&instance, EFFECT_TYPE_COMPRESSION);
-    if (effect_instance_set_compression_params(&instance, &param) != 0)
-    {
-        fprintf(stderr, "FAIL: runtime compression set params\n");
-        failures++;
-        return;
-    }
+    EXPECT_OK(effect_instance_set_compression_params(&instance, &param), "runtime compression set params");
 
     uint16_t runtime_output[2] = {0};
-    if (effect_instance_process(&instance, input, runtime_output, 2) != 0)
-    {
-        fprintf(stderr, "FAIL: runtime compression process\n");
-        failures++;
-        return;
-    }
+    EXPECT_OK(effect_instance_process(&instance, input, runtime_output, 2), "runtime compression process");
 
     expect_eq_u16_array(direct_output, runtime_output, 2, "runtime compression dispatch parity");
 }
@@ -1100,20 +1049,10 @@ static void test_runtime_overdrive_setter_normalizes_params(void)
 
     EffectInstance instance;
     effect_instance_init(&instance, EFFECT_TYPE_OVERDRIVE);
-    if (effect_instance_set_overdrive_params(&instance, &raw_param) != 0)
-    {
-        fprintf(stderr, "FAIL: runtime overdrive normalize set params\n");
-        failures++;
-        return;
-    }
+    EXPECT_OK(effect_instance_set_overdrive_params(&instance, &raw_param), "runtime overdrive normalize set params");
 
     uint16_t runtime_output[2] = {0};
-    if (effect_instance_process(&instance, input, runtime_output, 2) != 0)
-    {
-        fprintf(stderr, "FAIL: runtime overdrive normalize process\n");
-        failures++;
-        return;
-    }
+    EXPECT_OK(effect_instance_process(&instance, input, runtime_output, 2), "runtime overdrive normalize process");
 
     expect_eq_u16_array(direct_output, runtime_output, 2, "runtime overdrive normalize parity");
 }
@@ -1150,20 +1089,10 @@ static void test_runtime_echo_setter_normalizes_params(void)
 
     EffectInstance instance;
     effect_instance_init(&instance, EFFECT_TYPE_ECHO);
-    if (effect_instance_set_echo_params(&instance, &raw_param) != 0)
-    {
-        fprintf(stderr, "FAIL: runtime echo normalize set params\n");
-        failures++;
-        return;
-    }
+    EXPECT_OK(effect_instance_set_echo_params(&instance, &raw_param), "runtime echo normalize set params");
 
     uint16_t runtime_output[4] = {0};
-    if (effect_instance_process(&instance, input_with_delay, runtime_output, 4) != 0)
-    {
-        fprintf(stderr, "FAIL: runtime echo normalize process\n");
-        failures++;
-        return;
-    }
+    EXPECT_OK(effect_instance_process(&instance, input_with_delay, runtime_output, 4), "runtime echo normalize process");
 
     expect_eq_u16_array(direct_output, runtime_output, 4, "runtime echo normalize parity");
 }
@@ -1190,20 +1119,10 @@ static void test_runtime_echo_zero_delay_normalizes_to_copy(void)
 
     EffectInstance instance;
     effect_instance_init(&instance, EFFECT_TYPE_ECHO);
-    if (effect_instance_set_echo_params(&instance, &raw_param) != 0)
-    {
-        fprintf(stderr, "FAIL: runtime zero-delay echo normalize set params\n");
-        failures++;
-        return;
-    }
+    EXPECT_OK(effect_instance_set_echo_params(&instance, &raw_param), "runtime zero-delay echo normalize set params");
 
     uint16_t runtime_output[4] = {0};
-    if (effect_instance_process(&instance, input_with_delay, runtime_output, 4) != 0)
-    {
-        fprintf(stderr, "FAIL: runtime zero-delay echo normalize process\n");
-        failures++;
-        return;
-    }
+    EXPECT_OK(effect_instance_process(&instance, input_with_delay, runtime_output, 4), "runtime zero-delay echo normalize process");
 
     expect_eq_u16_array(direct_output, runtime_output, 4,
                         "runtime zero-delay echo normalize parity");
@@ -1264,20 +1183,10 @@ static void test_runtime_compression_setter_normalizes_params(void)
 
     EffectInstance instance;
     effect_instance_init(&instance, EFFECT_TYPE_COMPRESSION);
-    if (effect_instance_set_compression_params(&instance, &raw_param) != 0)
-    {
-        fprintf(stderr, "FAIL: runtime compression normalize set params\n");
-        failures++;
-        return;
-    }
+    EXPECT_OK(effect_instance_set_compression_params(&instance, &raw_param), "runtime compression normalize set params");
 
     uint16_t runtime_output[2] = {0};
-    if (effect_instance_process(&instance, input, runtime_output, 2) != 0)
-    {
-        fprintf(stderr, "FAIL: runtime compression normalize process\n");
-        failures++;
-        return;
-    }
+    EXPECT_OK(effect_instance_process(&instance, input, runtime_output, 2), "runtime compression normalize process");
 
     expect_eq_u16_array(direct_output, runtime_output, 2, "runtime compression normalize parity");
 }
@@ -1313,27 +1222,12 @@ static void test_handle_overdrive_parity(void)
     buf_overdrive(input, direct_output, 2, &param);
 
     EffectHandle handle = {0};
-    if (effect_handle_init(&handle, EFFECT_TYPE_OVERDRIVE) != 0)
-    {
-        fprintf(stderr, "FAIL: handle overdrive init\n");
-        failures++;
-        return;
-    }
+    EXPECT_OK(effect_handle_init(&handle, EFFECT_TYPE_OVERDRIVE), "handle overdrive init");
 
-    if (effect_handle_set_overdrive_params(&handle, &param) != 0)
-    {
-        fprintf(stderr, "FAIL: handle overdrive set params\n");
-        failures++;
-        return;
-    }
+    EXPECT_OK(effect_handle_set_overdrive_params(&handle, &param), "handle overdrive set params");
 
     uint16_t handle_output[2] = {0};
-    if (effect_handle_process(&handle, input, handle_output, 2) != 0)
-    {
-        fprintf(stderr, "FAIL: handle overdrive process\n");
-        failures++;
-        return;
-    }
+    EXPECT_OK(effect_handle_process(&handle, input, handle_output, 2), "handle overdrive process");
 
     expect_eq_u16_array(direct_output, handle_output, 2, "handle overdrive parity");
 }
@@ -1341,12 +1235,7 @@ static void test_handle_overdrive_parity(void)
 static void test_handle_rejects_wrong_param_setter(void)
 {
     EffectHandle handle = {0};
-    if (effect_handle_init(&handle, EFFECT_TYPE_ECHO) != 0)
-    {
-        fprintf(stderr, "FAIL: handle echo init for wrong setter test\n");
-        failures++;
-        return;
-    }
+    EXPECT_OK(effect_handle_init(&handle, EFFECT_TYPE_ECHO), "handle echo init for wrong setter test");
 
     OverdriveParam overdrive = {
         .level = MAX_OVERDRIVE_LEVEL,
@@ -1368,12 +1257,7 @@ static void test_handle_process_rejects_null_buffers(void)
     uint16_t input[1] = {(uint16_t)X_AXIS};
     uint16_t output[1] = {0};
 
-    if (effect_handle_init(&handle, EFFECT_TYPE_OVERDRIVE) != 0)
-    {
-        fprintf(stderr, "FAIL: handle init for null buffer test\n");
-        failures++;
-        return;
-    }
+    EXPECT_OK(effect_handle_init(&handle, EFFECT_TYPE_OVERDRIVE), "handle init for null buffer test");
 
     if (effect_handle_process(&handle, NULL, output, 1) == 0)
     {
@@ -1410,27 +1294,12 @@ static void test_handle_echo_parity(void)
     buf_echo(input_with_delay, direct_output, 3, &param);
 
     EffectHandle handle = {0};
-    if (effect_handle_init(&handle, EFFECT_TYPE_ECHO) != 0)
-    {
-        fprintf(stderr, "FAIL: handle echo init\n");
-        failures++;
-        return;
-    }
+    EXPECT_OK(effect_handle_init(&handle, EFFECT_TYPE_ECHO), "handle echo init");
 
-    if (effect_handle_set_echo_params(&handle, &param) != 0)
-    {
-        fprintf(stderr, "FAIL: handle echo set params\n");
-        failures++;
-        return;
-    }
+    EXPECT_OK(effect_handle_set_echo_params(&handle, &param), "handle echo set params");
 
     uint16_t handle_output[3] = {0};
-    if (effect_handle_process(&handle, input_with_delay, handle_output, 3) != 0)
-    {
-        fprintf(stderr, "FAIL: handle echo process\n");
-        failures++;
-        return;
-    }
+    EXPECT_OK(effect_handle_process(&handle, input_with_delay, handle_output, 3), "handle echo process");
 
     expect_eq_u16_array(direct_output, handle_output, 3, "handle echo parity");
 }
@@ -1438,12 +1307,7 @@ static void test_handle_echo_parity(void)
 static void test_handle_echo_delay_accessor(void)
 {
     EffectHandle handle = {0};
-    if (effect_handle_init(&handle, EFFECT_TYPE_ECHO) != 0)
-    {
-        fprintf(stderr, "FAIL: handle echo init for delay accessor\n");
-        failures++;
-        return;
-    }
+    EXPECT_OK(effect_handle_init(&handle, EFFECT_TYPE_ECHO), "handle echo init for delay accessor");
 
     EchoParam param = {
         .delay_samples = 2,
@@ -1453,20 +1317,10 @@ static void test_handle_echo_delay_accessor(void)
         .decay = Q_ONE,
     };
 
-    if (effect_handle_set_echo_params(&handle, &param) != 0)
-    {
-        fprintf(stderr, "FAIL: handle echo set params for delay accessor\n");
-        failures++;
-        return;
-    }
+    EXPECT_OK(effect_handle_set_echo_params(&handle, &param), "handle echo set params for delay accessor");
 
     size_t delay_samples = 0;
-    if (effect_handle_get_echo_delay_samples(&handle, &delay_samples) != 0)
-    {
-        fprintf(stderr, "FAIL: handle echo delay accessor returned error\n");
-        failures++;
-        return;
-    }
+    EXPECT_OK(effect_handle_get_echo_delay_samples(&handle, &delay_samples), "handle echo delay accessor returned error");
 
     if (delay_samples != 2)
     {
@@ -1478,12 +1332,7 @@ static void test_handle_echo_delay_accessor(void)
 static void test_handle_echo_delay_accessor_rejects_wrong_type(void)
 {
     EffectHandle handle = {0};
-    if (effect_handle_init(&handle, EFFECT_TYPE_OVERDRIVE) != 0)
-    {
-        fprintf(stderr, "FAIL: handle overdrive init for delay accessor type test\n");
-        failures++;
-        return;
-    }
+    EXPECT_OK(effect_handle_init(&handle, EFFECT_TYPE_OVERDRIVE), "handle overdrive init for delay accessor type test");
 
     size_t delay_samples = 0;
     if (effect_handle_get_echo_delay_samples(&handle, &delay_samples) == 0)
@@ -1496,12 +1345,7 @@ static void test_handle_echo_delay_accessor_rejects_wrong_type(void)
 static void test_handle_echo_delay_accessor_rejects_null_out_ptr(void)
 {
     EffectHandle handle = {0};
-    if (effect_handle_init(&handle, EFFECT_TYPE_ECHO) != 0)
-    {
-        fprintf(stderr, "FAIL: handle echo init for delay null ptr test\n");
-        failures++;
-        return;
-    }
+    EXPECT_OK(effect_handle_init(&handle, EFFECT_TYPE_ECHO), "handle echo init for delay null ptr test");
 
     if (effect_handle_get_echo_delay_samples(&handle, NULL) == 0)
     {
@@ -1540,34 +1384,14 @@ static void test_handle_reset_restores_defaults(void)
     };
 
     EffectHandle handle = {0};
-    if (effect_handle_init(&handle, EFFECT_TYPE_COMPRESSION) != 0)
-    {
-        fprintf(stderr, "FAIL: handle compression init\n");
-        failures++;
-        return;
-    }
+    EXPECT_OK(effect_handle_init(&handle, EFFECT_TYPE_COMPRESSION), "handle compression init");
 
-    if (effect_handle_set_compression_params(&handle, &custom) != 0)
-    {
-        fprintf(stderr, "FAIL: handle compression set custom\n");
-        failures++;
-        return;
-    }
+    EXPECT_OK(effect_handle_set_compression_params(&handle, &custom), "handle compression set custom");
 
-    if (effect_handle_reset(&handle) != 0)
-    {
-        fprintf(stderr, "FAIL: handle compression reset\n");
-        failures++;
-        return;
-    }
+    EXPECT_OK(effect_handle_reset(&handle), "handle compression reset");
 
     uint16_t handle_output[2] = {0};
-    if (effect_handle_process(&handle, input, handle_output, 2) != 0)
-    {
-        fprintf(stderr, "FAIL: handle compression process after reset\n");
-        failures++;
-        return;
-    }
+    EXPECT_OK(effect_handle_process(&handle, input, handle_output, 2), "handle compression process after reset");
 
     uint16_t direct_output[2] = {0};
     buf_compression(input, direct_output, 2, &defaults);

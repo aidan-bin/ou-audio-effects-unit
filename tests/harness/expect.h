@@ -8,6 +8,19 @@
 
 extern int failures;
 
+// For void test functions: fail and return early if expr is non-zero.
+#define EXPECT_OK(expr, label)                      \
+    do                                              \
+    {                                               \
+        if ((expr) != 0)                            \
+        {                                           \
+            fprintf(stderr, "FAIL: %s\n", (label)); \
+            failures++;                             \
+            return;                                 \
+        }                                           \
+    } while (0)
+
+
 static inline void expect_true(bool condition, const char *label)
 {
     if (!condition)
@@ -41,6 +54,29 @@ static inline void expect_eq_u16(uint16_t expected, uint16_t actual, const char 
     {
         fprintf(stderr, "FAIL: %s expected=%u actual=%u\n", label, expected, actual);
         failures++;
+    }
+}
+
+static inline void expect_eq_i16(int16_t expected, int16_t actual, const char *label)
+{
+    if (expected != actual)
+    {
+        fprintf(stderr, "FAIL: %s expected=%d actual=%d\n", label, expected, actual);
+        failures++;
+    }
+}
+
+static inline void expect_eq_u16_array(const uint16_t *expected, const uint16_t *actual,
+                                       size_t count, const char *label)
+{
+    for (size_t i = 0; i < count; i++)
+    {
+        if (expected[i] != actual[i])
+        {
+            fprintf(stderr, "FAIL: %s[%zu] expected=%u actual=%u\n", label, i, expected[i],
+                    actual[i]);
+            failures++;
+        }
     }
 }
 
