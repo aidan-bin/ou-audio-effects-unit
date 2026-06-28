@@ -220,6 +220,36 @@ static EffectsTaskOps make_ops(EffectsTaskTestOpsState *state)
     return ops;
 }
 
+static EffectsTaskContext make_task_context(EffectsPipeline *pipeline, uint16_t *adc_a,
+                                            uint16_t *adc_b, uint16_t *dac_a, uint16_t *dac_b,
+                                            uint16_t *delay_samples, size_t sample_buf_len,
+                                            size_t delay_samples_len)
+{
+    EffectsTaskContext ctx = {
+        .pipeline = pipeline,
+        .effects_state = NULL,
+        .effects_params = NULL,
+        .adc_buf_a = adc_a,
+        .adc_buf_b = adc_b,
+        .dac_buf_a = dac_a,
+        .dac_buf_b = dac_b,
+        .delay_samples_buf = delay_samples,
+        .sample_buf_len = sample_buf_len,
+        .delay_samples_len = delay_samples_len,
+        .sampling_period_us = 25,
+        .processing_slack_ms = 1,
+    };
+    return ctx;
+}
+
+static void set_overdrive_params(EffectsParams *params)
+{
+    params->overdrive.level = 1200;
+    params->overdrive.gain = 0x100;
+    params->overdrive.tone = 0x100;
+    params->overdrive.mix = 0x80;
+}
+
 static void test_effects_task_happy_path_matches_pipeline(void)
 {
     EffectsPipeline pipeline;
@@ -235,20 +265,8 @@ static void test_effects_task_happy_path_matches_pipeline(void)
     uint16_t dac_b[8] = {0};
     uint16_t delay_samples[16] = {0};
 
-    EffectsTaskContext task_context = {
-        .pipeline = &pipeline,
-        .effects_state = NULL,
-        .effects_params = NULL,
-        .adc_buf_a = adc_a,
-        .adc_buf_b = adc_b,
-        .dac_buf_a = dac_a,
-        .dac_buf_b = dac_b,
-        .delay_samples_buf = delay_samples,
-        .sample_buf_len = 8,
-        .delay_samples_len = 16,
-        .sampling_period_us = 25,
-        .processing_slack_ms = 1,
-    };
+    EffectsTaskContext task_context = make_task_context(
+        &pipeline, adc_a, adc_b, dac_a, dac_b, delay_samples, 8, 16);
 
     EffectsTaskTestOpsState ops_state = {0};
     ops_state.wait_for_adc_succeeds = true;
@@ -264,10 +282,7 @@ static void test_effects_task_happy_path_matches_pipeline(void)
     ops_state.latched_state.is_enabled[OVERDRIVE] = true;
 
     memset(&ops_state.latched_params, 0, sizeof(ops_state.latched_params));
-    ops_state.latched_params.overdrive.level = 1200;
-    ops_state.latched_params.overdrive.gain = 0x100;
-    ops_state.latched_params.overdrive.tone = 0x100;
-    ops_state.latched_params.overdrive.mix = 0x80;
+    set_overdrive_params(&ops_state.latched_params);
 
     EffectsTaskOps ops = make_ops(&ops_state);
 
@@ -309,20 +324,8 @@ static void test_effects_task_rejects_stray_adc_notification(void)
     uint16_t echo_delay_samples[8] = {0};
     uint16_t stray[4] = {0};
 
-    EffectsTaskContext task_context = {
-        .pipeline = &pipeline,
-        .effects_state = NULL,
-        .effects_params = NULL,
-        .adc_buf_a = adc_a,
-        .adc_buf_b = adc_b,
-        .dac_buf_a = dac_a,
-        .dac_buf_b = dac_b,
-        .delay_samples_buf = delay_samples,
-        .sample_buf_len = 4,
-        .delay_samples_len = 8,
-        .sampling_period_us = 25,
-        .processing_slack_ms = 1,
-    };
+    EffectsTaskContext task_context = make_task_context(
+        &pipeline, adc_a, adc_b, dac_a, dac_b, delay_samples, 4, 8);
 
     EffectsTaskTestOpsState ops_state = {0};
     ops_state.wait_for_adc_succeeds = true;
@@ -353,20 +356,8 @@ static void test_effects_task_timing_callbacks_fire(void)
     uint16_t dac_b[4] = {0};
     uint16_t delay_samples[8] = {0};
 
-    EffectsTaskContext task_context = {
-        .pipeline = &pipeline,
-        .effects_state = NULL,
-        .effects_params = NULL,
-        .adc_buf_a = adc_a,
-        .adc_buf_b = adc_b,
-        .dac_buf_a = dac_a,
-        .dac_buf_b = dac_b,
-        .delay_samples_buf = delay_samples,
-        .sample_buf_len = 4,
-        .delay_samples_len = 8,
-        .sampling_period_us = 25,
-        .processing_slack_ms = 1,
-    };
+    EffectsTaskContext task_context = make_task_context(
+        &pipeline, adc_a, adc_b, dac_a, dac_b, delay_samples, 4, 8);
 
     EffectsTaskTestOpsState ops_state = {0};
     ops_state.wait_for_adc_succeeds = true;
@@ -380,10 +371,7 @@ static void test_effects_task_timing_callbacks_fire(void)
     memset(ops_state.latched_state.is_enabled, 0, sizeof(ops_state.latched_state.is_enabled));
     ops_state.latched_state.is_enabled[OVERDRIVE] = true;
     memset(&ops_state.latched_params, 0, sizeof(ops_state.latched_params));
-    ops_state.latched_params.overdrive.level = 1200;
-    ops_state.latched_params.overdrive.gain = 0x100;
-    ops_state.latched_params.overdrive.tone = 0x100;
-    ops_state.latched_params.overdrive.mix = 0x80;
+    set_overdrive_params(&ops_state.latched_params);
 
     EffectsTaskOps ops = make_ops(&ops_state);
     ops.on_frame_begin = on_frame_begin;
@@ -409,20 +397,8 @@ static void test_effects_task_output_replacement_overwrites_dac_buffer(void)
     uint16_t dac_b[4] = {0};
     uint16_t delay_samples[8] = {0};
 
-    EffectsTaskContext task_context = {
-        .pipeline = &pipeline,
-        .effects_state = NULL,
-        .effects_params = NULL,
-        .adc_buf_a = adc_a,
-        .adc_buf_b = adc_b,
-        .dac_buf_a = dac_a,
-        .dac_buf_b = dac_b,
-        .delay_samples_buf = delay_samples,
-        .sample_buf_len = 4,
-        .delay_samples_len = 8,
-        .sampling_period_us = 25,
-        .processing_slack_ms = 1,
-    };
+    EffectsTaskContext task_context = make_task_context(
+        &pipeline, adc_a, adc_b, dac_a, dac_b, delay_samples, 4, 8);
 
     EffectsTaskTestOpsState ops_state = {0};
     ops_state.wait_for_adc_succeeds = true;
@@ -462,20 +438,8 @@ static void test_effects_task_reports_failure_when_test_replace_fails(void)
     uint16_t dac_b[4] = {0};
     uint16_t delay_samples[8] = {0};
 
-    EffectsTaskContext task_context = {
-        .pipeline = &pipeline,
-        .effects_state = NULL,
-        .effects_params = NULL,
-        .adc_buf_a = adc_a,
-        .adc_buf_b = adc_b,
-        .dac_buf_a = dac_a,
-        .dac_buf_b = dac_b,
-        .delay_samples_buf = delay_samples,
-        .sample_buf_len = 4,
-        .delay_samples_len = 8,
-        .sampling_period_us = 25,
-        .processing_slack_ms = 1,
-    };
+    EffectsTaskContext task_context = make_task_context(
+        &pipeline, adc_a, adc_b, dac_a, dac_b, delay_samples, 4, 8);
 
     EffectsTaskTestOpsState ops_state = {0};
     ops_state.wait_for_adc_succeeds = true;
@@ -512,20 +476,8 @@ static void test_effects_task_uses_matching_dac_buffer_when_wait_times_out(void)
     uint16_t dac_b[8] = {0};
     uint16_t delay_samples[16] = {0};
 
-    EffectsTaskContext task_context = {
-        .pipeline = &pipeline,
-        .effects_state = NULL,
-        .effects_params = NULL,
-        .adc_buf_a = adc_a,
-        .adc_buf_b = adc_b,
-        .dac_buf_a = dac_a,
-        .dac_buf_b = dac_b,
-        .delay_samples_buf = delay_samples,
-        .sample_buf_len = 8,
-        .delay_samples_len = 16,
-        .sampling_period_us = 25,
-        .processing_slack_ms = 1,
-    };
+    EffectsTaskContext task_context = make_task_context(
+        &pipeline, adc_a, adc_b, dac_a, dac_b, delay_samples, 8, 16);
 
     EffectsTaskTestOpsState ops_state = {0};
     ops_state.wait_for_adc_succeeds = true;
@@ -541,10 +493,7 @@ static void test_effects_task_uses_matching_dac_buffer_when_wait_times_out(void)
     ops_state.latched_state.is_enabled[OVERDRIVE] = true;
 
     memset(&ops_state.latched_params, 0, sizeof(ops_state.latched_params));
-    ops_state.latched_params.overdrive.level = 1200;
-    ops_state.latched_params.overdrive.gain = 0x100;
-    ops_state.latched_params.overdrive.tone = 0x100;
-    ops_state.latched_params.overdrive.mix = 0x80;
+    set_overdrive_params(&ops_state.latched_params);
 
     EffectsTaskOps ops = make_ops(&ops_state);
 
@@ -592,20 +541,8 @@ static void test_effects_task_echo_delay_history_from_buffer(void)
         (uint16_t)(X_AXIS + 800),
     };
 
-    EffectsTaskContext task_context = {
-        .pipeline = &pipeline,
-        .effects_state = NULL,
-        .effects_params = NULL,
-        .adc_buf_a = adc_a,
-        .adc_buf_b = adc_b,
-        .dac_buf_a = dac_a,
-        .dac_buf_b = dac_b,
-        .delay_samples_buf = delay_samples,
-        .sample_buf_len = 4,
-        .delay_samples_len = 8,
-        .sampling_period_us = 25,
-        .processing_slack_ms = 1,
-    };
+    EffectsTaskContext task_context = make_task_context(
+        &pipeline, adc_a, adc_b, dac_a, dac_b, delay_samples, 4, 8);
 
     EffectsTaskTestOpsState ops_state = {0};
     ops_state.wait_for_adc_succeeds = true;
