@@ -408,6 +408,10 @@ static uint8_t USBD_CDC_Dual_Setup(USBD_HandleTypeDef *pdev,
                 (inst == 0) ? hdual->cli_fops : hdual->audio_fops;
             uint32_t *data_buf =
                 (inst == 0) ? hdual->cli_data : hdual->audio_data;
+            uint8_t *cmd_op_code =
+                (inst == 0) ? &hdual->cli_cmd_op_code : &hdual->audio_cmd_op_code;
+            uint8_t *cmd_length =
+                (inst == 0) ? &hdual->cli_cmd_length : &hdual->audio_cmd_length;
 
             if (req->wLength)
             {
@@ -425,17 +429,8 @@ static uint8_t USBD_CDC_Dual_Setup(USBD_HandleTypeDef *pdev,
                 }
                 else
                 {
-                    if (inst == 0)
-                    {
-                        hdual->cli_cmd_op_code = req->bRequest;
-                        hdual->cli_cmd_length = (uint8_t)req->wLength;
-                    }
-                    else
-                    {
-                        hdual->audio_cmd_op_code = req->bRequest;
-                        hdual->audio_cmd_length =
-                            (uint8_t)req->wLength;
-                    }
+                    *cmd_op_code = req->bRequest;
+                    *cmd_length = (uint8_t)req->wLength;
                     USBD_CtlPrepareRx(pdev,
                                       (uint8_t *)(void *)data_buf, // NOLINT(bugprone-casting-through-void)
                                       req->wLength);
@@ -509,6 +504,17 @@ static uint8_t USBD_CDC_Dual_Setup(USBD_HandleTypeDef *pdev,
 /* ------------------------------------------------------------------ */
 /* USBD_CDC_Dual_EP0_RxReady                                          */
 /* ------------------------------------------------------------------ */
+static void dispatch_pending_control(USBD_CDC_ItfTypeDef *fops, uint8_t *op_code,
+                                     uint32_t *data, uint8_t length)
+{
+    if (*op_code != 0xFFU && fops != NULL && fops->Control != NULL)
+    {
+        // NOLINTNEXTLINE(bugprone-casting-through-void)
+        fops->Control(*op_code, (uint8_t *)(void *)data, (uint16_t)length);
+        *op_code = 0xFFU;
+    }
+}
+
 static uint8_t USBD_CDC_Dual_EP0_RxReady(USBD_HandleTypeDef *pdev)
 {
     USBD_CDC_Dual_HandleTypeDef *hdual = get_dual(pdev);
@@ -517,24 +523,10 @@ static uint8_t USBD_CDC_Dual_EP0_RxReady(USBD_HandleTypeDef *pdev)
         return USBD_FAIL;
     }
 
-    if (hdual->cli_cmd_op_code != 0xFFU && hdual->cli_fops != NULL &&
-        hdual->cli_fops->Control != NULL)
-    {
-        hdual->cli_fops->Control(hdual->cli_cmd_op_code,
-                                 (uint8_t *)(void *)hdual->cli_data, // NOLINT(bugprone-casting-through-void)
-                                 (uint16_t)hdual->cli_cmd_length);
-        hdual->cli_cmd_op_code = 0xFFU;
-    }
-
-    if (hdual->audio_cmd_op_code != 0xFFU && hdual->audio_fops != NULL &&
-        hdual->audio_fops->Control != NULL)
-    {
-        hdual->audio_fops->Control(
-            hdual->audio_cmd_op_code,
-            (uint8_t *)(void *)hdual->audio_data, // NOLINT(bugprone-casting-through-void)
-            (uint16_t)hdual->audio_cmd_length);
-        hdual->audio_cmd_op_code = 0xFFU;
-    }
+    dispatch_pending_control(hdual->cli_fops, &hdual->cli_cmd_op_code, hdual->cli_data,
+                             hdual->cli_cmd_length);
+    dispatch_pending_control(hdual->audio_fops, &hdual->audio_cmd_op_code, hdual->audio_data,
+                             hdual->audio_cmd_length);
 
     return USBD_OK;
 }
@@ -690,6 +682,18 @@ static void set_tx_buffer(USBD_CDC_Dual_HandleTypeDef *hdual, int inst,
     }
 }
 
+static void set_rx_buffer(USBD_CDC_Dual_HandleTypeDef *hdual, int inst, uint8_t *pbuff)
+{
+    if (inst == 0)
+    {
+        hdual->cli_rx_buffer = pbuff;
+    }
+    else
+    {
+        hdual->audio_rx_buffer = pbuff;
+    }
+}
+
 static void prepare_receive(USBD_HandleTypeDef *pdev, int inst)
 {
     USBD_CDC_Dual_HandleTypeDef *hdual = get_dual(pdev);
@@ -756,7 +760,7 @@ void USBD_CDC_Dual_SetRxBuffer_CLI(uint8_t *pbuff)
     USBD_CDC_Dual_HandleTypeDef *hdual = get_dual(&hUsbDeviceFS);
     if (hdual != NULL)
     {
-        hdual->cli_rx_buffer = pbuff;
+        set_rx_buffer(hdual, 0, pbuff);
     }
 }
 
@@ -765,8 +769,7 @@ void USBD_CDC_Dual_SetTxBuffer_CLI(uint8_t *pbuff, uint16_t len)
     USBD_CDC_Dual_HandleTypeDef *hdual = get_dual(&hUsbDeviceFS);
     if (hdual != NULL)
     {
-        hdual->cli_tx_buffer = pbuff;
-        hdual->cli_tx_length = len;
+        set_tx_buffer(hdual, 0, pbuff, len);
     }
 }
 
@@ -775,7 +778,7 @@ void USBD_CDC_Dual_SetRxBuffer_Audio(uint8_t *pbuff)
     USBD_CDC_Dual_HandleTypeDef *hdual = get_dual(&hUsbDeviceFS);
     if (hdual != NULL)
     {
-        hdual->audio_rx_buffer = pbuff;
+        set_rx_buffer(hdual, 1, pbuff);
     }
 }
 
@@ -784,8 +787,7 @@ void USBD_CDC_Dual_SetTxBuffer_Audio(uint8_t *pbuff, uint16_t len)
     USBD_CDC_Dual_HandleTypeDef *hdual = get_dual(&hUsbDeviceFS);
     if (hdual != NULL)
     {
-        hdual->audio_tx_buffer = pbuff;
-        hdual->audio_tx_length = len;
+        set_tx_buffer(hdual, 1, pbuff, len);
     }
 }
 
