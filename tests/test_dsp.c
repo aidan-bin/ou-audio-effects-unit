@@ -166,149 +166,48 @@ static void test_overdrive_full_wet_changes_signal(void)
     }
 }
 
-static void test_overdrive_mix_above_one_clamps_to_wet(void)
+// Each case clamps one out-of-range param back to a reference param; the
+// buffered output must match the reference output bit-for-bit.
+static void test_overdrive_param_clamps(void)
 {
-    const uint16_t input[] = {
-        (uint16_t)(X_AXIS - 900),
-        (uint16_t)(X_AXIS + 900),
+    const struct
+    {
+        OverdriveParam ref;
+        OverdriveParam variant;
+        uint16_t delta;
+        const char *label;
+    } cases[] = {
+        {{.level = MAX_OVERDRIVE_LEVEL, .gain = Q_ONE, .tone = Q_ONE, .mix = Q_ONE},
+         {.level = MAX_OVERDRIVE_LEVEL, .gain = Q_ONE, .tone = Q_ONE, .mix = Q_ONE + 64},
+         900, "overdrive mix>1 clamps"},
+        {{.level = MAX_OVERDRIVE_LEVEL, .gain = Q_ONE, .tone = Q_ONE, .mix = Q_ONE},
+         {.level = MAX_OVERDRIVE_LEVEL, .gain = Q_ONE + 64, .tone = Q_ONE, .mix = Q_ONE},
+         1100, "overdrive gain>1 clamps"},
+        {{.level = MAX_OVERDRIVE_LEVEL, .gain = Q_ONE, .tone = Q_ONE, .mix = Q_ONE},
+         {.level = MAX_OVERDRIVE_LEVEL, .gain = Q_ONE, .tone = 0, .mix = Q_ONE},
+         1300, "overdrive tone<1 clamps"},
+        {{.level = MAX_OVERDRIVE_LEVEL, .gain = Q_ONE, .tone = Q_ONE, .mix = Q_ONE},
+         {.level = (size_t)MAX_OVERDRIVE_LEVEL + 1, .gain = Q_ONE, .tone = Q_ONE, .mix = Q_ONE},
+         1300, "overdrive level>max clamps"},
+        {{.level = MAX_OVERDRIVE_LEVEL, .gain = Q_ONE, .tone = MAX_OVERDRIVE_TONE, .mix = Q_ONE},
+         {.level = MAX_OVERDRIVE_LEVEL, .gain = Q_ONE, .tone = MAX_OVERDRIVE_TONE + Q_ONE, .mix = Q_ONE},
+         1300, "overdrive tone>max clamps"},
     };
 
-    uint16_t output_clamped[2] = {0};
-    OverdriveParam clamped_param = {
-        .level = MAX_OVERDRIVE_LEVEL,
-        .gain = Q_ONE,
-        .tone = Q_ONE,
-        .mix = Q_ONE,
-    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++)
+    {
+        const uint16_t input[2] = {
+            (uint16_t)(X_AXIS - cases[i].delta),
+            (uint16_t)(X_AXIS + cases[i].delta),
+        };
+        uint16_t output_ref[2] = {0};
+        uint16_t output_variant[2] = {0};
 
-    uint16_t output_over[2] = {0};
-    OverdriveParam over_param = {
-        .level = MAX_OVERDRIVE_LEVEL,
-        .gain = Q_ONE,
-        .tone = Q_ONE,
-        .mix = Q_ONE + 64,
-    };
+        buf_overdrive(input, output_ref, 2, &cases[i].ref);
+        buf_overdrive(input, output_variant, 2, &cases[i].variant);
 
-    buf_overdrive(input, output_clamped, 2, &clamped_param);
-    buf_overdrive(input, output_over, 2, &over_param);
-
-    expect_eq_u16_array(output_clamped, output_over, 2, "overdrive mix>1 clamps");
-}
-
-static void test_overdrive_gain_above_one_clamps(void)
-{
-    const uint16_t input[] = {
-        (uint16_t)(X_AXIS - 1100),
-        (uint16_t)(X_AXIS + 1100),
-    };
-
-    uint16_t output_ref[2] = {0};
-    OverdriveParam ref_param = {
-        .level = MAX_OVERDRIVE_LEVEL,
-        .gain = Q_ONE,
-        .tone = Q_ONE,
-        .mix = Q_ONE,
-    };
-
-    uint16_t output_over[2] = {0};
-    OverdriveParam over_param = {
-        .level = MAX_OVERDRIVE_LEVEL,
-        .gain = Q_ONE + 64,
-        .tone = Q_ONE,
-        .mix = Q_ONE,
-    };
-
-    buf_overdrive(input, output_ref, 2, &ref_param);
-    buf_overdrive(input, output_over, 2, &over_param);
-
-    expect_eq_u16_array(output_ref, output_over, 2, "overdrive gain>1 clamps");
-}
-
-static void test_overdrive_tone_below_one_clamps(void)
-{
-    const uint16_t input[] = {
-        (uint16_t)(X_AXIS - 1300),
-        (uint16_t)(X_AXIS + 1300),
-    };
-
-    uint16_t output_ref[2] = {0};
-    OverdriveParam ref_param = {
-        .level = MAX_OVERDRIVE_LEVEL,
-        .gain = Q_ONE,
-        .tone = Q_ONE,
-        .mix = Q_ONE,
-    };
-
-    uint16_t output_low_tone[2] = {0};
-    OverdriveParam low_tone_param = {
-        .level = MAX_OVERDRIVE_LEVEL,
-        .gain = Q_ONE,
-        .tone = 0,
-        .mix = Q_ONE,
-    };
-
-    buf_overdrive(input, output_ref, 2, &ref_param);
-    buf_overdrive(input, output_low_tone, 2, &low_tone_param);
-
-    expect_eq_u16_array(output_ref, output_low_tone, 2, "overdrive tone<1 clamps");
-}
-
-static void test_overdrive_level_above_max_clamps(void)
-{
-    const uint16_t input[] = {
-        (uint16_t)(X_AXIS - 1300),
-        (uint16_t)(X_AXIS + 1300),
-    };
-
-    uint16_t output_ref[2] = {0};
-    OverdriveParam ref_param = {
-        .level = MAX_OVERDRIVE_LEVEL,
-        .gain = Q_ONE,
-        .tone = Q_ONE,
-        .mix = Q_ONE,
-    };
-
-    uint16_t output_over_level[2] = {0};
-    OverdriveParam over_level_param = {
-        .level = (size_t)MAX_OVERDRIVE_LEVEL + 1,
-        .gain = Q_ONE,
-        .tone = Q_ONE,
-        .mix = Q_ONE,
-    };
-
-    buf_overdrive(input, output_ref, 2, &ref_param);
-    buf_overdrive(input, output_over_level, 2, &over_level_param);
-
-    expect_eq_u16_array(output_ref, output_over_level, 2, "overdrive level>max clamps");
-}
-
-static void test_overdrive_tone_above_max_clamps(void)
-{
-    const uint16_t input[] = {
-        (uint16_t)(X_AXIS - 1300),
-        (uint16_t)(X_AXIS + 1300),
-    };
-
-    uint16_t output_ref[2] = {0};
-    OverdriveParam ref_param = {
-        .level = MAX_OVERDRIVE_LEVEL,
-        .gain = Q_ONE,
-        .tone = MAX_OVERDRIVE_TONE,
-        .mix = Q_ONE,
-    };
-
-    uint16_t output_over_tone[2] = {0};
-    OverdriveParam over_tone_param = {
-        .level = MAX_OVERDRIVE_LEVEL,
-        .gain = Q_ONE,
-        .tone = MAX_OVERDRIVE_TONE + Q_ONE,
-        .mix = Q_ONE,
-    };
-
-    buf_overdrive(input, output_ref, 2, &ref_param);
-    buf_overdrive(input, output_over_tone, 2, &over_tone_param);
-
-    expect_eq_u16_array(output_ref, output_over_tone, 2, "overdrive tone>max clamps");
+        expect_eq_u16_array(output_ref, output_variant, 2, cases[i].label);
+    }
 }
 
 static void test_overdrive_sign_symmetry(void)
@@ -1408,11 +1307,7 @@ int main(void)
     test_overdrive_dry_passthrough();
     test_overdrive_zero_level_mutes_wet();
     test_overdrive_full_wet_changes_signal();
-    test_overdrive_mix_above_one_clamps_to_wet();
-    test_overdrive_gain_above_one_clamps();
-    test_overdrive_tone_below_one_clamps();
-    test_overdrive_level_above_max_clamps();
-    test_overdrive_tone_above_max_clamps();
+    test_overdrive_param_clamps();
     test_overdrive_sign_symmetry();
     test_overdrive_extreme_inputs_stay_bounded();
     test_compression_ratio_behavior();
