@@ -56,6 +56,17 @@ static void set_default_effects_params(EffectsParams *params)
     params->compression_max.ratio = 32;
 }
 
+// Initialize default state/params and bind a freshly-zeroed services table.
+static void setup_adapter(CliServiceAdapter *context, EffectsState *state, EffectsParams *params,
+                          CliServices *services, const CliServiceAdapterOps *ops)
+{
+    set_default_effects_state(state);
+    set_default_effects_params(params);
+    cli_service_adapter_init(context, state, params, ops, 255);
+    *services = (CliServices){0};
+    cli_service_adapter_bind(context, services);
+}
+
 static bool rom_read_raw(uint16_t address, uint16_t length, uint8_t *payload_out,
                          size_t payload_capacity, size_t *payload_size_out, void *context)
 {
@@ -127,14 +138,9 @@ static void test_pot_override_precedence(void)
 {
     EffectsState state;
     EffectsParams params;
-    set_default_effects_state(&state);
-    set_default_effects_params(&params);
-
     CliServiceAdapter context;
-    cli_service_adapter_init(&context, &state, &params, NULL, 255);
-
-    CliServices services = {0};
-    cli_service_adapter_bind(&context, &services);
+    CliServices services;
+    setup_adapter(&context, &state, &params, &services, NULL);
 
     expect_true(cli_service_adapter_apply_pot_sample(&context, OVERDRIVE, 0, 0),
                 "pot apply without override");
@@ -155,14 +161,9 @@ static void test_switch_override_precedence(void)
 {
     EffectsState state;
     EffectsParams params;
-    set_default_effects_state(&state);
-    set_default_effects_params(&params);
-
     CliServiceAdapter context;
-    cli_service_adapter_init(&context, &state, &params, NULL, 255);
-
-    CliServices services = {0};
-    cli_service_adapter_bind(&context, &services);
+    CliServices services;
+    setup_adapter(&context, &state, &params, &services, NULL);
 
     expect_true(services.set_switch_override(1, true, services.context), "set switch override");
     expect_true(cli_service_adapter_apply_switches(&context, false, false, false),
@@ -266,14 +267,9 @@ static void test_test_input_mode_status_and_validation(void)
 {
     EffectsState state;
     EffectsParams params;
-    set_default_effects_state(&state);
-    set_default_effects_params(&params);
-
     CliServiceAdapter context;
-    cli_service_adapter_init(&context, &state, &params, NULL, 255);
-
-    CliServices services = {0};
-    cli_service_adapter_bind(&context, &services);
+    CliServices services;
+    setup_adapter(&context, &state, &params, &services, NULL);
 
     CliTestModeStatus status = {0};
     expect_true(services.test_get_input_status(&status, services.context),
@@ -306,14 +302,9 @@ static void test_test_output_mode_status_and_validation(void)
 {
     EffectsState state;
     EffectsParams params;
-    set_default_effects_state(&state);
-    set_default_effects_params(&params);
-
     CliServiceAdapter context;
-    cli_service_adapter_init(&context, &state, &params, NULL, 255);
-
-    CliServices services = {0};
-    cli_service_adapter_bind(&context, &services);
+    CliServices services;
+    setup_adapter(&context, &state, &params, &services, NULL);
 
     CliTestModeStatus status = {0};
     expect_true(services.test_get_output_status(&status, services.context),
@@ -346,14 +337,9 @@ static void test_log_stats_counters(void)
 {
     EffectsState state;
     EffectsParams params;
-    set_default_effects_state(&state);
-    set_default_effects_params(&params);
-
     CliServiceAdapter context;
-    cli_service_adapter_init(&context, &state, &params, NULL, 255);
-
-    CliServices services = {0};
-    cli_service_adapter_bind(&context, &services);
+    CliServices services;
+    setup_adapter(&context, &state, &params, &services, NULL);
 
     expect_true(services.log_set_enabled(true, services.context), "enable logging");
     expect_true(services.log_set_level(4, services.context), "set log level");
@@ -532,14 +518,9 @@ static void test_log_stream_line_queue(void)
 {
     EffectsState state;
     EffectsParams params;
-    set_default_effects_state(&state);
-    set_default_effects_params(&params);
-
     CliServiceAdapter context;
-    cli_service_adapter_init(&context, &state, &params, NULL, 255);
-
-    CliServices services = {0};
-    cli_service_adapter_bind(&context, &services);
+    CliServices services;
+    setup_adapter(&context, &state, &params, &services, NULL);
 
     expect_true(services.log_set_stream(true, services.context), "enable stream");
     expect_true(cli_service_adapter_append_log_line(&context, "log event alpha"),
