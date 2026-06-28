@@ -158,7 +158,8 @@ bool i2c_task_hal_is_device_ready(uint16_t address, uint32_t trials, uint32_t ti
     return HAL_I2C_IsDeviceReady(ctx->hi2c, address, trials, timeout_ms) == HAL_OK;
 }
 
-bool i2c_task_hal_start_receive(uint16_t address, uint8_t *payload, uint16_t items, void *context)
+static bool i2c_start_transfer(uint16_t address, uint8_t *payload, uint16_t items, void *context,
+                               bool receive)
 {
     I2CTaskSupportContext *ctx = (I2CTaskSupportContext *)context;
 
@@ -170,23 +171,20 @@ bool i2c_task_hal_start_receive(uint16_t address, uint8_t *payload, uint16_t ite
     drain_semaphore(ctx->i2c_completion_semaphore_handle);
     *(ctx->i2c_transfer_failed) = true;
 
-    return HAL_I2C_Master_Receive_IT(ctx->hi2c, address, payload, items) == HAL_OK;
+    HAL_StatusTypeDef status = receive ? HAL_I2C_Master_Receive_IT(ctx->hi2c, address, payload, items)
+                                       : HAL_I2C_Master_Transmit_IT(ctx->hi2c, address, payload, items);
+    return status == HAL_OK;
+}
+
+bool i2c_task_hal_start_receive(uint16_t address, uint8_t *payload, uint16_t items, void *context)
+{
+    return i2c_start_transfer(address, payload, items, context, true);
 }
 
 bool i2c_task_hal_start_transmit(uint16_t address, uint8_t *payload, uint16_t items,
                                  void *context)
 {
-    I2CTaskSupportContext *ctx = (I2CTaskSupportContext *)context;
-
-    if (ctx == NULL || ctx->hi2c == NULL || ctx->i2c_transfer_failed == NULL)
-    {
-        return false;
-    }
-
-    drain_semaphore(ctx->i2c_completion_semaphore_handle);
-    *(ctx->i2c_transfer_failed) = true;
-
-    return HAL_I2C_Master_Transmit_IT(ctx->hi2c, address, payload, items) == HAL_OK;
+    return i2c_start_transfer(address, payload, items, context, false);
 }
 
 bool i2c_task_wait_for_completion(uint32_t timeout_ms, bool *transfer_failed, void *context)

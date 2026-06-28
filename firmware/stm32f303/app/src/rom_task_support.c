@@ -80,6 +80,22 @@ static void set_write_disable(const RomTaskSupportOps *ops, bool disable_writes)
     }
 }
 
+// Queues a write transfer bracketed by enabling then re-disabling EEPROM writes.
+// Writes are always re-disabled (success or failure); the caller frees the payload.
+static bool queue_write_message(const RomTaskSupportConfig *config, const RomTaskSupportOps *ops,
+                                I2CHandlerMessage *message, uint32_t timeout_ticks,
+                                const char *fail_msg)
+{
+    set_write_disable(ops, false);
+    bool ok = queue_message(config, ops, message, message->p_failed, timeout_ticks);
+    set_write_disable(ops, true);
+    if (!ok)
+    {
+        (void)log_write(LOG_LEVEL_ERROR, fail_msg);
+    }
+    return ok;
+}
+
 bool rom_task_bootstrap_effects(const RomTaskSupportConfig *config, const RomTaskSupportOps *ops,
                                 EffectsState *state, EffectsParams *params)
 {
@@ -118,16 +134,12 @@ bool rom_task_bootstrap_effects(const RomTaskSupportConfig *config, const RomTas
     message.address = config->device_address;
     message.items = (uint16_t)address_payload_size_bytes;
 
-    set_write_disable(ops, false);
-    if (!queue_message(config, ops, &message, message.p_failed, config->bootstrap_timeout_ticks))
+    if (!queue_write_message(config, ops, &message, config->bootstrap_timeout_ticks,
+                             "rom bootstrap read-address transfer failed"))
     {
-        (void)log_write(LOG_LEVEL_ERROR, "rom bootstrap read-address transfer failed");
-        set_write_disable(ops, true);
         free_payload(ops, message.payload);
         return false;
     }
-
-    set_write_disable(ops, true);
 
     message.payload = allocate_payload(ops, payload_size_bytes);
     if (message.payload == NULL)
@@ -202,16 +214,13 @@ bool rom_task_save_effects(const RomTaskSupportConfig *config, const RomTaskSupp
     message.address = config->device_address;
     message.items = (uint16_t)payload_size_bytes;
 
-    set_write_disable(ops, false);
-    if (!queue_message(config, ops, &message, message.p_failed, config->save_timeout_ticks))
+    if (!queue_write_message(config, ops, &message, config->save_timeout_ticks,
+                             "rom save transfer failed"))
     {
-        (void)log_write(LOG_LEVEL_ERROR, "rom save transfer failed");
-        set_write_disable(ops, true);
         free_payload(ops, message.payload);
         return false;
     }
 
-    set_write_disable(ops, true);
     (void)log_write(LOG_LEVEL_INFO, "rom save complete");
     return true;
 }
