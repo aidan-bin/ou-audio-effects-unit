@@ -1,14 +1,22 @@
 #!/usr/bin/env bash
 
+# Versioned suffixes to probe for clang tools, newest first.
+CLANG_TOOL_VERSIONS=(20 19 18 17 16)
+
 tool_candidates_string() {
     local tool="$1"
-    echo "$tool, $tool-20, $tool-19, $tool-18, $tool-17, $tool-16"
+    local candidates="$tool"
+    local version
+    for version in "${CLANG_TOOL_VERSIONS[@]}"; do
+        candidates+=", $tool-$version"
+    done
+    echo "$candidates"
 }
 
 find_versioned_tool() {
     local tool="$1"
 
-    for candidate in "$tool" "$tool"-20 "$tool"-19 "$tool"-18 "$tool"-17 "$tool"-16; do
+    for candidate in "$tool" "${CLANG_TOOL_VERSIONS[@]/#/$tool-}"; do
         if command -v "$candidate" >/dev/null 2>&1; then
             echo "$candidate"
             return 0
@@ -17,3 +25,4 @@ find_versioned_tool() {
 
     return 1
 }
+</content>
