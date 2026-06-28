@@ -54,6 +54,12 @@ typedef struct
     bool reboot_called;
 } CliCoreTestContext;
 
+static void reset_output(CliCoreTestContext *ctx)
+{
+    ctx->output_used = 0;
+    ctx->output[0] = '\0';
+}
+
 static bool test_write(const char *text, void *context)
 {
     CliCoreTestContext *ctx = (CliCoreTestContext *)context;
@@ -423,14 +429,12 @@ static void test_ping_and_help(void)
                   "ping returns ok");
     expect_true(strstr(ctx.output, "pong") != NULL, "ping writes pong");
 
-    ctx.output_used = 0;
-    ctx.output[0] = '\0';
+    reset_output(&ctx);
     expect_eq_u32(CLI_STATUS_OK, cli_core_process_line("help", &services, &io),
                   "help returns ok");
     expect_true(strstr(ctx.output, "commands") != NULL, "help writes command list");
 
-    ctx.output_used = 0;
-    ctx.output[0] = '\0';
+    reset_output(&ctx);
     expect_eq_u32(CLI_STATUS_OK, cli_core_process_line("help config", &services, &io),
                   "help <command> returns ok");
     expect_true(strstr(ctx.output, "config set|get") != NULL, "help command writes usage");
@@ -478,8 +482,7 @@ static void test_rom_and_log_commands(void)
                   "rom read succeeds");
     expect_true(strstr(ctx.output, "AABB") != NULL, "rom bytes formatted in output");
 
-    ctx.output_used = 0;
-    ctx.output[0] = '\0';
+    reset_output(&ctx);
     expect_eq_u32(CLI_STATUS_OK,
                   cli_core_process_line("log stream", &services, &io),
                   "log stream succeeds");
@@ -488,8 +491,7 @@ static void test_rom_and_log_commands(void)
     expect_true(strstr(ctx.output, "log stream active") != NULL,
                 "log stream emits active status");
 
-    ctx.output_used = 0;
-    ctx.output[0] = '\0';
+    reset_output(&ctx);
     ctx.log_level = 3;
     ctx.frame_count = 11;
     ctx.failure_count = 2;
@@ -504,8 +506,7 @@ static void test_rom_and_log_commands(void)
     expect_true(strstr(ctx.output, "frames=11") != NULL, "log stats includes frame count");
     expect_true(strstr(ctx.output, "stream=0") != NULL, "log stats includes stream state");
 
-    ctx.output_used = 0;
-    ctx.output[0] = '\0';
+    reset_output(&ctx);
     expect_eq_u32(CLI_STATUS_OK,
                   cli_core_process_line("log stats timing", &services, &io),
                   "log stats timing succeeds");
@@ -545,8 +546,7 @@ static void test_test_input_mode_commands(void)
                   "test input amp command succeeds");
     expect_eq_u16(4000, ctx.test_input_amplitude, "test input amplitude parsed");
 
-    ctx.output_used = 0;
-    ctx.output[0] = '\0';
+    reset_output(&ctx);
     expect_eq_u32(CLI_STATUS_OK,
                   cli_core_process_line("test input status", &services, &io),
                   "test input status command succeeds");
@@ -585,8 +585,7 @@ static void test_test_output_mode_commands(void)
                   "test output amp command succeeds");
     expect_eq_u16(8000, ctx.test_output_amplitude, "test output amplitude parsed");
 
-    ctx.output_used = 0;
-    ctx.output[0] = '\0';
+    reset_output(&ctx);
     expect_eq_u32(CLI_STATUS_OK,
                   cli_core_process_line("test output status", &services, &io),
                   "test output status command succeeds");
@@ -608,15 +607,13 @@ static void test_log_stream_batch_command(void)
     expect_true(ctx.log_stream_enabled, "log stream enabled with batch");
     expect_eq_u8(5, ctx.stream_batch_size, "batch size 5 parsed");
 
-    ctx.output_used = 0;
-    ctx.output[0] = '\0';
+    reset_output(&ctx);
     expect_eq_u32(CLI_STATUS_OK,
                   cli_core_process_line("log stream batch 1", &services, &io),
                   "log stream batch 1 succeeds");
     expect_eq_u8(1, ctx.stream_batch_size, "batch size 1 parsed");
 
-    ctx.output_used = 0;
-    ctx.output[0] = '\0';
+    reset_output(&ctx);
     expect_eq_u32(CLI_STATUS_PARSE_ERROR,
                   cli_core_process_line("log stream batch 0", &services, &io),
                   "log stream batch 0 rejected as invalid");
@@ -662,28 +659,24 @@ static void test_i2c_commands(void)
     expect_eq_u8(0x50, ctx.i2c_last_address, "i2c ping address captured");
     expect_true(strstr(ctx.output, "i2c ping ok") != NULL, "i2c ping writes ok");
 
-    ctx.output_used = 0;
-    ctx.output[0] = '\0';
+    reset_output(&ctx);
     ctx.fail_service = true;
     expect_eq_u32(CLI_STATUS_SERVICE_ERROR,
                   cli_core_process_line("i2c ping 0x50", &services, &io),
                   "i2c ping fails on service error");
     ctx.fail_service = false;
 
-    ctx.output_used = 0;
-    ctx.output[0] = '\0';
+    reset_output(&ctx);
     expect_eq_u32(CLI_STATUS_INVALID_ARGUMENTS,
                   cli_core_process_line("i2c ping", &services, &io),
                   "i2c ping with no addr returns invalid args");
 
-    ctx.output_used = 0;
-    ctx.output[0] = '\0';
+    reset_output(&ctx);
     expect_eq_u32(CLI_STATUS_PARSE_ERROR,
                   cli_core_process_line("i2c ping xx", &services, &io),
                   "i2c ping with non-numeric addr returns parse error");
 
-    ctx.output_used = 0;
-    ctx.output[0] = '\0';
+    reset_output(&ctx);
     ctx.i2c_transfer_rx_buf[0] = 0xDE;
     ctx.i2c_transfer_rx_buf[1] = 0xAD;
     ctx.i2c_transfer_rx_len = 2;
@@ -693,23 +686,20 @@ static void test_i2c_commands(void)
     expect_true(strstr(ctx.output, "DE") != NULL, "i2c read data DE");
     expect_true(strstr(ctx.output, "AD") != NULL, "i2c read data AD");
 
-    ctx.output_used = 0;
-    ctx.output[0] = '\0';
+    reset_output(&ctx);
     expect_eq_u32(CLI_STATUS_OK,
                   cli_core_process_line("i2c write 0x50 0x00 DEAD", &services, &io),
                   "i2c write succeeds");
     expect_true(ctx.i2c_transfer_tx_len >= 3, "i2c write includes reg + data");
     expect_eq_u8(0x00, ctx.i2c_transfer_tx_buf[0], "i2c write first byte is reg");
 
-    ctx.output_used = 0;
-    ctx.output[0] = '\0';
+    reset_output(&ctx);
     expect_eq_u32(CLI_STATUS_OK,
                   cli_core_process_line("i2c send 0x50 DEADBEEF", &services, &io),
                   "i2c send succeeds");
     expect_eq_u8(0x50, ctx.i2c_last_address, "i2c send address");
 
-    ctx.output_used = 0;
-    ctx.output[0] = '\0';
+    reset_output(&ctx);
     ctx.i2c_transfer_rx_buf[0] = 0xCA;
     ctx.i2c_transfer_rx_buf[1] = 0xFE;
     ctx.i2c_transfer_rx_len = 2;
@@ -719,8 +709,7 @@ static void test_i2c_commands(void)
     expect_true(strstr(ctx.output, "CA") != NULL, "i2c recv data CA");
     expect_true(strstr(ctx.output, "FE") != NULL, "i2c recv data FE");
 
-    ctx.output_used = 0;
-    ctx.output[0] = '\0';
+    reset_output(&ctx);
     ctx.i2c_scanned_addrs[0] = 0x3C;
     ctx.i2c_scanned_addrs[1] = 0x50;
     ctx.i2c_scanned_count = 2;
@@ -730,8 +719,7 @@ static void test_i2c_commands(void)
     expect_true(strstr(ctx.output, "0x3C") != NULL, "i2c scan found 0x3C");
     expect_true(strstr(ctx.output, "0x50") != NULL, "i2c scan found 0x50");
 
-    ctx.output_used = 0;
-    ctx.output[0] = '\0';
+    reset_output(&ctx);
     expect_eq_u32(CLI_STATUS_OK,
                   cli_core_process_line("i2c scan 0x10 0x20", &services, &io),
                   "i2c scan with range succeeds");
@@ -749,14 +737,12 @@ static void test_error_paths(void)
     expect_true(strstr(ctx.output, "err unknown-command") != NULL,
                 "unknown command error output");
 
-    ctx.output_used = 0;
-    ctx.output[0] = '\0';
+    reset_output(&ctx);
     expect_eq_u32(CLI_STATUS_PARSE_ERROR,
                   cli_core_process_line("rom read nope 2", &services, &io),
                   "parse error status");
 
-    ctx.output_used = 0;
-    ctx.output[0] = '\0';
+    reset_output(&ctx);
     ctx.fail_service = true;
     expect_eq_u32(CLI_STATUS_SERVICE_ERROR,
                   cli_core_process_line("rom save-state", &services, &io),
