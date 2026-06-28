@@ -19,18 +19,16 @@ void buf_overdrive(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples
     size_t gain = clamp_qn(param->gain);
     size_t tone = clamp_range(param->tone, MIN_OVERDRIVE_TONE, MAX_OVERDRIVE_TONE);
     size_t mix = clamp_qn(param->mix);
+    size_t dry_amount = (1U << FIXED_POINT_Q) - mix;
 
     for (size_t n = 0; n < num_samples; n++)
     {
         int32_t input = (int32_t)in_buf[n] - X_AXIS;
         int32_t output;
 
-        size_t wet_amount = mix;
-        size_t dry_amount = (1U << FIXED_POINT_Q) - mix;
-
         output =
             (int32_t)level * q_tanh((int16_t)saturate_amplitude((int32_t)tone * input, INT16_MAX));
-        output = (int32_t)gain * ((int32_t)wet_amount * output >> FIXED_POINT_Q) >> FIXED_POINT_Q;
+        output = (int32_t)gain * ((int32_t)mix * output >> FIXED_POINT_Q) >> FIXED_POINT_Q;
         output += (int32_t)dry_amount * input;
 
         out_buf[n] = (int16_t)(output >> FIXED_POINT_Q) + X_AXIS;

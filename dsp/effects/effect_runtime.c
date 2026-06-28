@@ -9,37 +9,31 @@ static CompressionParam normalize_compression_params(const CompressionParam *par
 
 static OverdriveParam default_overdrive_params(void)
 {
-    OverdriveParam param = {
+    return (OverdriveParam){
         .level = MAX_OVERDRIVE_LEVEL,
         .gain = MAX_OVERDRIVE_GAIN,
         .tone = MIN_OVERDRIVE_TONE,
         .mix = 0,
     };
-
-    return param;
 }
 
 static EchoParam default_echo_params(void)
 {
-    EchoParam param = {
+    return (EchoParam){
         .delay_samples = 1,
         .pre_delay = MIN_ECHO_PRE_DELAY,
         .density = MAX_ECHO_DENSITY,
         .attack = MAX_ECHO_ATTACK,
         .decay = MAX_ECHO_DECAY,
     };
-
-    return param;
 }
 
 static CompressionParam default_compression_params(void)
 {
-    CompressionParam param = {
+    return (CompressionParam){
         .threshold = X_AXIS,
         .ratio = 0,
     };
-
-    return param;
 }
 
 void effect_instance_init(EffectInstance *instance, EffectType type)

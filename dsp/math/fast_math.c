@@ -53,10 +53,5 @@ size_t clamp_qn(size_t value)
 
 size_t clamp_min(size_t value, size_t min)
 {
-    if (value < min)
-    {
-        return min;
-    }
-
-    return value;
+    return clamp_range(value, min, SIZE_MAX);
 }
