@@ -85,10 +85,78 @@ static void test_pipeline_process_matches_runtime_helpers(void)
     }
 }
 
+static void test_pipeline_echo_state_attach_and_reset(void)
+{
+    EffectsPipeline pipeline;
+    memset(&pipeline, 0, sizeof(pipeline));
+    expect_true(effects_pipeline_init(&pipeline) == 0, "pipeline init for echo state succeeds");
+
+    uint16_t history[64];
+    uint16_t fb_line[32];
+    EchoState st;
+    st.history = history;
+    st.history_len = sizeof(history) / sizeof(history[0]);
+    st.fb.line = fb_line;
+    st.fb.line_len = sizeof(fb_line) / sizeof(fb_line[0]);
+    st.prev_enabled = 0;
+    echo_state_reset(&st);
+
+    expect_true(effects_pipeline_attach_echo_state(&pipeline, &st) == 0, "attach echo state");
+
+    EffectsParams params;
+    memset(&params, 0, sizeof(params));
+    params.echo.delay_samples = 4;
+    params.echo.pre_delay = 1;
+    params.echo.density = 256;
+    params.echo.attack = 256;
+    params.echo.decay = 0;
+    expect_true(effects_pipeline_sync_params(&pipeline, &params) == 0, "sync echo params");
+
+    EffectsState enabled;
+    effects_state_set_default_order(&enabled);
+    memset(enabled.is_enabled, 0, sizeof(enabled.is_enabled));
+    enabled.is_enabled[ECHO] = true;
+
+    expect_true(effects_pipeline_apply_enabled(&pipeline, &enabled) == 0, "apply enabled (edge)");
+    uint16_t loud[4];
+    uint16_t out[4] = {0};
+    for (size_t i = 0; i < 4; i++)
+    {
+        loud[i] = (uint16_t)(X_AXIS + 800);
+    }
+    expect_true(effects_pipeline_process(&pipeline, ECHO, loud, out, 4) == 0, "process loud frame");
+
+    bool history_has_energy = false;
+    for (size_t i = 0; i < st.history_len; i++)
+    {
+        if (history[i] != (uint16_t)X_AXIS)
+        {
+            history_has_energy = true;
+        }
+    }
+    expect_true(history_has_energy, "echo history captured the input frame");
+
+    EffectsState disabled = enabled;
+    disabled.is_enabled[ECHO] = false;
+    expect_true(effects_pipeline_apply_enabled(&pipeline, &disabled) == 0, "apply disabled");
+    expect_true(effects_pipeline_apply_enabled(&pipeline, &enabled) == 0, "apply re-enabled");
+
+    bool cleared = true;
+    for (size_t i = 0; i < st.history_len; i++)
+    {
+        if (history[i] != (uint16_t)X_AXIS)
+        {
+            cleared = false;
+        }
+    }
+    expect_true(cleared, "re-enable edge clears stale echo history");
+}
+
 int main(void)
 {
     test_pipeline_init_and_sync_params();
     test_pipeline_process_matches_runtime_helpers();
+    test_pipeline_echo_state_attach_and_reset();
 
     if (failures != 0)
     {

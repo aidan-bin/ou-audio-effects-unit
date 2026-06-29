@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #include "effects_pipeline.h"
+#include "effects.h"
 
 typedef struct
 {
@@ -17,13 +18,8 @@ typedef struct
     uint16_t *adc_buf_b;
     uint16_t *dac_buf_a;
     uint16_t *dac_buf_b;
-    uint16_t *delay_samples_buf;
-
-    uint16_t *echo_scratch_buf;
-    size_t echo_scratch_len;
 
     size_t sample_buf_len;
-    size_t delay_samples_len;
 
     uint32_t sampling_period_us;
     uint32_t processing_slack_ms;

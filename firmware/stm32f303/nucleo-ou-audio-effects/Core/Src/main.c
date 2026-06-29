@@ -101,12 +101,22 @@ static volatile EffectsParams effects_params;
 
 static volatile uint16_t adc_buf[ADC_BUF_LEN] = {0};
 static volatile uint16_t dac_buf[DAC_BUF_LEN] = {0};
-static volatile uint16_t delay_samples_buf[NUM_DELAY_SAMPLES] = {0};
-
-/* Scratch for the echo delay-history concatenation, sized to hold the full
- * delay history plus one fresh half-buffer. */
-#define ECHO_SCRATCH_LEN (NUM_DELAY_SAMPLES + SAMPLE_BUF_LEN)
-static uint16_t echo_scratch_buf[ECHO_SCRATCH_LEN] = {0};
+#define ECHO_HISTORY_LEN (NUM_DELAY_SAMPLES + SAMPLE_BUF_LEN)
+static uint16_t echo_history_buf[ECHO_HISTORY_LEN];
+__attribute__((section(".ccmram"))) static uint16_t echo_fb_line[MAX_ECHO_FEEDBACK_DELAY];
+static EchoState echo_state = {
+    .history = echo_history_buf,
+    .history_len = ECHO_HISTORY_LEN,
+    .history_w = 0,
+    .fb =
+        {
+            .line = echo_fb_line,
+            .line_len = MAX_ECHO_FEEDBACK_DELAY,
+            .write_idx = 0,
+            .lpf_state = 0,
+        },
+    .prev_enabled = 0,
+};
 
 static volatile uint16_t *const adc_buf_a = adc_buf;
 static volatile uint16_t *const adc_buf_b = &adc_buf[SAMPLE_BUF_LEN];
@@ -768,12 +778,18 @@ static void init_effects_defaults(void)
     effects_params.echo_min.density = 0;
     effects_params.echo_min.attack = 0;
     effects_params.echo_min.decay = 0;
+    effects_params.echo_min.feedback = 0;
+    effects_params.echo_min.feedback_delay = 0;
+    effects_params.echo_min.damping = 0;
 
     effects_params.echo_max.delay_samples = MAX_ECHO_DELAY_SAMPLES;
     effects_params.echo_max.pre_delay = MAX_ECHO_PRE_DELAY;
     effects_params.echo_max.density = MAX_ECHO_DENSITY;
     effects_params.echo_max.attack = MAX_ECHO_ATTACK;
     effects_params.echo_max.decay = MAX_ECHO_DECAY;
+    effects_params.echo_max.feedback = MAX_ECHO_FEEDBACK;
+    effects_params.echo_max.feedback_delay = MAX_ECHO_FEEDBACK_DELAY;
+    effects_params.echo_max.damping = MAX_ECHO_DAMPING;
 
     effects_params.compression_min.threshold = 0;
     effects_params.compression_min.ratio = 0;
@@ -822,6 +838,9 @@ void startEffectsTask(void const *argument)
         return;
     }
 
+    echo_state_reset(&echo_state);
+    (void)effects_pipeline_attach_echo_state(&effects_pipeline, &echo_state);
+
     const uint32_t sampling_period_us = compute_sampling_period_us();
     EffectsTaskContext task_context = {
         .pipeline = &effects_pipeline,
@@ -831,11 +850,7 @@ void startEffectsTask(void const *argument)
         .adc_buf_b = (uint16_t *)adc_buf_b,
         .dac_buf_a = (uint16_t *)dac_buf_a,
         .dac_buf_b = (uint16_t *)dac_buf_b,
-        .delay_samples_buf = (uint16_t *)delay_samples_buf,
-        .echo_scratch_buf = echo_scratch_buf,
-        .echo_scratch_len = ECHO_SCRATCH_LEN,
         .sample_buf_len = SAMPLE_BUF_LEN,
-        .delay_samples_len = NUM_DELAY_SAMPLES,
         .sampling_period_us = sampling_period_us,
         .processing_slack_ms = 2,
     };
@@ -891,6 +906,7 @@ void startEffectsTask(void const *argument)
         vTaskDelete(NULL);
         return;
     }
+
 
     for (;;)
     {

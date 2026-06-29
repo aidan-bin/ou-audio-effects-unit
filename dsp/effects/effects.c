@@ -35,37 +35,26 @@ void buf_overdrive(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples
     }
 }
 
-/* Buffered echo:
- * - Echo with maximum delay of (MAX_DELAY_SAMPLES / sample rate).
- * - num_samples is the size of out_buf.
- * - in_buf is assumed to have delay_samples of previous samples, plus num_samples of current
- *   samples (those to which to add echo).
- */
-void buf_echo(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples,
-              const EchoParam *param)
+void buf_echo_ring(const uint16_t *ring, size_t ring_len, size_t start_idx, uint16_t *out_buf,
+                   size_t num_samples, const EchoParam *param)
 {
+    if (ring == NULL || out_buf == NULL || param == NULL || ring_len == 0 || num_samples == 0)
+    {
+        return;
+    }
+
     size_t delay_samples = param->delay_samples;
     size_t pre_delay = clamp_min(param->pre_delay, MIN_ECHO_PRE_DELAY);
     size_t density = clamp_qn(param->density);
     size_t attack = clamp_qn(param->attack);
     size_t decay = clamp_qn(param->decay);
 
-    if (delay_samples == 0)
+    for (size_t k = 0; k < num_samples; k++)
     {
-        memcpy(out_buf, in_buf, num_samples * sizeof(uint16_t));
-        return;
+        out_buf[k] = ring[(start_idx + delay_samples + k) % ring_len];
     }
 
-    if (num_samples == 0)
-    {
-        return;
-    }
-
-    const uint16_t *in_buf_curr = &in_buf[delay_samples];
-
-    memcpy(out_buf, in_buf_curr, num_samples * sizeof(uint16_t));
-
-    if (density == 0 || pre_delay > delay_samples)
+    if (delay_samples == 0 || density == 0 || pre_delay > delay_samples)
     {
         return;
     }
@@ -78,7 +67,7 @@ void buf_echo(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples,
 
     for (size_t n = 0; n < delay_samples + num_samples - 1; n++)
     {
-        int32_t dry_input = (int32_t)in_buf[n] - X_AXIS;
+        int32_t dry_input = (int32_t)ring[(start_idx + n) % ring_len] - X_AXIS;
 
         size_t curr_echo_gain = attack;
 
@@ -95,6 +84,88 @@ void buf_echo(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples,
             curr_echo_gain = saturate_min((int32_t)curr_echo_gain - (int32_t)decay, 0);
         }
     }
+}
+
+void buf_echo(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples,
+              const EchoParam *param)
+{
+    if (in_buf == NULL || out_buf == NULL || param == NULL || num_samples == 0)
+    {
+        return;
+    }
+
+    buf_echo_ring(in_buf, param->delay_samples + num_samples, 0, out_buf, num_samples, param);
+}
+
+void buf_echo_feedback(EchoFeedback *fb, const uint16_t *in_buf, uint16_t *out_buf,
+                       size_t num_samples, const EchoParam *param)
+{
+    if (fb == NULL || fb->line == NULL || fb->line_len == 0 || in_buf == NULL ||
+        out_buf == NULL || param == NULL || num_samples == 0)
+    {
+        return;
+    }
+
+    size_t feedback = clamp_range(param->feedback, 0, MAX_ECHO_FEEDBACK);
+    if (feedback == 0)
+    {
+        return;
+    }
+
+    size_t damping = clamp_range(param->damping, 0, MAX_ECHO_DAMPING);
+    size_t fb_delay = clamp_range(param->feedback_delay, 1, fb->line_len);
+    int32_t lpf_coeff = (int32_t)((1U << FIXED_POINT_Q) - damping);
+
+    for (size_t n = 0; n < num_samples; n++)
+    {
+        size_t read_idx = (fb->write_idx + fb->line_len - fb_delay) % fb->line_len;
+        int32_t delayed = (int32_t)fb->line[read_idx] - X_AXIS;
+        int32_t dry = (int32_t)in_buf[n] - X_AXIS;
+
+        int32_t fb_in = dry + (((int32_t)feedback * delayed) >> FIXED_POINT_Q);
+
+        fb->lpf_state += (lpf_coeff * (fb_in - fb->lpf_state)) >> FIXED_POINT_Q;
+        fb->line[fb->write_idx] = saturate_u16(fb->lpf_state + X_AXIS);
+        fb->write_idx = (fb->write_idx + 1U) % fb->line_len;
+
+        out_buf[n] = saturate_u16((int32_t)out_buf[n] + delayed);
+    }
+}
+
+void echo_feedback_reset(EchoFeedback *fb)
+{
+    if (fb == NULL)
+    {
+        return;
+    }
+
+    if (fb->line != NULL)
+    {
+        for (size_t i = 0; i < fb->line_len; i++)
+        {
+            fb->line[i] = (uint16_t)X_AXIS;
+        }
+    }
+    fb->write_idx = 0;
+    fb->lpf_state = 0;
+}
+
+void echo_state_reset(EchoState *state)
+{
+    if (state == NULL)
+    {
+        return;
+    }
+
+    if (state->history != NULL)
+    {
+        for (size_t i = 0; i < state->history_len; i++)
+        {
+            state->history[i] = (uint16_t)X_AXIS;
+        }
+    }
+    state->history_w = 0;
+    echo_feedback_reset(&state->fb);
 }
 
 /* Buffered compression:

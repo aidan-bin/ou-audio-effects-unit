@@ -49,6 +49,12 @@ static void set_default_effects_params(EffectsParams *params)
     params->echo_max.attack = 23;
     params->echo_min.decay = 4;
     params->echo_max.decay = 24;
+    params->echo_min.feedback = 0;
+    params->echo_max.feedback = 200;
+    params->echo_min.feedback_delay = 0;
+    params->echo_max.feedback_delay = 8000;
+    params->echo_min.damping = 0;
+    params->echo_max.damping = 255;
 
     params->compression_min.threshold = 100;
     params->compression_max.threshold = 400;
@@ -199,6 +205,16 @@ static void test_config_bounds_and_state_updates(void)
     expect_true(services.config_get("overdrive.gain", &value, services.context),
                 "read config value");
     expect_eq_u32(50, (uint32_t)value, "config write persisted");
+
+    expect_true(services.config_set("echo.feedback", 180, services.context),
+                "accept in-range echo.feedback write");
+    expect_true(services.config_get("echo.feedback", &value, services.context),
+                "read echo.feedback");
+    expect_eq_u32(180, (uint32_t)value, "echo.feedback persisted");
+    expect_false(services.config_set("echo.feedback", 5000, services.context),
+                 "reject out-of-range echo.feedback");
+    expect_true(services.config_set("echo.damping", 128, services.context),
+                "accept echo.damping write");
 
     expect_true(services.config_set("state.active_effect", 2, services.context),
                 "set active effect");

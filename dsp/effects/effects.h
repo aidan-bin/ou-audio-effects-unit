@@ -43,6 +43,10 @@ typedef struct
                           // of delay samples)
     size_t attack;        // Gain on first echo in QN (subsequent echoes have lower gain)
     size_t decay;         // Amount of gain reduction per subsequent echo in QN (will saturate to 0 gain)
+
+    size_t feedback;
+    size_t feedback_delay;
+    size_t damping;
 } EchoParam;
 
 #define MAX_ECHO_DELAY_SAMPLES 2207 // Note: At 40.54 kHz, 50 ms is 2027 samples
@@ -54,6 +58,27 @@ typedef struct
 #define MAX_ECHO_ATTACK (1U << FIXED_POINT_Q)  // Max gain is 1.0 (equivalent to dry signal)
 #define MAX_ECHO_DECAY \
     (1U << FIXED_POINT_Q) // Max gain reduction is 1.0 (equivalent to a single echo)
+
+#define MAX_ECHO_FEEDBACK ((1U << FIXED_POINT_Q) - ((1U << FIXED_POINT_Q) / 20U))
+#define MAX_ECHO_FEEDBACK_DELAY 8000
+#define MAX_ECHO_DAMPING ((1U << FIXED_POINT_Q) - 1U)
+
+typedef struct
+{
+    uint16_t *line;
+    size_t line_len;
+    size_t write_idx;
+    int32_t lpf_state;
+} EchoFeedback;
+
+typedef struct
+{
+    uint16_t *history;
+    size_t history_len;
+    size_t history_w;
+    EchoFeedback fb;
+    int prev_enabled;
+} EchoState;
 
 typedef struct
 {
@@ -72,6 +97,12 @@ void buf_overdrive(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples
                    const OverdriveParam *param);
 void buf_echo(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples,
               const EchoParam *param);
+void buf_echo_ring(const uint16_t *ring, size_t ring_len, size_t start_idx, uint16_t *out_buf,
+                   size_t num_samples, const EchoParam *param);
+void echo_state_reset(EchoState *state);
+void buf_echo_feedback(EchoFeedback *fb, const uint16_t *in_buf, uint16_t *out_buf,
+                       size_t num_samples, const EchoParam *param);
+void echo_feedback_reset(EchoFeedback *fb);
 void buf_compression(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples,
                      const CompressionParam *param);
 #endif

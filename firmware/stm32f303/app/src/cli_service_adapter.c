@@ -78,6 +78,9 @@ static const ParamMapping param_map[] = {
     ECHO_ENTRY("echo.density", density),
     ECHO_ENTRY("echo.attack", attack),
     ECHO_ENTRY("echo.decay", decay),
+    ECHO_ENTRY("echo.feedback", feedback),
+    ECHO_ENTRY("echo.feedback_delay", feedback_delay),
+    ECHO_ENTRY("echo.damping", damping),
     COMPRESSION_ENTRY("compression.threshold", threshold),
     COMPRESSION_ENTRY("compression.ratio", ratio),
 };

@@ -1301,6 +1301,247 @@ static void test_handle_reset_restores_defaults(void)
     expect_eq_u16_array(direct_output, handle_output, 2, "handle reset default parity");
 }
 
+static void test_echo_feedback_zero_is_noop(void)
+{
+    uint16_t line[8];
+    EchoFeedback fb = {.line = line, .line_len = 8};
+    echo_feedback_reset(&fb);
+
+    const EchoParam param = {.feedback = 0, .feedback_delay = 2, .damping = 0};
+    const uint16_t in[4] = {(uint16_t)(X_AXIS + 100), (uint16_t)(X_AXIS - 50),
+                            (uint16_t)(X_AXIS + 7), (uint16_t)X_AXIS};
+    uint16_t out[4] = {1, 2, 3, 4};
+    const uint16_t expected[4] = {1, 2, 3, 4};
+
+    buf_echo_feedback(&fb, in, out, 4, &param);
+    expect_eq_u16_array(expected, out, 4, "feedback=0 leaves out_buf untouched");
+}
+
+static void test_echo_feedback_decaying_repeats(void)
+{
+    uint16_t line[4];
+    EchoFeedback fb = {.line = line, .line_len = 4};
+    echo_feedback_reset(&fb);
+
+    const EchoParam param = {.feedback = Q_ONE / 2U, .feedback_delay = 2, .damping = 0};
+    uint16_t in[8] = {0};
+    uint16_t out[8];
+    for (size_t i = 0; i < 8; i++)
+    {
+        in[i] = (uint16_t)X_AXIS;
+        out[i] = (uint16_t)X_AXIS;
+    }
+    in[0] = (uint16_t)(X_AXIS + 100);
+
+    buf_echo_feedback(&fb, in, out, 8, &param);
+
+    expect_eq_u16((uint16_t)(X_AXIS + 100), out[2], "first feedback repeat at delay");
+    expect_eq_u16((uint16_t)(X_AXIS + 50), out[4], "second repeat halved");
+    expect_eq_u16((uint16_t)(X_AXIS + 25), out[6], "third repeat quartered");
+    expect_eq_u16((uint16_t)X_AXIS, out[1], "no repeat between taps (n=1)");
+    expect_eq_u16((uint16_t)X_AXIS, out[3], "no repeat between taps (n=3)");
+}
+
+static void test_echo_feedback_clamps_and_decays(void)
+{
+    uint16_t line[16];
+    EchoFeedback fb = {.line = line, .line_len = 16};
+    echo_feedback_reset(&fb);
+
+    const EchoParam param = {
+        .feedback = Q_ONE * 4U, .feedback_delay = 4, .damping = 0};
+
+    uint16_t impulse[8];
+    uint16_t silence[8];
+    uint16_t out[8];
+    for (size_t i = 0; i < 8; i++)
+    {
+        impulse[i] = (uint16_t)X_AXIS;
+        silence[i] = (uint16_t)X_AXIS;
+    }
+    impulse[0] = (uint16_t)(X_AXIS + 5000);
+
+    for (size_t i = 0; i < 8; i++)
+    {
+        out[i] = (uint16_t)X_AXIS;
+    }
+    buf_echo_feedback(&fb, impulse, out, 8, &param);
+
+    int32_t initial_energy = 0;
+    for (size_t i = 0; i < fb.line_len; i++)
+    {
+        initial_energy += abs((int32_t)line[i] - X_AXIS);
+    }
+    expect_true(initial_energy > 0, "feedback line holds energy after impulse");
+
+    bool bounded = true;
+    int32_t final_energy = initial_energy;
+    for (int frame = 0; frame < 60; frame++)
+    {
+        for (size_t i = 0; i < 8; i++)
+        {
+            out[i] = (uint16_t)X_AXIS;
+        }
+        buf_echo_feedback(&fb, silence, out, 8, &param);
+
+        int32_t energy = 0;
+        for (size_t i = 0; i < fb.line_len; i++)
+        {
+            energy += abs((int32_t)line[i] - X_AXIS);
+        }
+        if (energy > 2 * initial_energy)
+        {
+            bounded = false;
+        }
+        final_energy = energy;
+    }
+    expect_true(bounded, "clamped feedback stays bounded (no divergence)");
+    expect_true(final_energy < initial_energy / 2, "clamped feedback tail decays over time");
+}
+
+static void test_echo_feedback_reset_clears(void)
+{
+    uint16_t line[4];
+    EchoFeedback fb = {.line = line, .line_len = 4, .write_idx = 3, .lpf_state = 123};
+    for (size_t i = 0; i < 4; i++)
+    {
+        line[i] = 0;
+    }
+
+    echo_feedback_reset(&fb);
+
+    for (size_t i = 0; i < 4; i++)
+    {
+        expect_eq_u16((uint16_t)X_AXIS, line[i], "reset fills line with silence");
+    }
+    expect_true(fb.write_idx == 0, "reset clears write index");
+    expect_true(fb.lpf_state == 0, "reset clears lpf state");
+}
+
+static void test_echo_feedback_null_safe(void)
+{
+    const EchoParam param = {.feedback = Q_ONE / 2U, .feedback_delay = 1};
+    uint16_t buf[2] = {(uint16_t)X_AXIS, (uint16_t)X_AXIS};
+
+    buf_echo_feedback(NULL, buf, buf, 2, &param); /* must not crash */
+
+    EchoFeedback fb_null_line = {.line = NULL, .line_len = 4};
+    buf_echo_feedback(&fb_null_line, buf, buf, 2, &param); /* must not crash */
+
+    echo_feedback_reset(NULL); /* must not crash */
+}
+
+static void test_buf_echo_ring_matches_contiguous_across_offsets(void)
+{
+    const EchoParam param = {
+        .delay_samples = 3, .pre_delay = 1, .density = Q_ONE, .attack = Q_ONE, .decay = 0};
+    const size_t num = 5;
+    const size_t len = param.delay_samples + num;
+
+    uint16_t in_buf[8];
+    for (size_t i = 0; i < len; i++)
+    {
+        in_buf[i] = (uint16_t)(X_AXIS + (int)(i * 37) - 80);
+    }
+
+    uint16_t expected[5] = {0};
+    buf_echo(in_buf, expected, num, &param);
+
+    for (size_t start = 0; start < len; start++)
+    {
+        uint16_t ring[8];
+        for (size_t i = 0; i < len; i++)
+        {
+            ring[(start + i) % len] = in_buf[i];
+        }
+        uint16_t out[5] = {0};
+        buf_echo_ring(ring, len, start, out, num, &param);
+        expect_eq_u16_array(expected, out, num, "buf_echo_ring matches contiguous across offsets");
+    }
+}
+
+static void test_instance_echo_stateful_delays_prior_input(void)
+{
+    uint16_t history[64];
+    uint16_t fb_line[32];
+    EchoState st;
+    st.history = history;
+    st.history_len = sizeof(history) / sizeof(history[0]);
+    st.fb.line = fb_line;
+    st.fb.line_len = sizeof(fb_line) / sizeof(fb_line[0]);
+    st.prev_enabled = 0;
+    echo_state_reset(&st);
+
+    EffectInstance inst;
+    effect_instance_init(&inst, EFFECT_TYPE_ECHO);
+    const EchoParam p = {
+        .delay_samples = 4, .pre_delay = 1, .density = Q_ONE, .attack = Q_ONE, .decay = 0,
+        .feedback = 0, .feedback_delay = 0, .damping = 0};
+    expect_true(effect_instance_set_echo_params(&inst, &p) == 0, "set echo params");
+    expect_true(effect_instance_attach_echo_state(&inst, &st) == 0, "attach echo state");
+
+    uint16_t in1[4] = {(uint16_t)(X_AXIS + 500), (uint16_t)X_AXIS, (uint16_t)X_AXIS,
+                       (uint16_t)X_AXIS};
+    uint16_t out1[4] = {0};
+    expect_true(effect_instance_process(&inst, in1, out1, 4) == 0, "echo process frame1");
+
+    uint16_t oracle_in1[8];
+    for (size_t i = 0; i < 4; i++)
+    {
+        oracle_in1[i] = (uint16_t)X_AXIS;
+        oracle_in1[4 + i] = in1[i];
+    }
+    uint16_t oracle1[4] = {0};
+    buf_echo(oracle_in1, oracle1, 4, &p);
+    expect_eq_u16_array(oracle1, out1, 4, "stateful echo frame1 uses silent history");
+
+    uint16_t in2[4] = {(uint16_t)X_AXIS, (uint16_t)X_AXIS, (uint16_t)X_AXIS, (uint16_t)X_AXIS};
+    uint16_t out2[4] = {0};
+    expect_true(effect_instance_process(&inst, in2, out2, 4) == 0, "echo process frame2");
+
+    uint16_t oracle_in2[8];
+    for (size_t i = 0; i < 4; i++)
+    {
+        oracle_in2[i] = in1[i];
+        oracle_in2[4 + i] = in2[i];
+    }
+    uint16_t oracle2[4] = {0};
+    buf_echo(oracle_in2, oracle2, 4, &p);
+    expect_eq_u16_array(oracle2, out2, 4, "stateful echo frame2 delays prior frame's input");
+
+    effect_instance_reset_state(&inst);
+    bool cleared = true;
+    for (size_t i = 0; i < st.history_len; i++)
+    {
+        if (history[i] != (uint16_t)X_AXIS)
+        {
+            cleared = false;
+        }
+    }
+    expect_true(cleared, "reset_state clears echo history to silence");
+    expect_true(st.history_w == 0, "reset_state clears history write index");
+}
+
+static void test_instance_echo_stateless_without_state(void)
+{
+    EffectInstance inst;
+    effect_instance_init(&inst, EFFECT_TYPE_ECHO);
+    const EchoParam p = {
+        .delay_samples = 2, .pre_delay = 1, .density = Q_ONE, .attack = Q_ONE, .decay = 0};
+    expect_true(effect_instance_set_echo_params(&inst, &p) == 0, "set echo params (stateless)");
+
+    uint16_t in_buf[6];
+    for (size_t i = 0; i < 6; i++)
+    {
+        in_buf[i] = (uint16_t)(X_AXIS + (int)(i * 25));
+    }
+    uint16_t out[4] = {0};
+    uint16_t expected[4] = {0};
+    expect_true(effect_instance_process(&inst, in_buf, out, 4) == 0, "stateless echo process");
+    buf_echo(in_buf, expected, 4, &p);
+    expect_eq_u16_array(expected, out, 4, "unattached echo instance == stateless buf_echo");
+}
+
 int main(void)
 {
     test_q_tanh_clamps();
@@ -1352,6 +1593,16 @@ int main(void)
     test_handle_echo_delay_accessor_rejects_null_out_ptr();
     test_handle_echo_delay_accessor_rejects_uninitialized_handle();
     test_handle_reset_restores_defaults();
+
+    test_echo_feedback_zero_is_noop();
+    test_echo_feedback_decaying_repeats();
+    test_echo_feedback_clamps_and_decays();
+    test_echo_feedback_reset_clears();
+    test_echo_feedback_null_safe();
+
+    test_buf_echo_ring_matches_contiguous_across_offsets();
+    test_instance_echo_stateful_delays_prior_input();
+    test_instance_echo_stateless_without_state();
 
     if (failures != 0)
     {

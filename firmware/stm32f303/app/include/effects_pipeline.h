@@ -19,5 +19,8 @@ int effects_pipeline_sync_params(EffectsPipeline *pipeline, const EffectsParams 
 int effects_pipeline_process(const EffectsPipeline *pipeline, Effect effect, const uint16_t *in_buf,
                              uint16_t *out_buf, size_t num_samples);
 int effects_pipeline_get_echo_delay_samples(const EffectsPipeline *pipeline, size_t *delay_samples);
+int effects_pipeline_attach_echo_state(EffectsPipeline *pipeline, EchoState *state);
+int effects_pipeline_apply_enabled(EffectsPipeline *pipeline, const EffectsState *state);
+int effects_pipeline_reset_state(EffectsPipeline *pipeline, Effect effect);
 
 #endif

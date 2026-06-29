@@ -39,7 +39,7 @@ static bool fail_frame(const EffectsTaskOps *ops, LogLevel level, const char *lo
 bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTaskOps *ops)
 {
     if (task_context == NULL || ops == NULL || task_context->pipeline == NULL ||
-        task_context->delay_samples_buf == NULL || ops->wait_for_adc_buffer == NULL ||
+        ops->wait_for_adc_buffer == NULL ||
         ops->wait_for_dac_buffer == NULL || ops->dma_copy == NULL ||
         ops->read_latched_state == NULL || ops->ms_to_ticks == NULL)
     {
@@ -53,7 +53,6 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
 
     uint16_t *curr_adc_buf = NULL;
     uint16_t *curr_dac_buf = NULL;
-    uint16_t *echo_input_buf = NULL;
     uint16_t *input_buf = NULL;
     uint16_t *output_buf = NULL;
 
@@ -90,26 +89,6 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
                           "panic: test input replacement failed\n");
     }
 
-    if (task_context->delay_samples_len > task_context->sample_buf_len)
-    {
-        size_t shift_count = task_context->delay_samples_len - task_context->sample_buf_len;
-        if (!ops->dma_copy(&task_context->delay_samples_buf[task_context->sample_buf_len],
-                           task_context->delay_samples_buf, shift_count, ticks_to_wait, ops->context))
-        {
-            return fail_frame(ops, LOG_LEVEL_ERROR, "effects task delay sample shift failed",
-                              "panic: delay sample shift failed\n");
-        }
-    }
-
-    if (!ops->dma_copy(
-            curr_adc_buf,
-            &task_context->delay_samples_buf[task_context->delay_samples_len - task_context->sample_buf_len],
-            task_context->sample_buf_len, ticks_to_wait, ops->context))
-    {
-        return fail_frame(ops, LOG_LEVEL_ERROR, "effects task delay sample capture failed",
-                          "panic: delay sample capture failed\n");
-    }
-
     if (!ops->wait_for_dac_buffer(ticks_to_wait, &curr_dac_buf, ops->context))
     {
         if (curr_adc_buf == task_context->adc_buf_a)
@@ -140,6 +119,8 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
     }
 
     effects_state_normalize(&latched_effects_state);
+
+    effects_pipeline_apply_enabled(task_context->pipeline, &latched_effects_state);
 
     bool any_enabled = false;
     for (int i = 0; i < NUM_EFFECTS; i++)
@@ -185,64 +166,12 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
             continue;
         }
 
-        if (effect == ECHO)
-        {
-            size_t num_delay_samples = 0;
-            if (effects_pipeline_get_echo_delay_samples(task_context->pipeline, &num_delay_samples) !=
-                0)
-            {
-                (void)log_write(LOG_LEVEL_ERROR, "process_failed: get_echo_delay_samples");
-                process_failed = true;
-                break;
-            }
-
-            if (num_delay_samples > task_context->delay_samples_len)
-            {
-                num_delay_samples = task_context->delay_samples_len;
-            }
-
-            echo_input_buf = task_context->echo_scratch_buf;
-            if (echo_input_buf == NULL ||
-                num_delay_samples + task_context->sample_buf_len > task_context->echo_scratch_len)
-            {
-                (void)log_write(LOG_LEVEL_ERROR, "process_failed: echo scratch too small");
-                process_failed = true;
-                break;
-            }
-
-            if (num_delay_samples > 0)
-            {
-                if (!ops->dma_copy(
-                        &task_context->delay_samples_buf[task_context->delay_samples_len - num_delay_samples],
-                        echo_input_buf, num_delay_samples, ticks_to_wait, ops->context))
-                {
-                    (void)log_write(LOG_LEVEL_ERROR, "process_failed: echo delay history dma copy");
-                    process_failed = true;
-                    break;
-                }
-            }
-
-            if (!ops->dma_copy(input_buf, &echo_input_buf[num_delay_samples], task_context->sample_buf_len,
-                               ticks_to_wait, ops->context))
-            {
-                (void)log_write(LOG_LEVEL_ERROR, "process_failed: echo input dma copy");
-                process_failed = true;
-                break;
-            }
-        }
-
-        const uint16_t *process_input = (effect == ECHO) ? echo_input_buf : input_buf;
-        if (effects_pipeline_process(task_context->pipeline, effect, process_input, output_buf,
+        if (effects_pipeline_process(task_context->pipeline, effect, input_buf, output_buf,
                                      task_context->sample_buf_len) != 0)
         {
             (void)log_write(LOG_LEVEL_ERROR, "process_failed: effect pipeline process");
             process_failed = true;
             break;
-        }
-
-        if (echo_input_buf != NULL)
-        {
-            echo_input_buf = NULL;
         }
 
         if (i < NUM_EFFECTS - 1)

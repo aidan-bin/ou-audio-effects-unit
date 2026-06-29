@@ -199,7 +199,20 @@ static EffectsTaskContext make_task_context(EffectsPipeline *pipeline, uint16_t 
                                             uint16_t *delay_samples, size_t sample_buf_len,
                                             size_t delay_samples_len)
 {
-    static uint16_t echo_scratch[256];
+    (void)delay_samples;
+    (void)delay_samples_len;
+
+    static uint16_t echo_history[256];
+    static uint16_t echo_fb_line[256];
+    static EchoState echo_state;
+    echo_state.history = echo_history;
+    echo_state.history_len = sizeof(echo_history) / sizeof(echo_history[0]);
+    echo_state.fb.line = echo_fb_line;
+    echo_state.fb.line_len = sizeof(echo_fb_line) / sizeof(echo_fb_line[0]);
+    echo_state.prev_enabled = 0;
+    echo_state_reset(&echo_state);
+    (void)effects_pipeline_attach_echo_state(pipeline, &echo_state);
+
     EffectsTaskContext ctx = {
         .pipeline = pipeline,
         .effects_state = NULL,
@@ -208,11 +221,7 @@ static EffectsTaskContext make_task_context(EffectsPipeline *pipeline, uint16_t 
         .adc_buf_b = adc_b,
         .dac_buf_a = dac_a,
         .dac_buf_b = dac_b,
-        .delay_samples_buf = delay_samples,
-        .echo_scratch_buf = echo_scratch,
-        .echo_scratch_len = sizeof(echo_scratch) / sizeof(echo_scratch[0]),
         .sample_buf_len = sample_buf_len,
-        .delay_samples_len = delay_samples_len,
         .sampling_period_us = 25,
         .processing_slack_ms = 1,
     };
@@ -492,28 +501,16 @@ static void test_effects_task_uses_matching_dac_buffer_when_wait_times_out(void)
     }
 }
 
-static void test_effects_task_echo_delay_history_from_buffer(void)
+static void test_effects_task_echo_processes_via_pipeline(void)
 {
     EffectsPipeline pipeline;
     expect_true(effects_pipeline_init(&pipeline) == 0, "pipeline init succeeds");
-
-    EffectsPipeline expected_pipeline;
-    expect_true(effects_pipeline_init(&expected_pipeline) == 0, "expected pipeline init succeeds");
 
     uint16_t adc_a[4] = {0};
     uint16_t adc_b[4] = {0};
     uint16_t dac_a[4] = {0};
     uint16_t dac_b[4] = {0};
-    uint16_t delay_samples[8] = {
-        (uint16_t)(X_AXIS + 100),
-        (uint16_t)(X_AXIS + 200),
-        (uint16_t)(X_AXIS + 300),
-        (uint16_t)(X_AXIS + 400),
-        (uint16_t)(X_AXIS + 500),
-        (uint16_t)(X_AXIS + 600),
-        (uint16_t)(X_AXIS + 700),
-        (uint16_t)(X_AXIS + 800),
-    };
+    uint16_t delay_samples[8] = {0};
 
     EffectsTaskContext task_context = make_task_context(
         &pipeline, adc_a, adc_b, dac_a, dac_b, delay_samples, 4, 8);
@@ -545,21 +542,21 @@ static void test_effects_task_echo_delay_history_from_buffer(void)
     expect_eq_u32(1, ops_state.frame_reports, "frame report callback called on success");
 
     uint16_t echo_input_buf[8];
-    memcpy(echo_input_buf, &delay_samples[4], 4 * sizeof(uint16_t));
+    for (size_t i = 0; i < 4; i++)
+    {
+        echo_input_buf[i] = (uint16_t)X_AXIS;
+    }
     for (size_t i = 0; i < 4; i++)
     {
         echo_input_buf[4 + i] = ops_state.replace_input_value;
     }
 
     uint16_t expected[4] = {0};
-    expect_true(effects_pipeline_sync_params(&expected_pipeline, &ops_state.latched_params) == 0,
-                "expected pipeline sync succeeds");
-    expect_true(effects_pipeline_process(&expected_pipeline, ECHO, echo_input_buf, expected, 4) == 0,
-                "expected echo process succeeds");
+    buf_echo(echo_input_buf, expected, 4, &ops_state.latched_params.echo);
 
     for (size_t i = 0; i < 4; i++)
     {
-        expect_eq_u16(expected[i], dac_a[i], "echo output matches oracle");
+        expect_eq_u16(expected[i], dac_a[i], "echo output matches stateless oracle on first frame");
     }
 }
 
@@ -571,7 +568,7 @@ int main(void)
     test_effects_task_reports_failure_when_test_replace_fails();
     test_effects_task_output_replacement_overwrites_dac_buffer();
     test_effects_task_uses_matching_dac_buffer_when_wait_times_out();
-    test_effects_task_echo_delay_history_from_buffer();
+    test_effects_task_echo_processes_via_pipeline();
 
     if (failures != 0)
     {

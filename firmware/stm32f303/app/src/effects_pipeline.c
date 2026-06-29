@@ -80,3 +80,46 @@ int effects_pipeline_get_echo_delay_samples(const EffectsPipeline *pipeline, siz
 
     return effect_handle_get_echo_delay_samples(&pipeline->echo, delay_samples);
 }
+
+int effects_pipeline_attach_echo_state(EffectsPipeline *pipeline, EchoState *state)
+{
+    if (pipeline == NULL)
+    {
+        return -1;
+    }
+
+    return effect_handle_attach_echo_state(&pipeline->echo, state);
+}
+
+int effects_pipeline_apply_enabled(EffectsPipeline *pipeline, const EffectsState *state)
+{
+    if (pipeline == NULL || state == NULL)
+    {
+        return -1;
+    }
+
+    effect_handle_set_enabled(&pipeline->overdrive, state->is_enabled[OVERDRIVE]);
+    effect_handle_set_enabled(&pipeline->echo, state->is_enabled[ECHO]);
+    effect_handle_set_enabled(&pipeline->compression, state->is_enabled[COMPRESSION]);
+    return 0;
+}
+
+int effects_pipeline_reset_state(EffectsPipeline *pipeline, Effect effect)
+{
+    if (pipeline == NULL)
+    {
+        return -1;
+    }
+
+    switch (effect)
+    {
+    case OVERDRIVE:
+        return effect_handle_reset_state(&pipeline->overdrive);
+    case ECHO:
+        return effect_handle_reset_state(&pipeline->echo);
+    case COMPRESSION:
+        return effect_handle_reset_state(&pipeline->compression);
+    default:
+        return -1;
+    }
+}

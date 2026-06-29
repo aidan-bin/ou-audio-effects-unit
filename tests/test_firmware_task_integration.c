@@ -303,14 +303,23 @@ static void test_integration_switch_pot_and_effects_pipeline(void)
     uint16_t adc_b[8] = {0};
     uint16_t dac_a[8] = {0};
     uint16_t dac_b[8] = {0};
-    uint16_t delay_samples[16] = {0};
 
     state.adc_ready = true;
     state.dac_ready = true;
     state.adc_buffer = adc_a;
     state.dac_buffer = dac_a;
 
-    static uint16_t echo_scratch[64];
+    static uint16_t echo_history[64];
+    static uint16_t echo_fb_line[64];
+    static EchoState echo_state;
+    echo_state.history = echo_history;
+    echo_state.history_len = sizeof(echo_history) / sizeof(echo_history[0]);
+    echo_state.fb.line = echo_fb_line;
+    echo_state.fb.line_len = sizeof(echo_fb_line) / sizeof(echo_fb_line[0]);
+    echo_state.prev_enabled = 0;
+    echo_state_reset(&echo_state);
+    (void)effects_pipeline_attach_echo_state(&pipeline, &echo_state);
+
     EffectsTaskContext effects_context = {
         .pipeline = &pipeline,
         .effects_state = NULL,
@@ -319,11 +328,7 @@ static void test_integration_switch_pot_and_effects_pipeline(void)
         .adc_buf_b = adc_b,
         .dac_buf_a = dac_a,
         .dac_buf_b = dac_b,
-        .delay_samples_buf = delay_samples,
-        .echo_scratch_buf = echo_scratch,
-        .echo_scratch_len = sizeof(echo_scratch) / sizeof(echo_scratch[0]),
         .sample_buf_len = 8,
-        .delay_samples_len = 16,
         .sampling_period_us = 25,
         .processing_slack_ms = 1,
     };
