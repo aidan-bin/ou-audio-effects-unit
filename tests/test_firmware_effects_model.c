@@ -162,12 +162,56 @@ static void test_invalid_effect_or_index_rejected(void)
                  "invalid pot index rejected");
 }
 
+static void test_set_order_applies_valid_permutation(void)
+{
+    EffectsState state = {
+        .ordered = {OVERDRIVE, ECHO, COMPRESSION},
+        .is_enabled = {true, false, true},
+        .active_effect_selection = 0,
+    };
+
+    const Effect order[NUM_EFFECTS] = {COMPRESSION, OVERDRIVE, ECHO};
+    expect_true(effects_state_set_order(&state, order, NUM_EFFECTS),
+                "set order valid permutation");
+    expect_eq_u8(COMPRESSION, state.ordered[0], "set order[0]");
+    expect_eq_u8(OVERDRIVE, state.ordered[1], "set order[1]");
+    expect_eq_u8(ECHO, state.ordered[2], "set order[2]");
+}
+
+static void test_set_order_rejects_invalid_and_keeps_state(void)
+{
+    EffectsState state = {
+        .ordered = {OVERDRIVE, ECHO, COMPRESSION},
+        .is_enabled = {true, false, true},
+        .active_effect_selection = 0,
+    };
+
+    const Effect duplicate[NUM_EFFECTS] = {ECHO, ECHO, COMPRESSION};
+    const Effect out_of_range[NUM_EFFECTS] = {OVERDRIVE, ECHO, (Effect)99};
+    const Effect wrong_count[2] = {OVERDRIVE, ECHO};
+
+    expect_false(effects_state_set_order(&state, duplicate, NUM_EFFECTS),
+                 "set order rejects duplicate");
+    expect_false(effects_state_set_order(&state, out_of_range, NUM_EFFECTS),
+                 "set order rejects out-of-range effect");
+    expect_false(effects_state_set_order(&state, wrong_count, 2),
+                 "set order rejects wrong count");
+    expect_false(effects_state_set_order(NULL, duplicate, NUM_EFFECTS),
+                 "set order rejects null state");
+
+    expect_eq_u8(OVERDRIVE, state.ordered[0], "set order unchanged[0]");
+    expect_eq_u8(ECHO, state.ordered[1], "set order unchanged[1]");
+    expect_eq_u8(COMPRESSION, state.ordered[2], "set order unchanged[2]");
+}
+
 int main(void)
 {
     test_effects_state_order_valid_default_order();
     test_effects_state_normalize_invalid_order_resets();
     test_effects_state_get_active_effect_invalid_state_fails();
     test_effects_state_get_active_effect_after_normalize();
+    test_set_order_applies_valid_permutation();
+    test_set_order_rejects_invalid_and_keeps_state();
     test_map_adc_to_param_zero_adcmax_returns_min();
     test_map_adc_to_param_swaps_inverted_bounds();
     test_map_adc_to_param_clamps_adc_input();

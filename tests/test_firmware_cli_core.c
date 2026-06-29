@@ -52,6 +52,9 @@ typedef struct
     size_t i2c_transfer_rx_len;
 
     bool reboot_called;
+
+    uint8_t order[8];
+    size_t order_count;
 } CliCoreTestContext;
 
 static void reset_output(CliCoreTestContext *ctx)
@@ -125,6 +128,31 @@ static bool config_get(const char *key, int32_t *value_out, void *context)
     strncpy(ctx->last_config_key, key, sizeof(ctx->last_config_key) - 1);
     *value_out = 42;
     return !ctx->fail_service;
+}
+
+static bool order_get(uint8_t *order_out, size_t capacity, size_t *count_out, void *context)
+{
+    CliCoreTestContext *ctx = (CliCoreTestContext *)context;
+    if (ctx->order_count > capacity)
+    {
+        return false;
+    }
+    memcpy(order_out, ctx->order, ctx->order_count);
+    *count_out = ctx->order_count;
+    return !ctx->fail_service;
+}
+
+static bool order_set(const uint8_t *order, size_t count, void *context)
+{
+    CliCoreTestContext *ctx = (CliCoreTestContext *)context;
+    // Mirror the adapter: only a full permutation of all effects is accepted.
+    if (ctx->fail_service || count != 3 || count > sizeof(ctx->order))
+    {
+        return false;
+    }
+    memcpy(ctx->order, order, count);
+    ctx->order_count = count;
+    return true;
 }
 
 static bool rom_save_state(void *context)
@@ -380,6 +408,8 @@ static CliServices make_services(CliCoreTestContext *ctx)
         .clear_all_overrides = clear_all_overrides,
         .config_set = config_set,
         .config_get = config_get,
+        .order_get = order_get,
+        .order_set = order_set,
         .rom_save_state = rom_save_state,
         .rom_load_state = rom_load_state,
         .rom_read_raw = rom_read_raw,
@@ -749,10 +779,75 @@ static void test_error_paths(void)
                   "service error status");
 }
 
+static void test_order_commands(void)
+{
+    CliCoreTestContext ctx = {0};
+    CliServices services = make_services(&ctx);
+    CliIo io = make_io(&ctx);
+
+    // Default chain: overdrive(0) echo(1) compression(2).
+    ctx.order[0] = 0;
+    ctx.order[1] = 1;
+    ctx.order[2] = 2;
+    ctx.order_count = 3;
+
+    expect_eq_u32(CLI_STATUS_OK, cli_core_process_line("order get", &services, &io),
+                  "order get ok");
+    expect_true(strstr(ctx.output, "order overdrive echo compression") != NULL,
+                "order get prints chain by name");
+
+    reset_output(&ctx);
+    expect_eq_u32(CLI_STATUS_OK,
+                  cli_core_process_line("order set compression echo overdrive", &services, &io),
+                  "order set full permutation ok");
+    expect_eq_u8(2, ctx.order[0], "order set[0]=compression");
+    expect_eq_u8(1, ctx.order[1], "order set[1]=echo");
+    expect_eq_u8(0, ctx.order[2], "order set[2]=overdrive");
+
+    // Current chain: compression echo overdrive -> swap the two ends.
+    reset_output(&ctx);
+    expect_eq_u32(CLI_STATUS_OK,
+                  cli_core_process_line("order swap overdrive compression", &services, &io),
+                  "order swap ok");
+    expect_eq_u8(0, ctx.order[0], "order swap[0]=overdrive");
+    expect_eq_u8(1, ctx.order[1], "order swap[1]=echo");
+    expect_eq_u8(2, ctx.order[2], "order swap[2]=compression");
+
+    // overdrive echo compression -> move echo to the front.
+    reset_output(&ctx);
+    expect_eq_u32(CLI_STATUS_OK,
+                  cli_core_process_line("order move echo 0", &services, &io),
+                  "order move ok");
+    expect_eq_u8(1, ctx.order[0], "order move[0]=echo");
+    expect_eq_u8(0, ctx.order[1], "order move[1]=overdrive");
+    expect_eq_u8(2, ctx.order[2], "order move[2]=compression");
+
+    reset_output(&ctx);
+    expect_eq_u32(CLI_STATUS_PARSE_ERROR,
+                  cli_core_process_line("order set foo bar baz", &services, &io),
+                  "order set unknown name parse error");
+
+    reset_output(&ctx);
+    expect_eq_u32(CLI_STATUS_PARSE_ERROR,
+                  cli_core_process_line("order move echo 9", &services, &io),
+                  "order move out-of-range parse error");
+
+    reset_output(&ctx);
+    expect_eq_u32(CLI_STATUS_INVALID_ARGUMENTS,
+                  cli_core_process_line("order", &services, &io),
+                  "order missing subcommand invalid args");
+
+    reset_output(&ctx);
+    expect_eq_u32(CLI_STATUS_SERVICE_ERROR,
+                  cli_core_process_line("order set overdrive echo", &services, &io),
+                  "order set wrong count rejected by service");
+}
+
 int main(void)
 {
     test_ping_and_help();
     test_override_and_config_commands();
+    test_order_commands();
     test_rom_and_log_commands();
     test_log_stream_batch_command();
     test_log_stats_reset();

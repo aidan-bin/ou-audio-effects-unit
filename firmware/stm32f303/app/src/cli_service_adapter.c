@@ -462,6 +462,49 @@ static bool service_config_get(const char *key, int32_t *value_out, void *ctx)
     return success;
 }
 
+static bool service_order_get(uint8_t *order_out, size_t capacity, size_t *count_out, void *ctx)
+{
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
+
+    if (context == NULL || context->state == NULL || order_out == NULL || count_out == NULL ||
+        capacity < NUM_EFFECTS)
+    {
+        return false;
+    }
+
+    lock_ctx(context);
+    for (size_t i = 0; i < NUM_EFFECTS; i++)
+    {
+        order_out[i] = (uint8_t)context->state->ordered[i];
+    }
+    *count_out = NUM_EFFECTS;
+    unlock_ctx(context);
+
+    return true;
+}
+
+static bool service_order_set(const uint8_t *order, size_t count, void *ctx)
+{
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
+
+    if (context == NULL || context->state == NULL || order == NULL || count != NUM_EFFECTS)
+    {
+        return false;
+    }
+
+    Effect ordered[NUM_EFFECTS];
+    for (size_t i = 0; i < NUM_EFFECTS; i++)
+    {
+        ordered[i] = (Effect)order[i];
+    }
+
+    lock_ctx(context);
+    bool success = effects_state_set_order(context->state, ordered, count);
+    unlock_ctx(context);
+
+    return success;
+}
+
 static bool service_rom_save_state(void *ctx)
 {
     CliServiceAdapter *context = (CliServiceAdapter *)ctx;
@@ -880,6 +923,8 @@ void cli_service_adapter_bind(CliServiceAdapter *context, CliServices *services_
     services_out->clear_all_overrides = service_clear_all_overrides;
     services_out->config_set = service_config_set;
     services_out->config_get = service_config_get;
+    services_out->order_get = service_order_get;
+    services_out->order_set = service_order_set;
     services_out->rom_save_state = service_rom_save_state;
     services_out->rom_load_state = service_rom_load_state;
     services_out->rom_read_raw = service_rom_read_raw;

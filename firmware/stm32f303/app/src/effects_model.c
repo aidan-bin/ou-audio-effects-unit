@@ -44,6 +44,33 @@ bool effects_state_order_valid(const EffectsState *state)
     return true;
 }
 
+bool effects_state_set_order(EffectsState *state, const Effect *order, size_t count)
+{
+    if (state == NULL || order == NULL || count != NUM_EFFECTS)
+    {
+        return false;
+    }
+
+    bool seen[NUM_EFFECTS] = {false};
+
+    for (size_t i = 0; i < count; i++)
+    {
+        if (!effect_is_valid(order[i]) || seen[order[i]])
+        {
+            return false;
+        }
+
+        seen[order[i]] = true;
+    }
+
+    for (size_t i = 0; i < count; i++)
+    {
+        state->ordered[i] = order[i];
+    }
+
+    return true;
+}
+
 void effects_state_normalize(EffectsState *state)
 {
     if (state == NULL)

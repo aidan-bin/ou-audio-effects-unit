@@ -7,6 +7,7 @@
 #include "sysinfo.h"
 
 #define CONFIG_LINE_BUF_SIZE 48
+#define ORDER_LINE_BUF_SIZE 64
 #define LOG_LINE_BUF_SIZE 128
 #define LOG_STREAM_BATCH_MAX 255
 #define TEST_STATUS_LINE_BUF_SIZE 112
@@ -95,11 +96,47 @@ static bool test_vector_id(const char *name, uint8_t *vector_out)
     return false;
 }
 
+// Effect name <-> id table
+static const struct
+{
+    const char *name;
+    uint8_t id;
+} effect_names[] = {
+    {"overdrive", 0U},
+    {"echo", 1U},
+    {"compression", 2U},
+};
+
+static const char *effect_name(uint8_t id)
+{
+    for (size_t i = 0; i < sizeof(effect_names) / sizeof(effect_names[0]); i++)
+    {
+        if (effect_names[i].id == id)
+        {
+            return effect_names[i].name;
+        }
+    }
+    return "?";
+}
+
+static bool effect_id(const char *name, uint8_t *id_out)
+{
+    for (size_t i = 0; i < sizeof(effect_names) / sizeof(effect_names[0]); i++)
+    {
+        if (strcmp(effect_names[i].name, name) == 0)
+        {
+            *id_out = effect_names[i].id;
+            return true;
+        }
+    }
+    return false;
+}
+
 static const char *command_help_text(const char *command)
 {
     if (command == NULL)
     {
-        return "commands: help ping override config rom log audio test i2c reboot info sysinfo\n";
+        return "commands: help ping override config order rom log audio test i2c reboot info sysinfo\n";
     }
 
     if (strcmp(command, "help") == 0)
@@ -117,6 +154,10 @@ static const char *command_help_text(const char *command)
     if (strcmp(command, "config") == 0)
     {
         return "config set|get <key> [value]\n";
+    }
+    if (strcmp(command, "order") == 0)
+    {
+        return "order get | set <effect...> | swap <a> <b> | move <effect> <pos>\n";
     }
     if (strcmp(command, "rom") == 0)
     {
@@ -385,6 +426,191 @@ static CliStatus handle_config(char **tokens,
         char line[CONFIG_LINE_BUF_SIZE];
         snprintf(line, sizeof(line), "config %ld\n", (long)value);
         write_line(io, line);
+        return CLI_STATUS_OK;
+    }
+
+    return CLI_STATUS_UNKNOWN_COMMAND;
+}
+
+static CliStatus order_print(const CliServices *services, const CliIo *io)
+{
+    uint8_t order[CLI_PARSE_MAX_TOKENS] = {0};
+    size_t count = 0;
+    if (!services->order_get(order, sizeof(order), &count, services->context))
+    {
+        return CLI_STATUS_SERVICE_ERROR;
+    }
+
+    char line[ORDER_LINE_BUF_SIZE];
+    size_t used = (size_t)snprintf(line, sizeof(line), "order");
+    for (size_t i = 0; i < count && used + 16U < sizeof(line); i++)
+    {
+        used += (size_t)snprintf(&line[used], sizeof(line) - used, " %s", effect_name(order[i]));
+    }
+    snprintf(&line[used], sizeof(line) - used, "\n");
+    return write_line(io, line) ? CLI_STATUS_OK : CLI_STATUS_SERVICE_ERROR;
+}
+
+static CliStatus handle_order(char **tokens,
+                              size_t token_count,
+                              const CliServices *services,
+                              const CliIo *io,
+                              CliCommandResult *result)
+{
+    (void)result;
+
+    if (token_count < 2)
+    {
+        return CLI_STATUS_INVALID_ARGUMENTS;
+    }
+
+    if (strcmp(tokens[1], "get") == 0)
+    {
+        if (token_count != 2)
+        {
+            return CLI_STATUS_INVALID_ARGUMENTS;
+        }
+        REQUIRE_SERVICE(services->order_get);
+        return order_print(services, io);
+    }
+
+    if (strcmp(tokens[1], "set") == 0)
+    {
+        REQUIRE_SERVICE(services->order_set);
+
+        size_t count = token_count - 2;
+        if (count == 0)
+        {
+            return CLI_STATUS_INVALID_ARGUMENTS;
+        }
+
+        uint8_t order[CLI_PARSE_MAX_TOKENS] = {0};
+        for (size_t i = 0; i < count; i++)
+        {
+            if (!effect_id(tokens[2 + i], &order[i]))
+            {
+                return CLI_STATUS_PARSE_ERROR;
+            }
+        }
+
+        if (!services->order_set(order, count, services->context))
+        {
+            return CLI_STATUS_SERVICE_ERROR;
+        }
+        return CLI_STATUS_OK;
+    }
+
+    if (strcmp(tokens[1], "swap") == 0)
+    {
+        if (token_count != 4)
+        {
+            return CLI_STATUS_INVALID_ARGUMENTS;
+        }
+        REQUIRE_SERVICE(services->order_get);
+        REQUIRE_SERVICE(services->order_set);
+
+        uint8_t id_a = 0;
+        uint8_t id_b = 0;
+        if (!effect_id(tokens[2], &id_a) || !effect_id(tokens[3], &id_b))
+        {
+            return CLI_STATUS_PARSE_ERROR;
+        }
+
+        uint8_t order[CLI_PARSE_MAX_TOKENS] = {0};
+        size_t count = 0;
+        if (!services->order_get(order, sizeof(order), &count, services->context))
+        {
+            return CLI_STATUS_SERVICE_ERROR;
+        }
+
+        size_t pos_a = count;
+        size_t pos_b = count;
+        for (size_t i = 0; i < count; i++)
+        {
+            if (order[i] == id_a)
+            {
+                pos_a = i;
+            }
+            if (order[i] == id_b)
+            {
+                pos_b = i;
+            }
+        }
+        if (pos_a == count || pos_b == count)
+        {
+            return CLI_STATUS_PARSE_ERROR;
+        }
+
+        uint8_t temp = order[pos_a];
+        order[pos_a] = order[pos_b];
+        order[pos_b] = temp;
+
+        if (!services->order_set(order, count, services->context))
+        {
+            return CLI_STATUS_SERVICE_ERROR;
+        }
+        return CLI_STATUS_OK;
+    }
+
+    if (strcmp(tokens[1], "move") == 0)
+    {
+        if (token_count != 4)
+        {
+            return CLI_STATUS_INVALID_ARGUMENTS;
+        }
+        REQUIRE_SERVICE(services->order_get);
+        REQUIRE_SERVICE(services->order_set);
+
+        uint8_t id = 0;
+        uint32_t pos = 0;
+        if (!effect_id(tokens[2], &id) || !cli_parse_u32(tokens[3], &pos))
+        {
+            return CLI_STATUS_PARSE_ERROR;
+        }
+
+        uint8_t order[CLI_PARSE_MAX_TOKENS] = {0};
+        size_t count = 0;
+        if (!services->order_get(order, sizeof(order), &count, services->context))
+        {
+            return CLI_STATUS_SERVICE_ERROR;
+        }
+
+        if (pos >= count)
+        {
+            return CLI_STATUS_PARSE_ERROR;
+        }
+
+        size_t src = count;
+        for (size_t i = 0; i < count; i++)
+        {
+            if (order[i] == id)
+            {
+                src = i;
+                break;
+            }
+        }
+        if (src == count)
+        {
+            return CLI_STATUS_PARSE_ERROR;
+        }
+
+        // Remove the effect from its slot, then re-insert it at pos, shifting
+        // the intervening effects to keep a valid permutation.
+        uint8_t moved = order[src];
+        for (size_t i = src; i + 1 < count; i++)
+        {
+            order[i] = order[i + 1];
+        }
+        for (size_t i = count - 1; i > pos; i--)
+        {
+            order[i] = order[i - 1];
+        }
+        order[pos] = moved;
+
+        if (!services->order_set(order, count, services->context))
+        {
+            return CLI_STATUS_SERVICE_ERROR;
+        }
         return CLI_STATUS_OK;
     }
 
@@ -1229,6 +1455,7 @@ CliStatus cli_core_process_line_ex(const char *line,
         {.name = "ping", .handler = handle_ping},
         {.name = "override", .handler = handle_override},
         {.name = "config", .handler = handle_config},
+        {.name = "order", .handler = handle_order},
         {.name = "rom", .handler = handle_rom},
         {.name = "log", .handler = handle_log},
         {.name = "audio", .handler = handle_audio},

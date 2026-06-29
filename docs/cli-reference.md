@@ -63,6 +63,19 @@ Q8 fixed-point where noted: `256 = 1.0`.
 - `heartbeat.period_ms` — LED toggle period ms, range 50–5000, default **500**
 - `system.heartbeat_ms` — alias for `heartbeat.period_ms`
 
+### order
+
+Get or change the order of the effects chain. Effects are referenced by name (e.g., `overdrive`, `echo`, `compression`). The default chain is `overdrive echo compression`.
+
+- `order get` — print the current chain
+- `order set <e1> <e2> <e3>` — set the full chain order (must be a permutation of all effects; duplicates, unknown names, or a wrong count are rejected)
+- `order swap <a> <b>` — swap the positions of two effects
+- `order move <effect> <pos>` — move an effect to 0-indexed position `pos`, shifting the rest
+
+The order is part of the persisted state, so `rom save-state` (and the periodic auto-save) retain it across reboot.
+
+Note that the control mapping is *positional*: switches and pots bind to the active effect (`state.active_effect`) at a given position in the chain, not to a fixed effect. Re-ordering therefore changes which effect each switch and pot controls.
+
 ### rom
 
 EEPROM state persistence.

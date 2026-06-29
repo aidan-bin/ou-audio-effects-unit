@@ -82,6 +82,9 @@ typedef struct
     bool (*config_set)(const char *key, int32_t value, void *context);
     bool (*config_get)(const char *key, int32_t *value_out, void *context);
 
+    bool (*order_get)(uint8_t *order_out, size_t capacity, size_t *count_out, void *context);
+    bool (*order_set)(const uint8_t *order, size_t count, void *context);
+
     bool (*rom_save_state)(void *context);
     bool (*rom_load_state)(void *context);
     bool (*rom_read_raw)(uint16_t address, uint16_t length, uint8_t *payload_out,

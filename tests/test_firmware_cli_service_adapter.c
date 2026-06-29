@@ -612,11 +612,57 @@ static void test_i2c_adapter_operations(void)
                  "i2c scan returns false when ops NULL");
 }
 
+static void test_order_get_set_roundtrip(void)
+{
+    EffectsState state;
+    EffectsParams params;
+    CliServiceAdapter context;
+    CliServices services;
+    setup_adapter(&context, &state, &params, &services, NULL);
+
+    // Default order is overdrive, echo, compression.
+    uint8_t order[8] = {0};
+    size_t count = 0;
+    expect_true(services.order_get(order, sizeof(order), &count, services.context),
+                "order_get default");
+    expect_eq_size(NUM_EFFECTS, count, "order_get returns all effects");
+    expect_eq_u8(OVERDRIVE, order[0], "order_get default[0]");
+    expect_eq_u8(ECHO, order[1], "order_get default[1]");
+    expect_eq_u8(COMPRESSION, order[2], "order_get default[2]");
+
+    const uint8_t new_order[NUM_EFFECTS] = {COMPRESSION, OVERDRIVE, ECHO};
+    expect_true(services.order_set(new_order, NUM_EFFECTS, services.context),
+                "order_set valid permutation");
+    expect_eq_u8(COMPRESSION, state.ordered[0], "order_set mutates state[0]");
+    expect_eq_u8(OVERDRIVE, state.ordered[1], "order_set mutates state[1]");
+    expect_eq_u8(ECHO, state.ordered[2], "order_set mutates state[2]");
+
+    expect_true(services.order_get(order, sizeof(order), &count, services.context),
+                "order_get after set");
+    expect_eq_u8(COMPRESSION, order[0], "order_get reflects new order");
+
+    // Invalid orders are rejected and leave the state unchanged.
+    const uint8_t duplicate[NUM_EFFECTS] = {ECHO, ECHO, OVERDRIVE};
+    expect_false(services.order_set(duplicate, NUM_EFFECTS, services.context),
+                 "order_set rejects duplicate");
+    const uint8_t wrong_count[2] = {OVERDRIVE, ECHO};
+    expect_false(services.order_set(wrong_count, 2, services.context),
+                 "order_set rejects wrong count");
+    const uint8_t out_of_range[NUM_EFFECTS] = {OVERDRIVE, ECHO, 99};
+    expect_false(services.order_set(out_of_range, NUM_EFFECTS, services.context),
+                 "order_set rejects out-of-range effect");
+
+    expect_eq_u8(COMPRESSION, state.ordered[0], "state unchanged after rejected[0]");
+    expect_eq_u8(OVERDRIVE, state.ordered[1], "state unchanged after rejected[1]");
+    expect_eq_u8(ECHO, state.ordered[2], "state unchanged after rejected[2]");
+}
+
 int main(void)
 {
     test_pot_override_precedence();
     test_switch_override_precedence();
     test_config_bounds_and_state_updates();
+    test_order_get_set_roundtrip();
     test_rom_raw_guardrails();
     test_test_input_mode_status_and_validation();
     test_test_output_mode_status_and_validation();

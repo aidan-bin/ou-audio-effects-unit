@@ -37,6 +37,7 @@ typedef struct
 bool effect_is_valid(Effect effect);
 void effects_state_set_default_order(EffectsState *state);
 bool effects_state_order_valid(const EffectsState *state);
+bool effects_state_set_order(EffectsState *state, const Effect *order, size_t count);
 void effects_state_normalize(EffectsState *state);
 bool effects_state_get_active_effect(const EffectsState *state, Effect *active_effect);
 size_t map_adc_to_param(uint32_t adc_value, size_t min, size_t max, uint32_t adc_max);
