@@ -7,19 +7,12 @@ int effects_pipeline_init(EffectsPipeline *pipeline)
         return -1;
     }
 
-    if (effect_handle_init(&pipeline->overdrive, EFFECT_TYPE_OVERDRIVE) != 0)
+    for (int i = 0; i < NUM_EFFECTS; i++)
     {
-        return -1;
-    }
-
-    if (effect_handle_init(&pipeline->echo, EFFECT_TYPE_ECHO) != 0)
-    {
-        return -1;
-    }
-
-    if (effect_handle_init(&pipeline->compression, EFFECT_TYPE_COMPRESSION) != 0)
-    {
-        return -1;
+        if (effect_handle_init(&pipeline->handles[i], (EffectType)i) != 0)
+        {
+            return -1;
+        }
     }
 
     return 0;
@@ -32,19 +25,13 @@ int effects_pipeline_sync_params(EffectsPipeline *pipeline, const EffectsParams 
         return -1;
     }
 
-    if (effect_handle_set_overdrive_params(&pipeline->overdrive, &params->overdrive) != 0)
+    for (int i = 0; i < NUM_EFFECTS; i++)
     {
-        return -1;
-    }
-
-    if (effect_handle_set_echo_params(&pipeline->echo, &params->echo) != 0)
-    {
-        return -1;
-    }
-
-    if (effect_handle_set_compression_params(&pipeline->compression, &params->compression) != 0)
-    {
-        return -1;
+        if (effect_handle_set_params(&pipeline->handles[i],
+                                     effects_params_value_for(params, (Effect)i)) != 0)
+        {
+            return -1;
+        }
     }
 
     return 0;
@@ -53,22 +40,12 @@ int effects_pipeline_sync_params(EffectsPipeline *pipeline, const EffectsParams 
 int effects_pipeline_process(const EffectsPipeline *pipeline, Effect effect, const uint16_t *in_buf,
                              uint16_t *out_buf, size_t num_samples)
 {
-    if (pipeline == NULL)
+    if (pipeline == NULL || !effect_is_valid(effect))
     {
         return -1;
     }
 
-    switch (effect)
-    {
-    case OVERDRIVE:
-        return effect_handle_process(&pipeline->overdrive, in_buf, out_buf, num_samples);
-    case ECHO:
-        return effect_handle_process(&pipeline->echo, in_buf, out_buf, num_samples);
-    case COMPRESSION:
-        return effect_handle_process(&pipeline->compression, in_buf, out_buf, num_samples);
-    default:
-        return -1;
-    }
+    return effect_handle_process(&pipeline->handles[effect], in_buf, out_buf, num_samples);
 }
 
 int effects_pipeline_get_echo_delay_samples(const EffectsPipeline *pipeline, size_t *delay_samples)
@@ -78,7 +55,7 @@ int effects_pipeline_get_echo_delay_samples(const EffectsPipeline *pipeline, siz
         return -1;
     }
 
-    return effect_handle_get_echo_delay_samples(&pipeline->echo, delay_samples);
+    return effect_handle_get_echo_delay_samples(&pipeline->handles[ECHO], delay_samples);
 }
 
 int effects_pipeline_attach_echo_state(EffectsPipeline *pipeline, EchoState *state)
@@ -88,7 +65,7 @@ int effects_pipeline_attach_echo_state(EffectsPipeline *pipeline, EchoState *sta
         return -1;
     }
 
-    return effect_handle_attach_echo_state(&pipeline->echo, state);
+    return effect_handle_attach_echo_state(&pipeline->handles[ECHO], state);
 }
 
 int effects_pipeline_apply_enabled(EffectsPipeline *pipeline, const EffectsState *state)
@@ -98,28 +75,19 @@ int effects_pipeline_apply_enabled(EffectsPipeline *pipeline, const EffectsState
         return -1;
     }
 
-    effect_handle_set_enabled(&pipeline->overdrive, state->is_enabled[OVERDRIVE]);
-    effect_handle_set_enabled(&pipeline->echo, state->is_enabled[ECHO]);
-    effect_handle_set_enabled(&pipeline->compression, state->is_enabled[COMPRESSION]);
+    for (int i = 0; i < NUM_EFFECTS; i++)
+    {
+        effect_handle_set_enabled(&pipeline->handles[i], state->is_enabled[i]);
+    }
     return 0;
 }
 
 int effects_pipeline_reset_state(EffectsPipeline *pipeline, Effect effect)
 {
-    if (pipeline == NULL)
+    if (pipeline == NULL || !effect_is_valid(effect))
     {
         return -1;
     }
 
-    switch (effect)
-    {
-    case OVERDRIVE:
-        return effect_handle_reset_state(&pipeline->overdrive);
-    case ECHO:
-        return effect_handle_reset_state(&pipeline->echo);
-    case COMPRESSION:
-        return effect_handle_reset_state(&pipeline->compression);
-    default:
-        return -1;
-    }
+    return effect_handle_reset_state(&pipeline->handles[effect]);
 }

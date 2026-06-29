@@ -152,10 +152,42 @@ static void test_pipeline_echo_state_attach_and_reset(void)
     expect_true(cleared, "re-enable edge clears stale echo history");
 }
 
+static void test_pipeline_process_compression_and_bounds(void)
+{
+    EffectsPipeline pipeline;
+    memset(&pipeline, 0, sizeof(pipeline));
+    expect_true(effects_pipeline_init(&pipeline) == 0, "pipeline init for compression succeeds");
+
+    EffectsParams params;
+    memset(&params, 0, sizeof(params));
+    params.compression.threshold = X_AXIS / 2;
+    params.compression.ratio = 0x80;
+    expect_true(effects_pipeline_sync_params(&pipeline, &params) == 0, "sync compression params");
+
+    uint16_t input[4] = {X_AXIS - 4000, X_AXIS - 100, X_AXIS + 2000, X_AXIS + 6000};
+    uint16_t output[4] = {0};
+    uint16_t expected[4] = {0};
+
+    expect_true(effects_pipeline_process(&pipeline, COMPRESSION, input, output, 4) == 0,
+                "pipeline compression process succeeds");
+    buf_compression(input, expected, 4, &params.compression);
+    for (size_t i = 0; i < 4; i++)
+    {
+        expect_eq_u16(expected[i], output[i], "compression output matches runtime");
+    }
+
+    // Out-of-range effect index is rejected.
+    expect_true(effects_pipeline_process(&pipeline, (Effect)NUM_EFFECTS, input, output, 4) != 0,
+                "process rejects out-of-range effect");
+    expect_true(effects_pipeline_reset_state(&pipeline, (Effect)NUM_EFFECTS) != 0,
+                "reset rejects out-of-range effect");
+}
+
 int main(void)
 {
     test_pipeline_init_and_sync_params();
     test_pipeline_process_matches_runtime_helpers();
+    test_pipeline_process_compression_and_bounds();
     test_pipeline_echo_state_attach_and_reset();
 
     if (failures != 0)

@@ -106,6 +106,26 @@ int effect_instance_set_compression_params(EffectInstance *instance,
     return 0;
 }
 
+int effect_instance_set_params(EffectInstance *instance, const void *param)
+{
+    if (instance == NULL || param == NULL)
+    {
+        return -1;
+    }
+
+    switch (instance->type)
+    {
+    case EFFECT_TYPE_OVERDRIVE:
+        return effect_instance_set_overdrive_params(instance, (const OverdriveParam *)param);
+    case EFFECT_TYPE_ECHO:
+        return effect_instance_set_echo_params(instance, (const EchoParam *)param);
+    case EFFECT_TYPE_COMPRESSION:
+        return effect_instance_set_compression_params(instance, (const CompressionParam *)param);
+    default:
+        return -1;
+    }
+}
+
 int effect_instance_attach_echo_state(EffectInstance *instance, EchoState *state)
 {
     if (instance == NULL || instance->type != EFFECT_TYPE_ECHO)
@@ -257,6 +277,16 @@ int effect_handle_set_compression_params(EffectHandle *handle, const Compression
     }
 
     return effect_instance_set_compression_params(&handle->instance, param);
+}
+
+int effect_handle_set_params(EffectHandle *handle, const void *param)
+{
+    if (handle == NULL || handle->initialized == 0)
+    {
+        return -1;
+    }
+
+    return effect_instance_set_params(&handle->instance, param);
 }
 
 int effect_handle_get_echo_delay_samples(const EffectHandle *handle, size_t *delay_samples)

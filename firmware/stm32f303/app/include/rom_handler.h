@@ -8,6 +8,10 @@
 #include "effects_model.h"
 
 #define ROM_HANDLER_ADDRESS_BYTES 2
+#define ROM_STATE_MAGIC_0 'O'
+#define ROM_STATE_MAGIC_1 'U'
+#define ROM_STATE_VERSION 1
+#define ROM_STATE_HEADER_BYTES 5 /* magic(2) + version(1) + length(2) */
 
 size_t rom_handler_read_payload_size(void);
 size_t rom_handler_write_payload_size(void);

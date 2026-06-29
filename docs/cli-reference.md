@@ -85,6 +85,8 @@ EEPROM state persistence.
 - `rom read <addr> <len>` — raw hex dump (max 64 bytes)
 - `rom write <addr> <hex>` — raw hex write
 
+Note that the EEPROM tracks version/layout and rejects mismatches on load (falling back to defaults).
+
 ### log
 
 - `log enable <0|1>` — enable/disable logging

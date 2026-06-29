@@ -1,8 +1,10 @@
 #include "effects_model.h"
 
+#include <stddef.h>
+
 bool effect_is_valid(Effect effect)
 {
-    return effect >= OVERDRIVE && effect <= COMPRESSION;
+    return (int)effect >= 0 && (int)effect < NUM_EFFECTS;
 }
 
 void effects_state_set_default_order(EffectsState *state)
@@ -201,4 +203,20 @@ bool effects_params_apply_pot_sample(EffectsParams *params, Effect active_effect
     }
 
     return true;
+}
+
+static const size_t param_member_offset[NUM_EFFECTS] = {
+    [OVERDRIVE] = offsetof(EffectsParams, overdrive),
+    [ECHO] = offsetof(EffectsParams, echo),
+    [COMPRESSION] = offsetof(EffectsParams, compression),
+};
+
+const void *effects_params_value_for(const EffectsParams *params, Effect effect)
+{
+    if (params == NULL || !effect_is_valid(effect))
+    {
+        return NULL;
+    }
+
+    return (const char *)params + param_member_offset[effect];
 }

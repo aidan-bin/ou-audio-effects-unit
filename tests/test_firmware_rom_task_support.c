@@ -114,8 +114,12 @@ static void test_bootstrap_effects(void)
     expected_params.compression.threshold = 222;
 
     ctx.read_payload_size = rom_handler_read_payload_size();
-    memcpy(ctx.read_payload, &expected_state, sizeof(expected_state));
-    memcpy(&ctx.read_payload[sizeof(expected_state)], &expected_params, sizeof(expected_params));
+    uint8_t encoded[ROM_HANDLER_ADDRESS_BYTES + ROM_STATE_HEADER_BYTES +
+                    sizeof(expected_state) + sizeof(expected_params)] = {0};
+    expect_true(rom_handler_encode_write_payload(config.read_address, &expected_state,
+                                                 &expected_params, encoded, sizeof(encoded)),
+                "build versioned read payload");
+    memcpy(ctx.read_payload, &encoded[ROM_HANDLER_ADDRESS_BYTES], ctx.read_payload_size);
 
     EffectsState loaded_state = {0};
     EffectsParams loaded_params = {0};
@@ -152,8 +156,14 @@ static void test_save_effects(void)
     expect_eq_u32(1, ctx.queue_calls, "save queues once");
     expect_eq_u32(2, ctx.set_write_enable_calls, "save toggles write enable twice");
     expect_true(ctx.write_enable_state, "save leaves write enable high");
-    expect_true(memcmp(&ctx.saved_payload[2], &state, sizeof(state)) == 0, "save encodes state");
-    expect_true(memcmp(&ctx.saved_payload[2 + sizeof(state)], &params, sizeof(params)) == 0,
+
+    uint8_t *body = &ctx.saved_payload[ROM_HANDLER_ADDRESS_BYTES];
+    expect_eq_u8((uint8_t)ROM_STATE_MAGIC_0, body[0], "save writes magic0");
+    expect_eq_u8((uint8_t)ROM_STATE_MAGIC_1, body[1], "save writes magic1");
+    expect_eq_u8((uint8_t)ROM_STATE_VERSION, body[2], "save writes version");
+    expect_true(memcmp(&body[ROM_STATE_HEADER_BYTES], &state, sizeof(state)) == 0,
+                "save encodes state");
+    expect_true(memcmp(&body[ROM_STATE_HEADER_BYTES + sizeof(state)], &params, sizeof(params)) == 0,
                 "save encodes params");
 }
 

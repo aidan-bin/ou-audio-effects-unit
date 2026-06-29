@@ -9,9 +9,7 @@
 
 typedef struct
 {
-    EffectHandle overdrive;
-    EffectHandle echo;
-    EffectHandle compression;
+    EffectHandle handles[NUM_EFFECTS];
 } EffectsPipeline;
 
 int effects_pipeline_init(EffectsPipeline *pipeline);

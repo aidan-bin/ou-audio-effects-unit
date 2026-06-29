@@ -204,6 +204,31 @@ static void test_set_order_rejects_invalid_and_keeps_state(void)
     expect_eq_u8(COMPRESSION, state.ordered[2], "set order unchanged[2]");
 }
 
+static void test_effect_is_valid_boundaries(void)
+{
+    expect_true(effect_is_valid(OVERDRIVE), "OVERDRIVE valid");
+    expect_true(effect_is_valid(COMPRESSION), "COMPRESSION valid");
+    expect_false(effect_is_valid((Effect)-1), "negative effect invalid");
+    expect_false(effect_is_valid((Effect)NUM_EFFECTS), "NUM_EFFECTS out of range");
+}
+
+static void test_effects_params_value_for_points_at_members(void)
+{
+    EffectsParams params;
+    memset(&params, 0, sizeof(params));
+
+    expect_true(effects_params_value_for(&params, OVERDRIVE) == (const void *)&params.overdrive,
+                "value_for overdrive");
+    expect_true(effects_params_value_for(&params, ECHO) == (const void *)&params.echo,
+                "value_for echo");
+    expect_true(
+        effects_params_value_for(&params, COMPRESSION) == (const void *)&params.compression,
+        "value_for compression");
+    expect_true(effects_params_value_for(&params, (Effect)99) == NULL,
+                "value_for invalid effect is NULL");
+    expect_true(effects_params_value_for(NULL, OVERDRIVE) == NULL, "value_for NULL params");
+}
+
 int main(void)
 {
     test_effects_state_order_valid_default_order();
@@ -212,6 +237,8 @@ int main(void)
     test_effects_state_get_active_effect_after_normalize();
     test_set_order_applies_valid_permutation();
     test_set_order_rejects_invalid_and_keeps_state();
+    test_effect_is_valid_boundaries();
+    test_effects_params_value_for_points_at_members();
     test_map_adc_to_param_zero_adcmax_returns_min();
     test_map_adc_to_param_swaps_inverted_bounds();
     test_map_adc_to_param_clamps_adc_input();

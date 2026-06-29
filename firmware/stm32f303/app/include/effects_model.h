@@ -48,4 +48,7 @@ void effects_state_apply_switches(EffectsState *state, bool switch_a_enabled, bo
 bool effects_params_apply_pot_sample(EffectsParams *params, Effect active_effect, uint8_t pot_index,
                                      uint32_t adc_value, uint32_t adc_max);
 
+
+const void *effects_params_value_for(const EffectsParams *params, Effect effect);
+
 #endif
