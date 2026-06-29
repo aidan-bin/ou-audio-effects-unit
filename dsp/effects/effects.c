@@ -3,7 +3,7 @@
 
 #include <string.h>
 
-static int32_t saturate_amplitude(int32_t num, size_t max);
+static int32_t saturate_i32(int64_t v);
 static int32_t saturate_min(int32_t num, int32_t min);
 static uint16_t saturate_u16(int32_t num);
 
@@ -19,15 +19,16 @@ void buf_overdrive(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples
     size_t gain = clamp_qn(param->gain);
     size_t tone = clamp_range(param->tone, MIN_OVERDRIVE_TONE, MAX_OVERDRIVE_TONE);
     size_t mix = clamp_qn(param->mix);
-    size_t dry_amount = (1U << FIXED_POINT_Q) - mix;
+    size_t dry_amount = QN_ONE - mix;
 
     for (size_t n = 0; n < num_samples; n++)
     {
         int32_t input = (int32_t)in_buf[n] - X_AXIS;
         int32_t output;
 
-        output =
-            (int32_t)level * q_tanh((int16_t)saturate_amplitude((int32_t)tone * input, INT16_MAX));
+        // Make sure q_tanh arg does not overflow for larger N
+        int64_t drive = (int64_t)tone * input;
+        output = (int32_t)level * q_tanh(saturate_i32(drive));
         output = (int32_t)gain * ((int32_t)mix * output >> FIXED_POINT_Q) >> FIXED_POINT_Q;
         output += (int32_t)dry_amount * input;
 
@@ -64,7 +65,7 @@ void buf_echo_ring(const uint16_t *ring, size_t ring_len, size_t start_idx, uint
         return;
     }
 
-    size_t echo_spacing = (1U << FIXED_POINT_Q) / density;
+    size_t echo_spacing = QN_ONE / density;
     if (echo_spacing == 0)
     {
         echo_spacing = 1;
@@ -125,7 +126,7 @@ void buf_echo_feedback(EchoFeedback *fb, const uint16_t *in_buf, uint16_t *out_b
 
     size_t damping = clamp_range(param->damping, 0, MAX_ECHO_DAMPING);
     size_t fb_delay = clamp_range(param->feedback_delay, 1, fb->line_len);
-    int32_t lpf_coeff = (int32_t)((1U << FIXED_POINT_Q) - damping);
+    int32_t lpf_coeff = (int32_t)(QN_ONE - damping);
 
     for (size_t n = 0; n < num_samples; n++)
     {
@@ -190,7 +191,7 @@ void buf_compression(const uint16_t *in_buf, uint16_t *out_buf, size_t num_sampl
     int32_t threshold = (int32_t)clamp_range(param->threshold, 0, X_AXIS);
     int32_t ratio = (int32_t)clamp_qn(param->ratio);
 
-    ratio = (1 << FIXED_POINT_Q) - ratio;
+    ratio = (int32_t)QN_ONE - ratio;
 
     for (size_t n = 0; n < num_samples; n++)
     {
@@ -213,14 +214,14 @@ void buf_compression(const uint16_t *in_buf, uint16_t *out_buf, size_t num_sampl
     }
 }
 
-static int32_t saturate_amplitude(int32_t num, size_t max)
+static int32_t saturate_i32(int64_t v)
 {
-    if (num > (int32_t)max)
-        return (int32_t)max;
-    else if (num < (int32_t)-max)
-        return -(int32_t)max;
+    if (v > INT32_MAX)
+        return INT32_MAX;
+    else if (v < INT32_MIN)
+        return INT32_MIN;
     else
-        return num;
+        return (int32_t)v;
 }
 
 static int32_t saturate_min(int32_t num, int32_t min)

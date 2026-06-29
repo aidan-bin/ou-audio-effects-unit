@@ -65,6 +65,15 @@ static inline void expect_eq_i16(int16_t expected, int16_t actual, const char *l
     }
 }
 
+static inline void expect_eq_i32(int32_t expected, int32_t actual, const char *label)
+{
+    if (expected != actual)
+    {
+        fprintf(stderr, "FAIL: %s expected=%d actual=%d\n", label, expected, actual);
+        failures++;
+    }
+}
+
 static inline void expect_eq_u16_array(const uint16_t *expected, const uint16_t *actual,
                                        size_t count, const char *label)
 {

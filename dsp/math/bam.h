@@ -19,10 +19,6 @@ typedef uint16_t ubam_t; // Unsigned BAM type [0,360)
 
 #define BAM_PLUS_180_DEG(angle) ((angle) ^ BAM_180_DEG)
 
-#ifndef FIXED_POINT_Q
-#define FIXED_POINT_Q 8 // N in QN for fixed-point numbers
-#endif
-
 float bam_to_float_deg(bam_t angle);   // BAM angle to float degrees
 float ubam_to_float_deg(ubam_t angle); // UBAM angle to float degrees
 bam_t float_deg_to_bam(float angle);   // Float degrees to BAM angle

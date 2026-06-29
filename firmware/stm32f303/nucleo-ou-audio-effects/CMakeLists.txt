@@ -96,6 +96,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
 
 # Add project symbols (macros)
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
+    FIXED_POINT_Q=8
     INCLUDE_WAV_LUT
     SYSINFO_BOARD="nucleo-f303re"
     SYSINFO_MCU="stm32f303re"

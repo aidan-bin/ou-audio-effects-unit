@@ -10,12 +10,10 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#include "fixed_point.h"
+
 /* Data convention definitions */
 #define X_AXIS (UINT16_MAX / 2) // x-axis is the median representable signal
-
-#ifndef FIXED_POINT_Q
-#define FIXED_POINT_Q 8 // N in QN for fixed-point numbers
-#endif
 
 /* Effects parameters */
 typedef struct
@@ -27,12 +25,12 @@ typedef struct
     size_t mix;   // Wet/dry ratio in QN (0.0 = fully dry, 0.5 = equally wet and dry, 1.0 = fully wet)
 } OverdriveParam;
 
-#define MAX_OVERDRIVE_GAIN (1U << FIXED_POINT_Q) // Max gain is 1.0
-#define MAX_OVERDRIVE_LEVEL INT16_MAX            // Cannot exceed INT16_MAX
-#define MIN_OVERDRIVE_TONE (1U << FIXED_POINT_Q) // Min tone is 1.0 (below this inverts the signal)
+#define MAX_OVERDRIVE_GAIN QN_ONE      // Max gain is 1.0
+#define MAX_OVERDRIVE_LEVEL INT16_MAX  // Cannot exceed INT16_MAX
+#define MIN_OVERDRIVE_TONE QN_ONE      // Min tone is 1.0 (below this inverts the signal)
 #define MAX_OVERDRIVE_TONE \
-    (5U << FIXED_POINT_Q)                       // Note: 5.0 is somewhat arbitrary (should be calibrated as desired)
-#define MAX_OVERDRIVE_MIX (1U << FIXED_POINT_Q) // Max mix is 1.0 (equivalent to fully wet)
+    (5u * QN_ONE)                      // Note: 5.0 is somewhat arbitrary (should be calibrated as desired)
+#define MAX_OVERDRIVE_MIX QN_ONE       // Max mix is 1.0 (equivalent to fully wet)
 
 typedef struct
 {
@@ -54,14 +52,14 @@ typedef struct
 #define MAX_ECHO_PRE_DELAY \
     MAX_ECHO_DELAY_SAMPLES                     // Max delay before first echo is until end of delay samples (equivalent
                                                // to a single echo)
-#define MAX_ECHO_DENSITY (1U << FIXED_POINT_Q) // Cannot exceed 1 echo per sample
-#define MAX_ECHO_ATTACK (1U << FIXED_POINT_Q)  // Max gain is 1.0 (equivalent to dry signal)
+#define MAX_ECHO_DENSITY QN_ONE // Cannot exceed 1 echo per sample
+#define MAX_ECHO_ATTACK QN_ONE  // Max gain is 1.0 (equivalent to dry signal)
 #define MAX_ECHO_DECAY \
-    (1U << FIXED_POINT_Q) // Max gain reduction is 1.0 (equivalent to a single echo)
+    QN_ONE // Max gain reduction is 1.0 (equivalent to a single echo)
 
-#define MAX_ECHO_FEEDBACK ((1U << FIXED_POINT_Q) - ((1U << FIXED_POINT_Q) / 20U)) // ~0.95 in QN
-#define MAX_ECHO_FEEDBACK_DELAY 8000                                              // ~196 ms @ 40.5 kHz
-#define MAX_ECHO_DAMPING ((1U << FIXED_POINT_Q) - 1U)
+#define MAX_ECHO_FEEDBACK (QN_ONE - (QN_ONE / 20u)) // ~0.95 in QN
+#define MAX_ECHO_FEEDBACK_DELAY 8000                // ~196 ms @ 40.5 kHz
+#define MAX_ECHO_DAMPING (QN_ONE - 1u)
 
 typedef struct
 {
@@ -91,7 +89,7 @@ typedef struct
 
 #define MAX_COMPRESSION_THRESHOLD X_AXIS
 #define MAX_COMPRESSION_RATIO \
-    (1U << FIXED_POINT_Q) // Max gain reduction is 1.0 (equivalent to clipping)
+    QN_ONE // Max gain reduction is 1.0 (equivalent to clipping)
 
 /* Effects function definitions */
 void buf_overdrive(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples,

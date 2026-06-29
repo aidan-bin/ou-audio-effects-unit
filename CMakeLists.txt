@@ -127,6 +127,7 @@ target_include_directories(ou_firmware_app
     PUBLIC
         ${OU_FIRMWARE_APP_INCLUDE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/dsp/effects
+        ${CMAKE_CURRENT_SOURCE_DIR}/dsp/math
 )
 
 target_link_libraries(ou_firmware_app PRIVATE ou_dsp)

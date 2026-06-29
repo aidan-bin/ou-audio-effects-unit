@@ -1,19 +1,19 @@
 #include "fast_math.h"
 #include <math.h>
 
-#define Q_ONE (1 << FIXED_POINT_Q)
+#define Q_ONE ((int32_t)1 << FIXED_POINT_Q)
 
-// Clamp point where tanh saturates to +/-1.0 in QA.
-#define TANH_CLAMP_POINT ((int16_t)(3 * Q_ONE))
+// Clamp point where tanh saturates to +/-1.0 in QN.
+#define TANH_CLAMP_POINT ((int32_t)(3 * Q_ONE))
 
 #define TANH_COEFF_A1 10
 #define TANH_COEFF_A2 105
 #define TANH_COEFF_B1 45
 #define TANH_COEFF_B2 105
 
-int16_t q_tanh(int16_t x)
+int32_t q_tanh(int32_t x)
 {
-    // x and return value are QA fixed-point values.
+    // x and return value are QN fixed-point values.
     // Approximation from a truncated Lambert continued-fraction form.
     if (x < -TANH_CLAMP_POINT)
         return -Q_ONE;
@@ -28,7 +28,7 @@ int16_t q_tanh(int16_t x)
     int64_t b = ((x_squared * x_squared) >> FIXED_POINT_Q) + (TANH_COEFF_B1 * x_squared) +
                 ((int64_t)TANH_COEFF_B2 << FIXED_POINT_Q);
 
-    return (int16_t)((a << FIXED_POINT_Q) / b);
+    return (int32_t)((a << FIXED_POINT_Q) / b);
 }
 
 size_t clamp_range(size_t value, size_t min, size_t max)
@@ -48,7 +48,7 @@ size_t clamp_range(size_t value, size_t min, size_t max)
 
 size_t clamp_qn(size_t value)
 {
-    return clamp_range(value, 0, (1U << FIXED_POINT_Q));
+    return clamp_range(value, 0, QN_ONE);
 }
 
 size_t clamp_min(size_t value, size_t min)
