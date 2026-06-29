@@ -35,6 +35,11 @@ void buf_overdrive(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples
     }
 }
 
+/* Buffered echo:
+ * - Echo with maximum delay of (MAX_DELAY_SAMPLES / sample rate); equivalent to FIR.
+ * - Uses ring buffer for multi-tap delay line.
+ * - Useful for discrete early reflections, but cannot produce a long tail.
+ */
 void buf_echo_ring(const uint16_t *ring, size_t ring_len, size_t start_idx, uint16_t *out_buf,
                    size_t num_samples, const EchoParam *param)
 {
@@ -86,6 +91,7 @@ void buf_echo_ring(const uint16_t *ring, size_t ring_len, size_t start_idx, uint
     }
 }
 
+/* Wrapper for buf_echo_ring with contiguous input buffer (special case where no modular indexing is used) */
 void buf_echo(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples,
               const EchoParam *param)
 {
@@ -97,6 +103,11 @@ void buf_echo(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples,
     buf_echo_ring(in_buf, param->delay_samples + num_samples, 0, out_buf, num_samples, param);
 }
 
+/* Buffered echo with feedback:
+ * - Echo with feedback path (recirculating reflections); equivalent to comb IIR.
+ * - Uses one-pole low-pass filter in feedback path for damping.
+ * - Useful for long tails.
+ */
 void buf_echo_feedback(EchoFeedback *fb, const uint16_t *in_buf, uint16_t *out_buf,
                        size_t num_samples, const EchoParam *param)
 {

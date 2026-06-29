@@ -101,6 +101,8 @@ static volatile EffectsParams effects_params;
 
 static volatile uint16_t adc_buf[ADC_BUF_LEN] = {0};
 static volatile uint16_t dac_buf[DAC_BUF_LEN] = {0};
+
+/* Feedback for echo; stored in CCM RAM since DMA is not needed. */
 #define ECHO_HISTORY_LEN (NUM_DELAY_SAMPLES + SAMPLE_BUF_LEN)
 static uint16_t echo_history_buf[ECHO_HISTORY_LEN];
 __attribute__((section(".ccmram"))) static uint16_t echo_fb_line[MAX_ECHO_FEEDBACK_DELAY];
@@ -906,8 +908,7 @@ void startEffectsTask(void const *argument)
         vTaskDelete(NULL);
         return;
     }
-
-
+    
     for (;;)
     {
         bool step_ok = effects_task_step(&task_context, &task_ops);

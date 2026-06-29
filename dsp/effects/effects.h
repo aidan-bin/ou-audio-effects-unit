@@ -44,9 +44,9 @@ typedef struct
     size_t attack;        // Gain on first echo in QN (subsequent echoes have lower gain)
     size_t decay;         // Amount of gain reduction per subsequent echo in QN (will saturate to 0 gain)
 
-    size_t feedback;
-    size_t feedback_delay;
-    size_t damping;
+    size_t feedback;       // Recirculation gain in QN (determines tail length); strictly < 1.0; 0 disables feedback
+    size_t feedback_delay; // Feedback delay-line length in samples (echo spacing of the tail)
+    size_t damping;        // One-pole low-pass amount in QN applied in the feedback path
 } EchoParam;
 
 #define MAX_ECHO_DELAY_SAMPLES 2207 // Note: At 40.54 kHz, 50 ms is 2027 samples
@@ -59,8 +59,8 @@ typedef struct
 #define MAX_ECHO_DECAY \
     (1U << FIXED_POINT_Q) // Max gain reduction is 1.0 (equivalent to a single echo)
 
-#define MAX_ECHO_FEEDBACK ((1U << FIXED_POINT_Q) - ((1U << FIXED_POINT_Q) / 20U))
-#define MAX_ECHO_FEEDBACK_DELAY 8000
+#define MAX_ECHO_FEEDBACK ((1U << FIXED_POINT_Q) - ((1U << FIXED_POINT_Q) / 20U)) // ~0.95 in QN
+#define MAX_ECHO_FEEDBACK_DELAY 8000                                              // ~196 ms @ 40.5 kHz
 #define MAX_ECHO_DAMPING ((1U << FIXED_POINT_Q) - 1U)
 
 typedef struct
@@ -68,14 +68,15 @@ typedef struct
     uint16_t *line;
     size_t line_len;
     size_t write_idx;
-    int32_t lpf_state;
+    int32_t lpf_state;   // Persistent one-pole damping accumulator (centered on 0)
+    int prev_enabled;
 } EchoFeedback;
 
 typedef struct
 {
-    uint16_t *history;
-    size_t history_len;
-    size_t history_w;
+    uint16_t *history;   // Multi-tap delay-line ring
+    size_t history_len;  // Capacity in samples; must be >= MAX_ECHO_DELAY_SAMPLES + frame size
+    size_t history_w;    // Persistent ring write position
     EchoFeedback fb;
     int prev_enabled;
 } EchoState;
