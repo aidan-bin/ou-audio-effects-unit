@@ -745,11 +745,7 @@ static void init_effects_defaults(void)
     (void)memset((void *)&effects_state, 0, sizeof(effects_state));
     (void)memset((void *)&effects_params, 0, sizeof(effects_params));
 
-    effects_state_set_default_order((EffectsState *)&effects_state);
-    effects_state.active_effect_selection = 0;
-    effects_state.is_enabled[OVERDRIVE] = true;
-    effects_state.is_enabled[ECHO] = false;
-    effects_state.is_enabled[COMPRESSION] = false;
+    effects_state_set_default_slots((EffectsState *)&effects_state);
 
     effects_params.overdrive.gain = MAX_OVERDRIVE_GAIN;
     effects_params.overdrive.level = MAX_OVERDRIVE_LEVEL;

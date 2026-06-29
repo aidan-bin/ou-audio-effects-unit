@@ -23,9 +23,9 @@ static void test_encode_address_big_endian(void)
 static void test_encode_write_and_decode_round_trip(void)
 {
     EffectsState state = {
-        .ordered = {ECHO, COMPRESSION, OVERDRIVE},
-        .is_enabled = {true, false, true},
-        .active_effect_selection = 2,
+        .slots = {ECHO, COMPRESSION, OVERDRIVE, EFFECT_ID_NONE},
+        .slot_enabled = {true, false, true, false},
+        .active_slot = 2,
     };
 
     EffectsParams params;
@@ -50,10 +50,11 @@ static void test_encode_write_and_decode_round_trip(void)
                                                 &decoded_state, &decoded_params),
                 "decode read payload success");
 
-    expect_true(decoded_state.ordered[0] == ECHO, "decode ordered[0]");
-    expect_true(decoded_state.ordered[1] == COMPRESSION, "decode ordered[1]");
-    expect_true(decoded_state.ordered[2] == OVERDRIVE, "decode ordered[2]");
-    expect_true(decoded_state.active_effect_selection == 2, "decode selection");
+    expect_true(decoded_state.slots[0] == ECHO, "decode slots[0]");
+    expect_true(decoded_state.slots[1] == COMPRESSION, "decode slots[1]");
+    expect_true(decoded_state.slots[2] == OVERDRIVE, "decode slots[2]");
+    expect_true(decoded_state.slots[3] == EFFECT_ID_NONE, "decode slots[3] empty");
+    expect_true(decoded_state.active_slot == 2, "decode active slot");
 
     expect_true(decoded_params.overdrive.level == 111, "decode overdrive level");
     expect_true(decoded_params.echo.attack == 222, "decode echo attack");
@@ -63,9 +64,9 @@ static void test_encode_write_and_decode_round_trip(void)
 static void test_decode_rejects_bad_header(void)
 {
     EffectsState state = {
-        .ordered = {OVERDRIVE, ECHO, COMPRESSION},
-        .is_enabled = {true, false, true},
-        .active_effect_selection = 0,
+        .slots = {OVERDRIVE, ECHO, COMPRESSION, EFFECT_ID_NONE},
+        .slot_enabled = {true, false, true, false},
+        .active_slot = 0,
     };
     EffectsParams params;
     memset(&params, 0, sizeof(params));

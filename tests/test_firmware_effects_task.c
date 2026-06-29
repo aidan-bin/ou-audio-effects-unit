@@ -263,9 +263,7 @@ static void test_effects_task_happy_path_matches_pipeline(void)
     ops_state.adc_buffer_to_return = adc_a;
     ops_state.dac_buffer_to_return = dac_a;
 
-    effects_state_set_default_order(&ops_state.latched_state);
-    memset(ops_state.latched_state.is_enabled, 0, sizeof(ops_state.latched_state.is_enabled));
-    ops_state.latched_state.is_enabled[OVERDRIVE] = true;
+    effects_state_set_default_slots(&ops_state.latched_state);
 
     memset(&ops_state.latched_params, 0, sizeof(ops_state.latched_params));
     set_overdrive_params(&ops_state.latched_params);
@@ -320,7 +318,7 @@ static void test_effects_task_rejects_stray_adc_notification(void)
     ops_state.adc_buffer_to_return = stray;
     ops_state.dac_buffer_to_return = dac_a;
 
-    effects_state_set_default_order(&ops_state.latched_state);
+    effects_state_set_default_slots(&ops_state.latched_state);
     memset(&ops_state.latched_params, 0, sizeof(ops_state.latched_params));
 
     EffectsTaskOps ops = make_ops(&ops_state);
@@ -351,9 +349,7 @@ static void test_effects_task_timing_callbacks_fire(void)
     ops_state.adc_buffer_to_return = adc_a;
     ops_state.dac_buffer_to_return = dac_a;
     ops_state.mock_timestamp_us = 1000;
-    effects_state_set_default_order(&ops_state.latched_state);
-    memset(ops_state.latched_state.is_enabled, 0, sizeof(ops_state.latched_state.is_enabled));
-    ops_state.latched_state.is_enabled[OVERDRIVE] = true;
+    effects_state_set_default_slots(&ops_state.latched_state);
     memset(&ops_state.latched_params, 0, sizeof(ops_state.latched_params));
     set_overdrive_params(&ops_state.latched_params);
 
@@ -393,8 +389,8 @@ static void test_effects_task_output_replacement_overwrites_dac_buffer(void)
     ops_state.adc_buffer_to_return = adc_a;
     ops_state.dac_buffer_to_return = dac_a;
 
-    effects_state_set_default_order(&ops_state.latched_state);
-    memset(ops_state.latched_state.is_enabled, 0, sizeof(ops_state.latched_state.is_enabled));
+    effects_state_set_default_slots(&ops_state.latched_state);
+    memset(ops_state.latched_state.slot_enabled, 0, sizeof(ops_state.latched_state.slot_enabled));
     memset(&ops_state.latched_params, 0, sizeof(ops_state.latched_params));
 
     EffectsTaskOps ops = make_ops(&ops_state);
@@ -432,7 +428,7 @@ static void test_effects_task_reports_failure_when_test_replace_fails(void)
     ops_state.adc_buffer_to_return = adc_a;
     ops_state.dac_buffer_to_return = dac_a;
 
-    effects_state_set_default_order(&ops_state.latched_state);
+    effects_state_set_default_slots(&ops_state.latched_state);
     memset(&ops_state.latched_params, 0, sizeof(ops_state.latched_params));
 
     EffectsTaskOps ops = make_ops(&ops_state);
@@ -471,9 +467,7 @@ static void test_effects_task_uses_matching_dac_buffer_when_wait_times_out(void)
     ops_state.adc_buffer_to_return = adc_b;
     ops_state.dac_buffer_to_return = dac_a;
 
-    effects_state_set_default_order(&ops_state.latched_state);
-    memset(ops_state.latched_state.is_enabled, 0, sizeof(ops_state.latched_state.is_enabled));
-    ops_state.latched_state.is_enabled[OVERDRIVE] = true;
+    effects_state_set_default_slots(&ops_state.latched_state);
 
     memset(&ops_state.latched_params, 0, sizeof(ops_state.latched_params));
     set_overdrive_params(&ops_state.latched_params);
@@ -524,9 +518,9 @@ static void test_effects_task_echo_processes_via_pipeline(void)
     ops_state.adc_buffer_to_return = adc_a;
     ops_state.dac_buffer_to_return = dac_a;
 
-    effects_state_set_default_order(&ops_state.latched_state);
-    memset(ops_state.latched_state.is_enabled, 0, sizeof(ops_state.latched_state.is_enabled));
-    ops_state.latched_state.is_enabled[ECHO] = true;
+    effects_state_set_default_slots(&ops_state.latched_state);
+    ops_state.latched_state.slot_enabled[0] = false;
+    ops_state.latched_state.slot_enabled[1] = true;
 
     memset(&ops_state.latched_params, 0, sizeof(ops_state.latched_params));
     ops_state.latched_params.echo.delay_samples = 4;

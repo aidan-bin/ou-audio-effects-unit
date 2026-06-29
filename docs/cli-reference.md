@@ -51,30 +51,31 @@ Q8 fixed-point where noted: `256 = 1.0`.
 - `compression.threshold` — amplitude threshold, range 0–32767, default **32767**
 - `compression.ratio` — gain reduction amount (Q8; 0 = off, 256 = hard clip), range 0–256, default **0**
 
-#### State
-
-- `state.active_effect` — 0=overdrive, 1=echo, 2=compression, default **0**
-- `state.enable.overdrive` — 0/1, default **1**
-- `state.enable.echo` — 0/1, default **0**
-- `state.enable.compression` — 0/1, default **0**
-
 #### Runtime
 
 - `heartbeat.period_ms` — LED toggle period ms, range 50–5000, default **500**
 - `system.heartbeat_ms` — alias for `heartbeat.period_ms`
 
-### order
+### slot
 
-Get or change the order of the effects chain. Effects are referenced by name (e.g., `overdrive`, `echo`, `compression`). The default chain is `overdrive echo compression`.
+The effects chain is a set of slots (`NUM_SLOTS`, default 4) that is separate from the catalog of effect *types*. Each slot is empty or holds one effect (one instance per effect type); the chain runs the assigned, enabled slots in order.
 
-- `order get` — print the current chain
-- `order set <e1> <e2> <e3>` — set the full chain order (must be a permutation of all effects; duplicates, unknown names, or a wrong count are rejected)
-- `order swap <a> <b>` — swap the positions of two effects
-- `order move <effect> <pos>` — move an effect to 0-indexed position `pos`, shifting the rest
+- `slot [get]` — list slots, e.g. `slots 0=overdrive(on) 1=echo(off) 2=compression(off) 3=empty`
+- `slot set <pos> <effect>` — assign an effect to a slot; if it is already in another slot it is moved (one instance per effect)
+- `slot clear <pos>` — empty a slot
+- `slot swap <a> <b>` — swap two slots (assignment and enable move together)
+- `slot enable <pos> <0|1>` — enable/disable a slot from the CLI; authoritative for slots with no physical switch (switch-backed slots 0–2 are re-driven by the switch each poll — use `override switch` to force those)
+- `slot active [<pos>]` — get or set the active slot (the one the pots edit); prints `active slot <pos> <effect|empty>`
 
-The order is part of the persisted state, so `rom save-state` (and the periodic auto-save) retain it across reboot.
+Slot assignment and enables are persisted state, so `rom save-state` (and the periodic auto-save) retain them across reboot.
 
-Note that the control mapping is *positional*: switches and pots bind to the active effect (`state.active_effect`) at a given position in the chain, not to a fixed effect. Re-ordering therefore changes which effect each switch and pot controls.
+The control mapping is *positional*: switches bind to slot positions, and the pots edit the effect in the active slot (`slot active`), not a fixed effect. Re-ordering/re-assigning therefore changes which effect each switch and pot controls.
+
+### effects
+
+- `effects` — list the catalog of effect types and where each is assigned, e.g. `effects overdrive@0 echo(unassigned) compression@2`
+
+To enable an effect: assign it to a slot (`slot set <pos> <effect>`), then enable it — a switch for slots 0–2, or `slot enable <pos> 1` for a CLI-only slot.
 
 ### rom
 

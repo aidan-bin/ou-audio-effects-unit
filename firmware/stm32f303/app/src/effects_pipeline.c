@@ -77,7 +77,8 @@ int effects_pipeline_apply_enabled(EffectsPipeline *pipeline, const EffectsState
 
     for (int i = 0; i < NUM_EFFECTS; i++)
     {
-        effect_handle_set_enabled(&pipeline->handles[i], state->is_enabled[i]);
+        effect_handle_set_enabled(&pipeline->handles[i],
+                                  effects_state_effect_enabled(state, (Effect)i));
     }
     return 0;
 }

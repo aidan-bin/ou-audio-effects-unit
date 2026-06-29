@@ -7,7 +7,8 @@
 #include "sysinfo.h"
 
 #define CONFIG_LINE_BUF_SIZE 48
-#define ORDER_LINE_BUF_SIZE 64
+#define SLOT_LINE_BUF_SIZE 128
+#define CLI_SLOT_EMPTY 0xFFu
 #define LOG_LINE_BUF_SIZE 128
 #define LOG_STREAM_BATCH_MAX 255
 #define TEST_STATUS_LINE_BUF_SIZE 112
@@ -136,7 +137,7 @@ static const char *command_help_text(const char *command)
 {
     if (command == NULL)
     {
-        return "commands: help ping override config order rom log audio test i2c reboot info sysinfo\n";
+        return "commands: help ping override config slot effects rom log audio test i2c reboot info sysinfo\n";
     }
 
     if (strcmp(command, "help") == 0)
@@ -155,9 +156,13 @@ static const char *command_help_text(const char *command)
     {
         return "config set|get <key> [value]\n";
     }
-    if (strcmp(command, "order") == 0)
+    if (strcmp(command, "slot") == 0)
     {
-        return "order get | set <effect...> | swap <a> <b> | move <effect> <pos>\n";
+        return "slot [get] | set <pos> <effect> | clear <pos> | swap <a> <b> | enable <pos> <0|1> | active [<pos>]\n";
+    }
+    if (strcmp(command, "effects") == 0)
+    {
+        return "effects (list catalog + slot assignment)\n";
     }
     if (strcmp(command, "rom") == 0)
     {
@@ -432,68 +437,83 @@ static CliStatus handle_config(char **tokens,
     return CLI_STATUS_UNKNOWN_COMMAND;
 }
 
-static CliStatus order_print(const CliServices *services, const CliIo *io)
+static CliStatus slot_print(const char *prefix, const CliServices *services, const CliIo *io)
 {
-    uint8_t order[CLI_PARSE_MAX_TOKENS] = {0};
+    uint8_t slots[CLI_PARSE_MAX_TOKENS] = {0};
+    uint8_t enabled[CLI_PARSE_MAX_TOKENS] = {0};
     size_t count = 0;
-    if (!services->order_get(order, sizeof(order), &count, services->context))
+    if (!services->slot_get(slots, enabled, sizeof(slots), &count, services->context))
     {
         return CLI_STATUS_SERVICE_ERROR;
     }
 
-    char line[ORDER_LINE_BUF_SIZE];
-    size_t used = (size_t)snprintf(line, sizeof(line), "order");
-    for (size_t i = 0; i < count && used + 16U < sizeof(line); i++)
+    char line[SLOT_LINE_BUF_SIZE];
+    size_t used = (size_t)snprintf(line, sizeof(line), "%s", prefix);
+    for (size_t i = 0; i < count && used + 24U < sizeof(line); i++)
     {
-        used += (size_t)snprintf(&line[used], sizeof(line) - used, " %s", effect_name(order[i]));
+        if (slots[i] == CLI_SLOT_EMPTY)
+        {
+            used += (size_t)snprintf(&line[used], sizeof(line) - used, " %u=empty", (unsigned)i);
+        }
+        else
+        {
+            used += (size_t)snprintf(&line[used], sizeof(line) - used, " %u=%s(%s)", (unsigned)i,
+                                     effect_name(slots[i]), enabled[i] ? "on" : "off");
+        }
     }
     snprintf(&line[used], sizeof(line) - used, "\n");
     return write_line(io, line) ? CLI_STATUS_OK : CLI_STATUS_SERVICE_ERROR;
 }
 
-static CliStatus handle_order(char **tokens,
-                              size_t token_count,
-                              const CliServices *services,
-                              const CliIo *io,
-                              CliCommandResult *result)
+static CliStatus handle_slot(char **tokens,
+                             size_t token_count,
+                             const CliServices *services,
+                             const CliIo *io,
+                             CliCommandResult *result)
 {
     (void)result;
 
-    if (token_count < 2)
+    if (token_count == 1 || (token_count == 2 && strcmp(tokens[1], "get") == 0))
     {
-        return CLI_STATUS_INVALID_ARGUMENTS;
-    }
-
-    if (strcmp(tokens[1], "get") == 0)
-    {
-        if (token_count != 2)
-        {
-            return CLI_STATUS_INVALID_ARGUMENTS;
-        }
-        REQUIRE_SERVICE(services->order_get);
-        return order_print(services, io);
+        REQUIRE_SERVICE(services->slot_get);
+        return slot_print("slots", services, io);
     }
 
     if (strcmp(tokens[1], "set") == 0)
     {
-        REQUIRE_SERVICE(services->order_set);
-
-        size_t count = token_count - 2;
-        if (count == 0)
+        if (token_count != 4)
         {
             return CLI_STATUS_INVALID_ARGUMENTS;
         }
+        REQUIRE_SERVICE(services->slot_assign);
 
-        uint8_t order[CLI_PARSE_MAX_TOKENS] = {0};
-        for (size_t i = 0; i < count; i++)
+        uint32_t pos = 0;
+        uint8_t effect = 0;
+        if (!parse_u32_max(tokens[2], UINT8_MAX - 1U, &pos) || !effect_id(tokens[3], &effect))
         {
-            if (!effect_id(tokens[2 + i], &order[i]))
-            {
-                return CLI_STATUS_PARSE_ERROR;
-            }
+            return CLI_STATUS_PARSE_ERROR;
         }
+        if (!services->slot_assign((uint8_t)pos, effect, services->context))
+        {
+            return CLI_STATUS_SERVICE_ERROR;
+        }
+        return CLI_STATUS_OK;
+    }
 
-        if (!services->order_set(order, count, services->context))
+    if (strcmp(tokens[1], "clear") == 0)
+    {
+        if (token_count != 3)
+        {
+            return CLI_STATUS_INVALID_ARGUMENTS;
+        }
+        REQUIRE_SERVICE(services->slot_clear);
+
+        uint32_t pos = 0;
+        if (!parse_u32_max(tokens[2], UINT8_MAX - 1U, &pos))
+        {
+            return CLI_STATUS_PARSE_ERROR;
+        }
+        if (!services->slot_clear((uint8_t)pos, services->context))
         {
             return CLI_STATUS_SERVICE_ERROR;
         }
@@ -506,115 +526,144 @@ static CliStatus handle_order(char **tokens,
         {
             return CLI_STATUS_INVALID_ARGUMENTS;
         }
-        REQUIRE_SERVICE(services->order_get);
-        REQUIRE_SERVICE(services->order_set);
+        REQUIRE_SERVICE(services->slot_swap);
 
-        uint8_t id_a = 0;
-        uint8_t id_b = 0;
-        if (!effect_id(tokens[2], &id_a) || !effect_id(tokens[3], &id_b))
+        uint32_t a = 0;
+        uint32_t b = 0;
+        if (!parse_u32_max(tokens[2], UINT8_MAX - 1U, &a) ||
+            !parse_u32_max(tokens[3], UINT8_MAX - 1U, &b))
         {
             return CLI_STATUS_PARSE_ERROR;
         }
-
-        uint8_t order[CLI_PARSE_MAX_TOKENS] = {0};
-        size_t count = 0;
-        if (!services->order_get(order, sizeof(order), &count, services->context))
-        {
-            return CLI_STATUS_SERVICE_ERROR;
-        }
-
-        size_t pos_a = count;
-        size_t pos_b = count;
-        for (size_t i = 0; i < count; i++)
-        {
-            if (order[i] == id_a)
-            {
-                pos_a = i;
-            }
-            if (order[i] == id_b)
-            {
-                pos_b = i;
-            }
-        }
-        if (pos_a == count || pos_b == count)
-        {
-            return CLI_STATUS_PARSE_ERROR;
-        }
-
-        uint8_t temp = order[pos_a];
-        order[pos_a] = order[pos_b];
-        order[pos_b] = temp;
-
-        if (!services->order_set(order, count, services->context))
+        if (!services->slot_swap((uint8_t)a, (uint8_t)b, services->context))
         {
             return CLI_STATUS_SERVICE_ERROR;
         }
         return CLI_STATUS_OK;
     }
 
-    if (strcmp(tokens[1], "move") == 0)
+    if (strcmp(tokens[1], "enable") == 0)
     {
         if (token_count != 4)
         {
             return CLI_STATUS_INVALID_ARGUMENTS;
         }
-        REQUIRE_SERVICE(services->order_get);
-        REQUIRE_SERVICE(services->order_set);
+        REQUIRE_SERVICE(services->slot_set_enabled);
 
-        uint8_t id = 0;
         uint32_t pos = 0;
-        if (!effect_id(tokens[2], &id) || !cli_parse_u32(tokens[3], &pos))
+        bool enabled = false;
+        if (!parse_u32_max(tokens[2], UINT8_MAX - 1U, &pos) || !cli_parse_bool01(tokens[3], &enabled))
         {
             return CLI_STATUS_PARSE_ERROR;
         }
-
-        uint8_t order[CLI_PARSE_MAX_TOKENS] = {0};
-        size_t count = 0;
-        if (!services->order_get(order, sizeof(order), &count, services->context))
-        {
-            return CLI_STATUS_SERVICE_ERROR;
-        }
-
-        if (pos >= count)
-        {
-            return CLI_STATUS_PARSE_ERROR;
-        }
-
-        size_t src = count;
-        for (size_t i = 0; i < count; i++)
-        {
-            if (order[i] == id)
-            {
-                src = i;
-                break;
-            }
-        }
-        if (src == count)
-        {
-            return CLI_STATUS_PARSE_ERROR;
-        }
-
-        // Remove the effect from its slot, then re-insert it at pos, shifting
-        // the intervening effects to keep a valid permutation.
-        uint8_t moved = order[src];
-        for (size_t i = src; i + 1 < count; i++)
-        {
-            order[i] = order[i + 1];
-        }
-        for (size_t i = count - 1; i > pos; i--)
-        {
-            order[i] = order[i - 1];
-        }
-        order[pos] = moved;
-
-        if (!services->order_set(order, count, services->context))
+        if (!services->slot_set_enabled((uint8_t)pos, enabled, services->context))
         {
             return CLI_STATUS_SERVICE_ERROR;
         }
         return CLI_STATUS_OK;
     }
 
+    if (strcmp(tokens[1], "active") == 0)
+    {
+        if (token_count == 2)
+        {
+            REQUIRE_SERVICE(services->slot_get_active);
+            REQUIRE_SERVICE(services->slot_get);
+
+            uint8_t pos = 0;
+            if (!services->slot_get_active(&pos, services->context))
+            {
+                return CLI_STATUS_SERVICE_ERROR;
+            }
+
+            uint8_t slots[CLI_PARSE_MAX_TOKENS] = {0};
+            uint8_t enabled[CLI_PARSE_MAX_TOKENS] = {0};
+            size_t count = 0;
+            if (!services->slot_get(slots, enabled, sizeof(slots), &count, services->context))
+            {
+                return CLI_STATUS_SERVICE_ERROR;
+            }
+
+            const char *name = (pos < count && slots[pos] != CLI_SLOT_EMPTY)
+                                   ? effect_name(slots[pos])
+                                   : "empty";
+            char line[SLOT_LINE_BUF_SIZE];
+            (void)snprintf(line, sizeof(line), "active slot %u %s\n", (unsigned)pos, name);
+            return write_line(io, line) ? CLI_STATUS_OK : CLI_STATUS_SERVICE_ERROR;
+        }
+
+        if (token_count == 3)
+        {
+            REQUIRE_SERVICE(services->slot_set_active);
+
+            uint32_t pos = 0;
+            if (!parse_u32_max(tokens[2], UINT8_MAX - 1U, &pos))
+            {
+                return CLI_STATUS_PARSE_ERROR;
+            }
+            if (!services->slot_set_active((uint8_t)pos, services->context))
+            {
+                return CLI_STATUS_SERVICE_ERROR;
+            }
+            return CLI_STATUS_OK;
+        }
+
+        return CLI_STATUS_INVALID_ARGUMENTS;
+    }
+
     return CLI_STATUS_UNKNOWN_COMMAND;
+}
+
+static CliStatus handle_effects(char **tokens,
+                                size_t token_count,
+                                const CliServices *services,
+                                const CliIo *io,
+                                CliCommandResult *result)
+{
+    (void)result;
+
+    if (token_count != 1)
+    {
+        return CLI_STATUS_INVALID_ARGUMENTS;
+    }
+    REQUIRE_SERVICE(services->slot_get);
+
+    uint8_t slots[CLI_PARSE_MAX_TOKENS] = {0};
+    uint8_t enabled[CLI_PARSE_MAX_TOKENS] = {0};
+    size_t count = 0;
+    if (!services->slot_get(slots, enabled, sizeof(slots), &count, services->context))
+    {
+        return CLI_STATUS_SERVICE_ERROR;
+    }
+
+    char line[SLOT_LINE_BUF_SIZE];
+    size_t used = (size_t)snprintf(line, sizeof(line), "effects");
+    for (size_t e = 0; e < sizeof(effect_names) / sizeof(effect_names[0]) &&
+                       used + 24U < sizeof(line);
+         e++)
+    {
+        size_t pos = count;
+        for (size_t i = 0; i < count; i++)
+        {
+            if (slots[i] == effect_names[e].id)
+            {
+                pos = i;
+                break;
+            }
+        }
+        if (pos < count)
+        {
+            used += (size_t)snprintf(&line[used], sizeof(line) - used, " %s@%u",
+                                     effect_names[e].name, (unsigned)pos);
+        }
+        else
+        {
+            used += (size_t)snprintf(&line[used], sizeof(line) - used, " %s(unassigned)",
+                                     effect_names[e].name);
+        }
+    }
+    snprintf(&line[used], sizeof(line) - used, "\n");
+    return write_line(io, line) ? CLI_STATUS_OK : CLI_STATUS_SERVICE_ERROR;
 }
 
 static CliStatus handle_rom(char **tokens,
@@ -1455,7 +1504,8 @@ CliStatus cli_core_process_line_ex(const char *line,
         {.name = "ping", .handler = handle_ping},
         {.name = "override", .handler = handle_override},
         {.name = "config", .handler = handle_config},
-        {.name = "order", .handler = handle_order},
+        {.name = "slot", .handler = handle_slot},
+        {.name = "effects", .handler = handle_effects},
         {.name = "rom", .handler = handle_rom},
         {.name = "log", .handler = handle_log},
         {.name = "audio", .handler = handle_audio},

@@ -105,8 +105,8 @@ static void test_bootstrap_effects(void)
     RomTaskSupportConfig config = make_config();
 
     EffectsState expected_state = {0};
-    effects_state_set_default_order(&expected_state);
-    expected_state.active_effect_selection = 2;
+    effects_state_set_default_slots(&expected_state);
+    expected_state.active_slot = 2;
 
     EffectsParams expected_params = {0};
     expected_params.overdrive.level = 111;
@@ -132,7 +132,7 @@ static void test_bootstrap_effects(void)
     expect_eq_u32(2, ctx.set_write_enable_calls, "bootstrap toggles write enable twice");
     expect_true(ctx.write_enable_state, "bootstrap leaves write enable high");
     expect_eq_u32(42, config.bootstrap_timeout_ticks, "bootstrap timeout configured");
-    expect_true(loaded_state.active_effect_selection == 2, "bootstrap state decoded");
+    expect_true(loaded_state.active_slot == 2, "bootstrap state decoded");
     expect_true(loaded_params.overdrive.level == 111, "bootstrap params decoded");
 }
 
@@ -143,7 +143,7 @@ static void test_save_effects(void)
     RomTaskSupportConfig config = make_config();
 
     EffectsState state = {0};
-    effects_state_set_default_order(&state);
+    effects_state_set_default_slots(&state);
 
     EffectsParams params = {0};
     params.overdrive.level = 7;

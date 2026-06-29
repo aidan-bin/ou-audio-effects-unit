@@ -82,8 +82,14 @@ typedef struct
     bool (*config_set)(const char *key, int32_t value, void *context);
     bool (*config_get)(const char *key, int32_t *value_out, void *context);
 
-    bool (*order_get)(uint8_t *order_out, size_t capacity, size_t *count_out, void *context);
-    bool (*order_set)(const uint8_t *order, size_t count, void *context);
+    bool (*slot_get)(uint8_t *slots_out, uint8_t *enabled_out, size_t capacity,
+                     size_t *count_out, void *context);
+    bool (*slot_assign)(uint8_t pos, uint8_t effect, void *context);
+    bool (*slot_clear)(uint8_t pos, void *context);
+    bool (*slot_swap)(uint8_t a, uint8_t b, void *context);
+    bool (*slot_set_enabled)(uint8_t pos, bool enabled, void *context);
+    bool (*slot_get_active)(uint8_t *pos_out, void *context);
+    bool (*slot_set_active)(uint8_t pos, void *context);
 
     bool (*rom_save_state)(void *context);
     bool (*rom_load_state)(void *context);

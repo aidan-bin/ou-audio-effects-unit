@@ -100,8 +100,8 @@ static void init_state(SwitchTaskTestState *state)
     state->read_state_succeeds = true;
     state->write_state_succeeds = true;
 
-    effects_state_set_default_order(&state->source_state);
-    state->source_state.active_effect_selection = 1;
+    effects_state_set_default_slots(&state->source_state);
+    state->source_state.active_slot = 1;
 }
 
 static void test_switch_mapping_and_sleep(void)
@@ -118,12 +118,9 @@ static void test_switch_mapping_and_sleep(void)
     bool ok = switch_task_step(&context, &ops);
     expect_true(ok, "switch step succeeds");
     expect_eq_u32(1, state.write_calls, "state written once");
-    expect_true(state.written_state.is_enabled[state.written_state.ordered[0]],
-                "switch A maps to first ordered effect");
-    expect_true(!state.written_state.is_enabled[state.written_state.ordered[1]],
-                "switch B maps to second ordered effect");
-    expect_true(state.written_state.is_enabled[state.written_state.ordered[2]],
-                "switch C maps to third ordered effect");
+    expect_true(state.written_state.slot_enabled[0], "switch A maps to slot 0");
+    expect_true(!state.written_state.slot_enabled[1], "switch B maps to slot 1");
+    expect_true(state.written_state.slot_enabled[2], "switch C maps to slot 2");
     expect_eq_u32(1, state.sleep_calls, "sleep called once");
     expect_eq_u32(5, state.last_sleep_ms, "sleep uses polling frequency");
 }
@@ -133,10 +130,10 @@ static void test_state_is_normalized_before_write(void)
     SwitchTaskTestState state;
     init_state(&state);
 
-    state.source_state.ordered[0] = (Effect)99;
-    state.source_state.ordered[1] = ECHO;
-    state.source_state.ordered[2] = ECHO;
-    state.source_state.active_effect_selection = 99;
+    state.source_state.slots[0] = (uint8_t)99;
+    state.source_state.slots[1] = ECHO;
+    state.source_state.slots[2] = ECHO;
+    state.source_state.active_slot = 99;
 
     SwitchTaskContext context = make_context();
     SwitchTaskOps ops = make_ops(&state);
@@ -144,9 +141,8 @@ static void test_state_is_normalized_before_write(void)
     bool ok = switch_task_step(&context, &ops);
     expect_true(ok, "switch step succeeds with invalid source state");
     expect_eq_u32(1, state.write_calls, "normalized state written");
-    expect_true(effects_state_order_valid(&state.written_state), "written state order normalized");
-    expect_true(state.written_state.active_effect_selection < NUM_EFFECTS,
-                "active selection normalized");
+    expect_true(effects_state_slots_valid(&state.written_state), "written state slots normalized");
+    expect_true(state.written_state.active_slot < NUM_SLOTS, "active slot normalized");
 }
 
 int main(void)

@@ -236,8 +236,8 @@ static void test_integration_switch_pot_and_effects_pipeline(void)
     IntegrationState state;
     memset(&state, 0, sizeof(state));
 
-    effects_state_set_default_order(&state.effects_state);
-    state.effects_state.active_effect_selection = 1;
+    effects_state_set_default_slots(&state.effects_state);
+    state.effects_state.active_slot = 1;
 
     state.switches[0] = false;
     state.switches[1] = true;
@@ -262,9 +262,11 @@ static void test_integration_switch_pot_and_effects_pipeline(void)
     };
 
     expect_true(switch_task_step(&switch_context, &switch_ops), "switch task step succeeds");
-    expect_true(state.effects_state.is_enabled[OVERDRIVE] == false, "switch task disables overdrive");
-    expect_true(state.effects_state.is_enabled[ECHO], "switch task enables echo");
-    expect_true(state.effects_state.is_enabled[COMPRESSION] == false,
+    expect_true(effects_state_effect_enabled(&state.effects_state, OVERDRIVE) == false,
+                "switch task disables overdrive");
+    expect_true(effects_state_effect_enabled(&state.effects_state, ECHO),
+                "switch task enables echo");
+    expect_true(effects_state_effect_enabled(&state.effects_state, COMPRESSION) == false,
                 "switch task disables compression");
 
     PotTaskContext pot_context = {

@@ -53,8 +53,10 @@ typedef struct
 
     bool reboot_called;
 
-    uint8_t order[8];
-    size_t order_count;
+    uint8_t slots[8];
+    uint8_t slot_enabled[8];
+    size_t slot_count;
+    uint8_t active_slot;
 } CliCoreTestContext;
 
 static void reset_output(CliCoreTestContext *ctx)
@@ -130,28 +132,93 @@ static bool config_get(const char *key, int32_t *value_out, void *context)
     return !ctx->fail_service;
 }
 
-static bool order_get(uint8_t *order_out, size_t capacity, size_t *count_out, void *context)
+static bool slot_get(uint8_t *slots_out, uint8_t *enabled_out, size_t capacity, size_t *count_out,
+                     void *context)
 {
     CliCoreTestContext *ctx = (CliCoreTestContext *)context;
-    if (ctx->order_count > capacity)
+    if (ctx->slot_count > capacity)
     {
         return false;
     }
-    memcpy(order_out, ctx->order, ctx->order_count);
-    *count_out = ctx->order_count;
+    memcpy(slots_out, ctx->slots, ctx->slot_count);
+    memcpy(enabled_out, ctx->slot_enabled, ctx->slot_count);
+    *count_out = ctx->slot_count;
     return !ctx->fail_service;
 }
 
-static bool order_set(const uint8_t *order, size_t count, void *context)
+static bool slot_assign(uint8_t pos, uint8_t effect, void *context)
 {
     CliCoreTestContext *ctx = (CliCoreTestContext *)context;
-    // Mirror the adapter: only a full permutation of all effects is accepted.
-    if (ctx->fail_service || count != 3 || count > sizeof(ctx->order))
+    if (ctx->fail_service || pos >= ctx->slot_count)
     {
         return false;
     }
-    memcpy(ctx->order, order, count);
-    ctx->order_count = count;
+    for (size_t i = 0; i < ctx->slot_count; i++)
+    {
+        if (i != pos && ctx->slots[i] == effect)
+        {
+            ctx->slots[i] = 0xFFu;
+            ctx->slot_enabled[i] = 0;
+        }
+    }
+    ctx->slots[pos] = effect;
+    return true;
+}
+
+static bool slot_clear(uint8_t pos, void *context)
+{
+    CliCoreTestContext *ctx = (CliCoreTestContext *)context;
+    if (ctx->fail_service || pos >= ctx->slot_count)
+    {
+        return false;
+    }
+    ctx->slots[pos] = 0xFFu;
+    ctx->slot_enabled[pos] = 0;
+    return true;
+}
+
+static bool slot_swap(uint8_t a, uint8_t b, void *context)
+{
+    CliCoreTestContext *ctx = (CliCoreTestContext *)context;
+    if (ctx->fail_service || a >= ctx->slot_count || b >= ctx->slot_count)
+    {
+        return false;
+    }
+    uint8_t ts = ctx->slots[a];
+    ctx->slots[a] = ctx->slots[b];
+    ctx->slots[b] = ts;
+    uint8_t te = ctx->slot_enabled[a];
+    ctx->slot_enabled[a] = ctx->slot_enabled[b];
+    ctx->slot_enabled[b] = te;
+    return true;
+}
+
+static bool slot_set_enabled(uint8_t pos, bool enabled, void *context)
+{
+    CliCoreTestContext *ctx = (CliCoreTestContext *)context;
+    if (ctx->fail_service || pos >= ctx->slot_count)
+    {
+        return false;
+    }
+    ctx->slot_enabled[pos] = enabled ? 1 : 0;
+    return true;
+}
+
+static bool slot_get_active(uint8_t *pos_out, void *context)
+{
+    CliCoreTestContext *ctx = (CliCoreTestContext *)context;
+    *pos_out = ctx->active_slot;
+    return !ctx->fail_service;
+}
+
+static bool slot_set_active(uint8_t pos, void *context)
+{
+    CliCoreTestContext *ctx = (CliCoreTestContext *)context;
+    if (ctx->fail_service || pos >= ctx->slot_count)
+    {
+        return false;
+    }
+    ctx->active_slot = pos;
     return true;
 }
 
@@ -408,8 +475,13 @@ static CliServices make_services(CliCoreTestContext *ctx)
         .clear_all_overrides = clear_all_overrides,
         .config_set = config_set,
         .config_get = config_get,
-        .order_get = order_get,
-        .order_set = order_set,
+        .slot_get = slot_get,
+        .slot_assign = slot_assign,
+        .slot_clear = slot_clear,
+        .slot_swap = slot_swap,
+        .slot_set_enabled = slot_set_enabled,
+        .slot_get_active = slot_get_active,
+        .slot_set_active = slot_set_active,
         .rom_save_state = rom_save_state,
         .rom_load_state = rom_load_state,
         .rom_read_raw = rom_read_raw,
@@ -779,75 +851,119 @@ static void test_error_paths(void)
                   "service error status");
 }
 
-static void test_order_commands(void)
+static void test_slot_commands(void)
 {
     CliCoreTestContext ctx = {0};
     CliServices services = make_services(&ctx);
     CliIo io = make_io(&ctx);
 
-    // Default chain: overdrive(0) echo(1) compression(2).
-    ctx.order[0] = 0;
-    ctx.order[1] = 1;
-    ctx.order[2] = 2;
-    ctx.order_count = 3;
+    // overdrive(0) echo(1) compression(2) empty, only overdrive enabled.
+    ctx.slots[0] = 0;
+    ctx.slots[1] = 1;
+    ctx.slots[2] = 2;
+    ctx.slots[3] = 0xFFu;
+    ctx.slot_enabled[0] = 1;
+    ctx.slot_count = 4;
 
-    expect_eq_u32(CLI_STATUS_OK, cli_core_process_line("order get", &services, &io),
-                  "order get ok");
-    expect_true(strstr(ctx.output, "order overdrive echo compression") != NULL,
-                "order get prints chain by name");
+    expect_eq_u32(CLI_STATUS_OK, cli_core_process_line("slot", &services, &io), "slot get ok");
+    expect_true(strstr(ctx.output, "0=overdrive(on)") != NULL, "slot list shows overdrive on");
+    expect_true(strstr(ctx.output, "3=empty") != NULL, "slot list shows empty slot");
 
     reset_output(&ctx);
-    expect_eq_u32(CLI_STATUS_OK,
-                  cli_core_process_line("order set compression echo overdrive", &services, &io),
-                  "order set full permutation ok");
-    expect_eq_u8(2, ctx.order[0], "order set[0]=compression");
-    expect_eq_u8(1, ctx.order[1], "order set[1]=echo");
-    expect_eq_u8(0, ctx.order[2], "order set[2]=overdrive");
+    expect_eq_u32(CLI_STATUS_OK, cli_core_process_line("slot set 3 echo", &services, &io),
+                  "slot set ok");
+    expect_eq_u8(1, ctx.slots[3], "echo assigned to slot3");
+    expect_eq_u8(0xFFu, ctx.slots[1], "echo vacated from slot1");
 
-    // Current chain: compression echo overdrive -> swap the two ends.
     reset_output(&ctx);
-    expect_eq_u32(CLI_STATUS_OK,
-                  cli_core_process_line("order swap overdrive compression", &services, &io),
-                  "order swap ok");
-    expect_eq_u8(0, ctx.order[0], "order swap[0]=overdrive");
-    expect_eq_u8(1, ctx.order[1], "order swap[1]=echo");
-    expect_eq_u8(2, ctx.order[2], "order swap[2]=compression");
+    expect_eq_u32(CLI_STATUS_OK, cli_core_process_line("slot enable 3 1", &services, &io),
+                  "slot enable ok");
+    expect_true(ctx.slot_enabled[3], "slot3 enabled");
 
-    // overdrive echo compression -> move echo to the front.
     reset_output(&ctx);
-    expect_eq_u32(CLI_STATUS_OK,
-                  cli_core_process_line("order move echo 0", &services, &io),
-                  "order move ok");
-    expect_eq_u8(1, ctx.order[0], "order move[0]=echo");
-    expect_eq_u8(0, ctx.order[1], "order move[1]=overdrive");
-    expect_eq_u8(2, ctx.order[2], "order move[2]=compression");
+    expect_eq_u32(CLI_STATUS_OK, cli_core_process_line("slot clear 0", &services, &io),
+                  "slot clear ok");
+    expect_eq_u8(0xFFu, ctx.slots[0], "slot0 cleared");
+
+    reset_output(&ctx);
+    expect_eq_u32(CLI_STATUS_OK, cli_core_process_line("slot swap 2 3", &services, &io),
+                  "slot swap ok");
+    expect_eq_u8(1, ctx.slots[2], "slot2 now echo after swap");
+    expect_eq_u8(2, ctx.slots[3], "slot3 now compression after swap");
 
     reset_output(&ctx);
     expect_eq_u32(CLI_STATUS_PARSE_ERROR,
-                  cli_core_process_line("order set foo bar baz", &services, &io),
-                  "order set unknown name parse error");
-
-    reset_output(&ctx);
-    expect_eq_u32(CLI_STATUS_PARSE_ERROR,
-                  cli_core_process_line("order move echo 9", &services, &io),
-                  "order move out-of-range parse error");
+                  cli_core_process_line("slot set 0 foo", &services, &io),
+                  "slot set unknown effect parse error");
 
     reset_output(&ctx);
     expect_eq_u32(CLI_STATUS_INVALID_ARGUMENTS,
-                  cli_core_process_line("order", &services, &io),
-                  "order missing subcommand invalid args");
+                  cli_core_process_line("slot set 0", &services, &io),
+                  "slot set missing arg invalid");
 
     reset_output(&ctx);
     expect_eq_u32(CLI_STATUS_SERVICE_ERROR,
-                  cli_core_process_line("order set overdrive echo", &services, &io),
-                  "order set wrong count rejected by service");
+                  cli_core_process_line("slot clear 9", &services, &io),
+                  "slot clear out-of-range rejected by service");
+
+    reset_output(&ctx);
+    expect_eq_u32(CLI_STATUS_UNKNOWN_COMMAND,
+                  cli_core_process_line("slot frobnicate", &services, &io),
+                  "unknown slot subcommand");
+}
+
+static void test_effects_command(void)
+{
+    CliCoreTestContext ctx = {0};
+    CliServices services = make_services(&ctx);
+    CliIo io = make_io(&ctx);
+
+    ctx.slots[0] = 0;      // overdrive
+    ctx.slots[1] = 0xFFu;  // empty
+    ctx.slots[2] = 2;      // compression
+    ctx.slots[3] = 0xFFu;  // empty
+    ctx.slot_count = 4;
+
+    expect_eq_u32(CLI_STATUS_OK, cli_core_process_line("effects", &services, &io), "effects ok");
+    expect_true(strstr(ctx.output, "overdrive@0") != NULL, "overdrive assigned to slot0");
+    expect_true(strstr(ctx.output, "echo(unassigned)") != NULL, "echo unassigned");
+    expect_true(strstr(ctx.output, "compression@2") != NULL, "compression at slot2");
+}
+
+static void test_slot_active_command(void)
+{
+    CliCoreTestContext ctx = {0};
+    CliServices services = make_services(&ctx);
+    CliIo io = make_io(&ctx);
+
+    ctx.slots[0] = 0;
+    ctx.slots[1] = 1;
+    ctx.slots[2] = 2;
+    ctx.slots[3] = 0xFFu;
+    ctx.slot_count = 4;
+    ctx.active_slot = 1;
+
+    expect_eq_u32(CLI_STATUS_OK, cli_core_process_line("slot active", &services, &io),
+                  "slot active get ok");
+    expect_true(strstr(ctx.output, "active slot 1 echo") != NULL, "slot active shows echo");
+
+    reset_output(&ctx);
+    expect_eq_u32(CLI_STATUS_OK, cli_core_process_line("slot active 2", &services, &io),
+                  "slot active set ok");
+    expect_eq_u8(2, ctx.active_slot, "active slot updated");
+
+    reset_output(&ctx);
+    expect_eq_u32(CLI_STATUS_SERVICE_ERROR, cli_core_process_line("slot active 9", &services, &io),
+                  "slot active out-of-range rejected by service");
 }
 
 int main(void)
 {
     test_ping_and_help();
     test_override_and_config_commands();
-    test_order_commands();
+    test_slot_commands();
+    test_slot_active_command();
+    test_effects_command();
     test_rom_and_log_commands();
     test_log_stream_batch_command();
     test_log_stats_reset();

@@ -7,57 +7,162 @@
 
 int failures = 0;
 
-static void test_effects_state_order_valid_default_order(void)
+static void test_default_slots(void)
 {
-    EffectsState state = {
-        .ordered = {OVERDRIVE, ECHO, COMPRESSION},
-        .is_enabled = {true, false, true},
-        .active_effect_selection = 1,
-    };
+    EffectsState state;
+    memset(&state, 0xAB, sizeof(state));
+    effects_state_set_default_slots(&state);
 
-    expect_true(effects_state_order_valid(&state), "order valid default");
+    expect_eq_u8(OVERDRIVE, state.slots[0], "default slot0 overdrive");
+    expect_eq_u8(ECHO, state.slots[1], "default slot1 echo");
+    expect_eq_u8(COMPRESSION, state.slots[2], "default slot2 compression");
+    expect_eq_u8(EFFECT_ID_NONE, state.slots[3], "default slot3 empty");
+    expect_true(state.slot_enabled[0], "default slot0 enabled");
+    expect_false(state.slot_enabled[1], "default slot1 disabled");
+    expect_false(state.slot_enabled[2], "default slot2 disabled");
+    expect_eq_u8(0, state.active_slot, "default active slot 0");
+    expect_true(effects_state_slots_valid(&state), "default slots valid");
 }
 
-static void test_effects_state_normalize_invalid_order_resets(void)
+static void test_slots_valid_detects_duplicate(void)
 {
-    EffectsState state = {
-        .ordered = {OVERDRIVE, OVERDRIVE, COMPRESSION},
-        .is_enabled = {true, true, true},
-        .active_effect_selection = NUM_EFFECTS,
-    };
+    EffectsState state;
+    effects_state_set_default_slots(&state);
+    state.slots[3] = OVERDRIVE; // duplicate of slot0
+
+    expect_false(effects_state_slots_valid(&state), "duplicate effect is invalid");
+}
+
+static void test_normalize_clears_invalid_and_duplicate(void)
+{
+    EffectsState state;
+    effects_state_set_default_slots(&state);
+    state.slots[2] = (uint8_t)99; // invalid id
+    state.slots[3] = OVERDRIVE;   // duplicate of slot0
+    state.slot_enabled[3] = true;
+    state.active_slot = (uint8_t)(NUM_SLOTS + 3);
 
     effects_state_normalize(&state);
 
-    expect_eq_u8(OVERDRIVE, state.ordered[0], "normalize order[0]");
-    expect_eq_u8(ECHO, state.ordered[1], "normalize order[1]");
-    expect_eq_u8(COMPRESSION, state.ordered[2], "normalize order[2]");
-    expect_eq_u8(0, state.active_effect_selection, "normalize active selection");
+    expect_eq_u8(OVERDRIVE, state.slots[0], "normalize keeps first overdrive");
+    expect_eq_u8(EFFECT_ID_NONE, state.slots[2], "normalize clears invalid slot");
+    expect_eq_u8(EFFECT_ID_NONE, state.slots[3], "normalize clears duplicate slot");
+    expect_false(state.slot_enabled[3], "normalize disables cleared slot");
+    expect_eq_u8(0, state.active_slot, "normalize clamps active slot");
 }
 
-static void test_effects_state_get_active_effect_invalid_state_fails(void)
+static void test_assign_slot_moves_existing(void)
 {
-    EffectsState state = {
-        .ordered = {OVERDRIVE, OVERDRIVE, COMPRESSION},
-        .is_enabled = {true, true, true},
-        .active_effect_selection = 0,
-    };
+    EffectsState state;
+    effects_state_set_default_slots(&state); // od@0 echo@1 comp@2 empty@3
+
+    expect_true(effects_state_assign_slot(&state, 3, ECHO), "assign echo to slot3");
+    expect_eq_u8(ECHO, state.slots[3], "echo now in slot3");
+    expect_eq_u8(EFFECT_ID_NONE, state.slots[1], "old echo slot vacated");
+
+    expect_false(effects_state_assign_slot(&state, NUM_SLOTS, OVERDRIVE),
+                 "assign rejects out-of-range pos");
+    expect_false(effects_state_assign_slot(&state, 0, (Effect)99), "assign rejects invalid effect");
+}
+
+static void test_clear_slot(void)
+{
+    EffectsState state;
+    effects_state_set_default_slots(&state);
+
+    expect_true(effects_state_clear_slot(&state, 0), "clear slot0");
+    expect_eq_u8(EFFECT_ID_NONE, state.slots[0], "slot0 empty after clear");
+    expect_false(state.slot_enabled[0], "slot0 disabled after clear");
+    expect_false(effects_state_clear_slot(&state, NUM_SLOTS), "clear rejects out-of-range pos");
+}
+
+static void test_swap_slots_carries_enable(void)
+{
+    EffectsState state;
+    effects_state_set_default_slots(&state); // slot0 enabled, slot2 disabled
+
+    expect_true(effects_state_swap_slots(&state, 0, 2), "swap slots 0 and 2");
+    expect_eq_u8(COMPRESSION, state.slots[0], "slot0 now compression");
+    expect_eq_u8(OVERDRIVE, state.slots[2], "slot2 now overdrive");
+    expect_false(state.slot_enabled[0], "slot0 takes old slot2 enable (off)");
+    expect_true(state.slot_enabled[2], "slot2 takes old slot0 enable (on)");
+    expect_false(effects_state_swap_slots(&state, 0, NUM_SLOTS), "swap rejects bad pos");
+}
+
+static void test_set_slot_enabled(void)
+{
+    EffectsState state;
+    effects_state_set_default_slots(&state);
+
+    expect_true(effects_state_set_slot_enabled(&state, 3, true), "enable slot3 via CLI");
+    expect_true(state.slot_enabled[3], "slot3 enabled");
+    expect_false(effects_state_set_slot_enabled(&state, NUM_SLOTS, true),
+                 "set_slot_enabled rejects bad pos");
+}
+
+static void test_effect_enabled_reflects_slot(void)
+{
+    EffectsState state;
+    effects_state_set_default_slots(&state); // overdrive enabled in slot0
+
+    expect_true(effects_state_effect_enabled(&state, OVERDRIVE), "overdrive enabled");
+    expect_false(effects_state_effect_enabled(&state, ECHO), "echo assigned but disabled");
+
+    effects_state_clear_slot(&state, 1);
+    expect_false(effects_state_effect_enabled(&state, ECHO), "unassigned echo not enabled");
+    expect_false(effects_state_effect_enabled(&state, (Effect)99), "invalid effect not enabled");
+}
+
+static void test_active_effect_from_active_slot(void)
+{
+    EffectsState state;
+    effects_state_set_default_slots(&state);
+    state.active_slot = 1;
 
     Effect active = OVERDRIVE;
+    expect_true(effects_state_get_active_effect(&state, &active), "active effect resolves");
+    expect_eq_u8(ECHO, (uint8_t)active, "active effect is echo");
+
+    effects_state_clear_slot(&state, 1);
     expect_false(effects_state_get_active_effect(&state, &active),
-                 "get active effect invalid order");
+                 "empty active slot yields no effect");
 }
 
-static void test_effects_state_get_active_effect_after_normalize(void)
+static void test_apply_switches_drives_slot_enables(void)
 {
-    EffectsState state = {
-        .ordered = {OVERDRIVE, ECHO, COMPRESSION},
-        .is_enabled = {true, true, true},
-        .active_effect_selection = 2,
-    };
+    EffectsState state;
+    effects_state_set_default_slots(&state);
 
-    Effect active = OVERDRIVE;
-    expect_true(effects_state_get_active_effect(&state, &active), "get active effect valid state");
-    expect_eq_u8(COMPRESSION, (uint8_t)active, "active effect selection");
+    effects_state_apply_switches(&state, false, true, true);
+    expect_false(state.slot_enabled[0], "switch A drives slot0");
+    expect_true(state.slot_enabled[1], "switch B drives slot1");
+    expect_true(state.slot_enabled[2], "switch C drives slot2");
+}
+
+static void test_set_active_slot(void)
+{
+    EffectsState state;
+    effects_state_set_default_slots(&state);
+
+    expect_true(effects_state_set_active_slot(&state, 2), "set active slot 2");
+    expect_eq_u8(2, state.active_slot, "active slot updated");
+    expect_false(effects_state_set_active_slot(&state, NUM_SLOTS),
+                 "reject out-of-range active slot");
+    expect_eq_u8(2, state.active_slot, "active slot unchanged after rejection");
+}
+
+static void test_effect_id_is_empty(void)
+{
+    expect_true(effect_id_is_empty(EFFECT_ID_NONE), "EFFECT_ID_NONE is empty");
+    expect_false(effect_id_is_empty((EffectId)OVERDRIVE), "valid id is not empty");
+}
+
+static void test_effect_is_valid_boundaries(void)
+{
+    expect_true(effect_is_valid(OVERDRIVE), "OVERDRIVE valid");
+    expect_true(effect_is_valid(COMPRESSION), "COMPRESSION valid");
+    expect_false(effect_is_valid((Effect)-1), "negative effect invalid");
+    expect_false(effect_is_valid((Effect)NUM_EFFECTS), "NUM_EFFECTS out of range");
 }
 
 static void test_map_adc_to_param_zero_adcmax_returns_min(void)
@@ -110,21 +215,6 @@ static EffectsParams test_params_template(void)
     return params;
 }
 
-static void test_switch_mapping_uses_effect_order(void)
-{
-    EffectsState state = {
-        .ordered = {ECHO, COMPRESSION, OVERDRIVE},
-        .is_enabled = {false, false, false},
-        .active_effect_selection = 0,
-    };
-
-    effects_state_apply_switches(&state, true, false, true);
-
-    expect_true(state.is_enabled[ECHO], "switch A maps to ordered[0]");
-    expect_false(state.is_enabled[COMPRESSION], "switch B maps to ordered[1]");
-    expect_true(state.is_enabled[OVERDRIVE], "switch C maps to ordered[2]");
-}
-
 static void test_overdrive_pot_updates_target_parameter(void)
 {
     EffectsParams params = test_params_template();
@@ -162,56 +252,6 @@ static void test_invalid_effect_or_index_rejected(void)
                  "invalid pot index rejected");
 }
 
-static void test_set_order_applies_valid_permutation(void)
-{
-    EffectsState state = {
-        .ordered = {OVERDRIVE, ECHO, COMPRESSION},
-        .is_enabled = {true, false, true},
-        .active_effect_selection = 0,
-    };
-
-    const Effect order[NUM_EFFECTS] = {COMPRESSION, OVERDRIVE, ECHO};
-    expect_true(effects_state_set_order(&state, order, NUM_EFFECTS),
-                "set order valid permutation");
-    expect_eq_u8(COMPRESSION, state.ordered[0], "set order[0]");
-    expect_eq_u8(OVERDRIVE, state.ordered[1], "set order[1]");
-    expect_eq_u8(ECHO, state.ordered[2], "set order[2]");
-}
-
-static void test_set_order_rejects_invalid_and_keeps_state(void)
-{
-    EffectsState state = {
-        .ordered = {OVERDRIVE, ECHO, COMPRESSION},
-        .is_enabled = {true, false, true},
-        .active_effect_selection = 0,
-    };
-
-    const Effect duplicate[NUM_EFFECTS] = {ECHO, ECHO, COMPRESSION};
-    const Effect out_of_range[NUM_EFFECTS] = {OVERDRIVE, ECHO, (Effect)99};
-    const Effect wrong_count[2] = {OVERDRIVE, ECHO};
-
-    expect_false(effects_state_set_order(&state, duplicate, NUM_EFFECTS),
-                 "set order rejects duplicate");
-    expect_false(effects_state_set_order(&state, out_of_range, NUM_EFFECTS),
-                 "set order rejects out-of-range effect");
-    expect_false(effects_state_set_order(&state, wrong_count, 2),
-                 "set order rejects wrong count");
-    expect_false(effects_state_set_order(NULL, duplicate, NUM_EFFECTS),
-                 "set order rejects null state");
-
-    expect_eq_u8(OVERDRIVE, state.ordered[0], "set order unchanged[0]");
-    expect_eq_u8(ECHO, state.ordered[1], "set order unchanged[1]");
-    expect_eq_u8(COMPRESSION, state.ordered[2], "set order unchanged[2]");
-}
-
-static void test_effect_is_valid_boundaries(void)
-{
-    expect_true(effect_is_valid(OVERDRIVE), "OVERDRIVE valid");
-    expect_true(effect_is_valid(COMPRESSION), "COMPRESSION valid");
-    expect_false(effect_is_valid((Effect)-1), "negative effect invalid");
-    expect_false(effect_is_valid((Effect)NUM_EFFECTS), "NUM_EFFECTS out of range");
-}
-
 static void test_effects_params_value_for_points_at_members(void)
 {
     EffectsParams params;
@@ -231,22 +271,26 @@ static void test_effects_params_value_for_points_at_members(void)
 
 int main(void)
 {
-    test_effects_state_order_valid_default_order();
-    test_effects_state_normalize_invalid_order_resets();
-    test_effects_state_get_active_effect_invalid_state_fails();
-    test_effects_state_get_active_effect_after_normalize();
-    test_set_order_applies_valid_permutation();
-    test_set_order_rejects_invalid_and_keeps_state();
+    test_default_slots();
+    test_slots_valid_detects_duplicate();
+    test_normalize_clears_invalid_and_duplicate();
+    test_assign_slot_moves_existing();
+    test_clear_slot();
+    test_swap_slots_carries_enable();
+    test_set_slot_enabled();
+    test_effect_enabled_reflects_slot();
+    test_active_effect_from_active_slot();
+    test_apply_switches_drives_slot_enables();
+    test_set_active_slot();
+    test_effect_id_is_empty();
     test_effect_is_valid_boundaries();
-    test_effects_params_value_for_points_at_members();
     test_map_adc_to_param_zero_adcmax_returns_min();
     test_map_adc_to_param_swaps_inverted_bounds();
     test_map_adc_to_param_clamps_adc_input();
-
-    test_switch_mapping_uses_effect_order();
     test_overdrive_pot_updates_target_parameter();
     test_compression_unused_pots_are_noop();
     test_invalid_effect_or_index_rejected();
+    test_effects_params_value_for_points_at_members();
 
     if (failures != 0)
     {

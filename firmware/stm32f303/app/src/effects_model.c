@@ -7,19 +7,44 @@ bool effect_is_valid(Effect effect)
     return (int)effect >= 0 && (int)effect < NUM_EFFECTS;
 }
 
-void effects_state_set_default_order(EffectsState *state)
+bool effect_id_is_empty(EffectId id)
+{
+    return id == EFFECT_ID_NONE;
+}
+
+static size_t find_effect_slot(const EffectsState *state, Effect effect)
+{
+    for (size_t i = 0; i < NUM_SLOTS; i++)
+    {
+        if (state->slots[i] == (uint8_t)effect)
+        {
+            return i;
+        }
+    }
+    return NUM_SLOTS;
+}
+
+void effects_state_set_default_slots(EffectsState *state)
 {
     if (state == NULL)
     {
         return;
     }
 
-    state->ordered[0] = OVERDRIVE;
-    state->ordered[1] = ECHO;
-    state->ordered[2] = COMPRESSION;
+    for (size_t i = 0; i < NUM_SLOTS; i++)
+    {
+        state->slots[i] = EFFECT_ID_NONE;
+        state->slot_enabled[i] = false;
+    }
+    
+    state->slots[0] = OVERDRIVE;
+    state->slots[1] = ECHO;
+    state->slots[2] = COMPRESSION;
+    state->slot_enabled[0] = true;
+    state->active_slot = 0;
 }
 
-bool effects_state_order_valid(const EffectsState *state)
+bool effects_state_slots_valid(const EffectsState *state)
 {
     if (state == NULL)
     {
@@ -28,46 +53,20 @@ bool effects_state_order_valid(const EffectsState *state)
 
     bool seen[NUM_EFFECTS] = {false};
 
-    for (int i = 0; i < NUM_EFFECTS; i++)
+    for (size_t i = 0; i < NUM_SLOTS; i++)
     {
-        if (!effect_is_valid(state->ordered[i]))
+        uint8_t slot = state->slots[i];
+        if (effect_id_is_empty(slot))
+        {
+            continue;
+        }
+
+        if (!effect_is_valid((Effect)slot) || seen[slot])
         {
             return false;
         }
 
-        if (seen[state->ordered[i]])
-        {
-            return false;
-        }
-
-        seen[state->ordered[i]] = true;
-    }
-
-    return true;
-}
-
-bool effects_state_set_order(EffectsState *state, const Effect *order, size_t count)
-{
-    if (state == NULL || order == NULL || count != NUM_EFFECTS)
-    {
-        return false;
-    }
-
-    bool seen[NUM_EFFECTS] = {false};
-
-    for (size_t i = 0; i < count; i++)
-    {
-        if (!effect_is_valid(order[i]) || seen[order[i]])
-        {
-            return false;
-        }
-
-        seen[order[i]] = true;
-    }
-
-    for (size_t i = 0; i < count; i++)
-    {
-        state->ordered[i] = order[i];
+        seen[slot] = true;
     }
 
     return true;
@@ -80,36 +79,129 @@ void effects_state_normalize(EffectsState *state)
         return;
     }
 
-    if (!effects_state_order_valid(state))
+    // Clear any invalid id or duplicate, keeping the first occurrence.
+    bool seen[NUM_EFFECTS] = {false};
+    for (size_t i = 0; i < NUM_SLOTS; i++)
     {
-        effects_state_set_default_order(state);
+        uint8_t slot = state->slots[i];
+        if (effect_id_is_empty(slot))
+        {
+            continue;
+        }
+
+        if (!effect_is_valid((Effect)slot) || seen[slot])
+        {
+            state->slots[i] = EFFECT_ID_NONE;
+            state->slot_enabled[i] = false;
+            continue;
+        }
+
+        seen[slot] = true;
     }
 
-    if (state->active_effect_selection >= NUM_EFFECTS)
+    if (state->active_slot >= NUM_SLOTS)
     {
-        state->active_effect_selection = 0;
+        state->active_slot = 0;
     }
+}
+
+bool effects_state_assign_slot(EffectsState *state, size_t pos, Effect effect)
+{
+    if (state == NULL || pos >= NUM_SLOTS || !effect_is_valid(effect))
+    {
+        return false;
+    }
+
+    // One instance per effect: vacate any other slot already holding it.
+    // Vacated slot becomes empty + disabled.
+    size_t existing = find_effect_slot(state, effect);
+    if (existing != NUM_SLOTS && existing != pos)
+    {
+        state->slots[existing] = EFFECT_ID_NONE;
+        state->slot_enabled[existing] = false;
+    }
+
+    state->slots[pos] = (uint8_t)effect;
+    return true;
+}
+
+bool effects_state_clear_slot(EffectsState *state, size_t pos)
+{
+    if (state == NULL || pos >= NUM_SLOTS)
+    {
+        return false;
+    }
+
+    state->slots[pos] = EFFECT_ID_NONE;
+    state->slot_enabled[pos] = false;
+    return true;
+}
+
+bool effects_state_swap_slots(EffectsState *state, size_t a, size_t b)
+{
+    if (state == NULL || a >= NUM_SLOTS || b >= NUM_SLOTS)
+    {
+        return false;
+    }
+
+    uint8_t tmp_slot = state->slots[a];
+    state->slots[a] = state->slots[b];
+    state->slots[b] = tmp_slot;
+
+    bool tmp_en = state->slot_enabled[a];
+    state->slot_enabled[a] = state->slot_enabled[b];
+    state->slot_enabled[b] = tmp_en;
+    return true;
+}
+
+bool effects_state_set_slot_enabled(EffectsState *state, size_t pos, bool enabled)
+{
+    if (state == NULL || pos >= NUM_SLOTS)
+    {
+        return false;
+    }
+
+    state->slot_enabled[pos] = enabled;
+    return true;
 }
 
 bool effects_state_get_active_effect(const EffectsState *state, Effect *active_effect)
 {
-    if (state == NULL || active_effect == NULL)
+    if (state == NULL || active_effect == NULL || state->active_slot >= NUM_SLOTS)
     {
         return false;
     }
 
-    if (!effects_state_order_valid(state))
+    uint8_t slot = state->slots[state->active_slot];
+    if (effect_id_is_empty(slot) || !effect_is_valid((Effect)slot))
     {
         return false;
     }
 
-    if (state->active_effect_selection >= NUM_EFFECTS)
+    *active_effect = (Effect)slot;
+    return true;
+}
+
+bool effects_state_effect_enabled(const EffectsState *state, Effect effect)
+{
+    if (state == NULL || !effect_is_valid(effect))
     {
         return false;
     }
 
-    *active_effect = state->ordered[state->active_effect_selection];
-    return effect_is_valid(*active_effect);
+    size_t pos = find_effect_slot(state, effect);
+    return pos != NUM_SLOTS && state->slot_enabled[pos];
+}
+
+bool effects_state_set_active_slot(EffectsState *state, size_t pos)
+{
+    if (state == NULL || pos >= NUM_SLOTS)
+    {
+        return false;
+    }
+
+    state->active_slot = (uint8_t)pos;
+    return true;
 }
 
 size_t map_adc_to_param(uint32_t adc_value, size_t min, size_t max, uint32_t adc_max)
@@ -144,9 +236,10 @@ void effects_state_apply_switches(EffectsState *state, bool switch_a_enabled, bo
         return;
     }
 
-    state->is_enabled[state->ordered[0]] = switch_a_enabled;
-    state->is_enabled[state->ordered[1]] = switch_b_enabled;
-    state->is_enabled[state->ordered[2]] = switch_c_enabled;
+    // TODO: Only three switches, so any effect above slot 2 needs to be enabled via CLI.
+    state->slot_enabled[0] = switch_a_enabled;
+    state->slot_enabled[1] = switch_b_enabled;
+    state->slot_enabled[2] = switch_c_enabled;
 }
 
 #define NUM_POTS 4

@@ -148,76 +148,6 @@ static bool get_param_value(const EffectsParams *params, const char *key, int32_
     return true;
 }
 
-// "state.enable.*" keys all toggle one entry of EffectsState::is_enabled, so a
-// table keyed by effect collapses the otherwise-identical handlers.
-static const struct
-{
-    const char *key;
-    Effect effect;
-} state_enable_map[] = {
-    {"state.enable.overdrive", OVERDRIVE},
-    {"state.enable.echo", ECHO},
-    {"state.enable.compression", COMPRESSION},
-};
-
-static bool set_state_value(EffectsState *state, const char *key, int32_t value)
-{
-    if (state == NULL || key == NULL)
-    {
-        return false;
-    }
-
-    if (strcmp(key, "state.active_effect") == 0)
-    {
-        if (value < 0 || value >= NUM_EFFECTS)
-        {
-            return false;
-        }
-        state->active_effect_selection = (uint8_t)value;
-        return true;
-    }
-
-    for (size_t i = 0; i < sizeof(state_enable_map) / sizeof(state_enable_map[0]); i++)
-    {
-        if (strcmp(key, state_enable_map[i].key) == 0)
-        {
-            if (value < 0 || value > 1)
-            {
-                return false;
-            }
-            state->is_enabled[state_enable_map[i].effect] = value == 1;
-            return true;
-        }
-    }
-
-    return false;
-}
-
-static bool get_state_value(const EffectsState *state, const char *key, int32_t *value_out)
-{
-    if (state == NULL || key == NULL || value_out == NULL)
-    {
-        return false;
-    }
-
-    if (strcmp(key, "state.active_effect") == 0)
-    {
-        *value_out = state->active_effect_selection;
-        return true;
-    }
-
-    for (size_t i = 0; i < sizeof(state_enable_map) / sizeof(state_enable_map[0]); i++)
-    {
-        if (strcmp(key, state_enable_map[i].key) == 0)
-        {
-            *value_out = state->is_enabled[state_enable_map[i].effect] ? 1 : 0;
-            return true;
-        }
-    }
-
-    return false;
-}
-
 static bool set_runtime_value(CliServiceAdapter *context, const char *key, int32_t value)
 {
     if (context == NULL || key == NULL || value < 0)
@@ -431,8 +361,7 @@ static bool service_config_set(const char *key, int32_t value, void *ctx)
     }
 
     lock_ctx(context);
-    success = set_state_value(context->state, key, value) ||
-              set_param_value(context->params, key, value) ||
+    success = set_param_value(context->params, key, value) ||
               set_runtime_value(context, key, value);
     if (success)
     {
@@ -454,54 +383,117 @@ static bool service_config_get(const char *key, int32_t *value_out, void *ctx)
     }
 
     lock_ctx(context);
-    success = get_state_value(context->state, key, value_out) ||
-              get_param_value(context->params, key, value_out) ||
+    success = get_param_value(context->params, key, value_out) ||
               get_runtime_value(context, key, value_out);
     unlock_ctx(context);
 
     return success;
 }
 
-static bool service_order_get(uint8_t *order_out, size_t capacity, size_t *count_out, void *ctx)
+static bool service_slot_get(uint8_t *slots_out, uint8_t *enabled_out, size_t capacity,
+                             size_t *count_out, void *ctx)
 {
     CliServiceAdapter *context = (CliServiceAdapter *)ctx;
 
-    if (context == NULL || context->state == NULL || order_out == NULL || count_out == NULL ||
-        capacity < NUM_EFFECTS)
+    if (context == NULL || context->state == NULL || slots_out == NULL || enabled_out == NULL ||
+        count_out == NULL || capacity < NUM_SLOTS)
     {
         return false;
     }
 
     lock_ctx(context);
-    for (size_t i = 0; i < NUM_EFFECTS; i++)
+    for (size_t i = 0; i < NUM_SLOTS; i++)
     {
-        order_out[i] = (uint8_t)context->state->ordered[i];
+        slots_out[i] = context->state->slots[i];
+        enabled_out[i] = context->state->slot_enabled[i] ? 1U : 0U;
     }
-    *count_out = NUM_EFFECTS;
+    *count_out = NUM_SLOTS;
     unlock_ctx(context);
 
     return true;
 }
 
-static bool service_order_set(const uint8_t *order, size_t count, void *ctx)
+static bool service_slot_assign(uint8_t pos, uint8_t effect, void *ctx)
 {
     CliServiceAdapter *context = (CliServiceAdapter *)ctx;
-
-    if (context == NULL || context->state == NULL || order == NULL || count != NUM_EFFECTS)
+    if (context == NULL || context->state == NULL)
     {
         return false;
     }
 
-    Effect ordered[NUM_EFFECTS];
-    for (size_t i = 0; i < NUM_EFFECTS; i++)
+    lock_ctx(context);
+    bool success = effects_state_assign_slot(context->state, pos, (Effect)effect);
+    unlock_ctx(context);
+    return success;
+}
+
+static bool service_slot_clear(uint8_t pos, void *ctx)
+{
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
+    if (context == NULL || context->state == NULL)
     {
-        ordered[i] = (Effect)order[i];
+        return false;
     }
 
     lock_ctx(context);
-    bool success = effects_state_set_order(context->state, ordered, count);
+    bool success = effects_state_clear_slot(context->state, pos);
     unlock_ctx(context);
+    return success;
+}
 
+static bool service_slot_swap(uint8_t a, uint8_t b, void *ctx)
+{
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
+    if (context == NULL || context->state == NULL)
+    {
+        return false;
+    }
+
+    lock_ctx(context);
+    bool success = effects_state_swap_slots(context->state, a, b);
+    unlock_ctx(context);
+    return success;
+}
+
+static bool service_slot_set_enabled(uint8_t pos, bool enabled, void *ctx)
+{
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
+    if (context == NULL || context->state == NULL)
+    {
+        return false;
+    }
+
+    lock_ctx(context);
+    bool success = effects_state_set_slot_enabled(context->state, pos, enabled);
+    unlock_ctx(context);
+    return success;
+}
+
+static bool service_slot_get_active(uint8_t *pos_out, void *ctx)
+{
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
+    if (context == NULL || context->state == NULL || pos_out == NULL)
+    {
+        return false;
+    }
+
+    lock_ctx(context);
+    *pos_out = context->state->active_slot;
+    unlock_ctx(context);
+    return true;
+}
+
+static bool service_slot_set_active(uint8_t pos, void *ctx)
+{
+    CliServiceAdapter *context = (CliServiceAdapter *)ctx;
+    if (context == NULL || context->state == NULL)
+    {
+        return false;
+    }
+
+    lock_ctx(context);
+    bool success = effects_state_set_active_slot(context->state, pos);
+    unlock_ctx(context);
     return success;
 }
 
@@ -923,8 +915,13 @@ void cli_service_adapter_bind(CliServiceAdapter *context, CliServices *services_
     services_out->clear_all_overrides = service_clear_all_overrides;
     services_out->config_set = service_config_set;
     services_out->config_get = service_config_get;
-    services_out->order_get = service_order_get;
-    services_out->order_set = service_order_set;
+    services_out->slot_get = service_slot_get;
+    services_out->slot_assign = service_slot_assign;
+    services_out->slot_clear = service_slot_clear;
+    services_out->slot_swap = service_slot_swap;
+    services_out->slot_set_enabled = service_slot_set_enabled;
+    services_out->slot_get_active = service_slot_get_active;
+    services_out->slot_set_active = service_slot_set_active;
     services_out->rom_save_state = service_rom_save_state;
     services_out->rom_load_state = service_rom_load_state;
     services_out->rom_read_raw = service_rom_read_raw;

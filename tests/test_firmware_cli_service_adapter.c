@@ -23,7 +23,7 @@ typedef struct
 static void set_default_effects_state(EffectsState *state)
 {
     memset(state, 0, sizeof(*state));
-    effects_state_set_default_order(state);
+    effects_state_set_default_slots(state);
 }
 
 static void set_default_effects_params(EffectsParams *params)
@@ -173,12 +173,12 @@ static void test_switch_override_precedence(void)
     expect_true(services.set_switch_override(1, true, services.context), "set switch override");
     expect_true(cli_service_adapter_apply_switches(&context, false, false, false),
                 "apply switches with override");
-    expect_true(state.is_enabled[ECHO], "switch override took precedence");
+    expect_true(state.slot_enabled[1], "switch override took precedence");
 
     expect_true(services.clear_switch_override(1, services.context), "clear switch override");
     expect_true(cli_service_adapter_apply_switches(&context, false, false, false),
                 "apply switches after clear");
-    expect_false(state.is_enabled[ECHO], "hardware switch restored after clear");
+    expect_false(state.slot_enabled[1], "hardware switch restored after clear");
 }
 
 static void test_config_bounds_and_state_updates(void)
@@ -216,11 +216,14 @@ static void test_config_bounds_and_state_updates(void)
     expect_true(services.config_set("echo.damping", 128, services.context),
                 "accept echo.damping write");
 
-    expect_true(services.config_set("state.active_effect", 2, services.context),
-                "set active effect");
-    expect_eq_u8(2, state.active_effect_selection, "active effect updated");
-    expect_false(services.config_set("state.active_effect", 9, services.context),
-                 "reject invalid active effect");
+    expect_true(services.slot_set_active(2, services.context), "set active slot");
+    expect_eq_u8(2, state.active_slot, "active slot updated");
+    expect_false(services.slot_set_active(9, services.context), "reject invalid active slot");
+    uint8_t active_pos = 0;
+    expect_true(services.slot_get_active(&active_pos, services.context), "get active slot");
+    expect_eq_u8(2, active_pos, "active slot read back");
+    expect_false(services.config_set("state.active_slot", 1, services.context),
+                 "state.active_slot config key removed");
 
     expect_true(services.config_set("heartbeat.period_ms", 250, services.context),
                 "set heartbeat period");
@@ -612,7 +615,7 @@ static void test_i2c_adapter_operations(void)
                  "i2c scan returns false when ops NULL");
 }
 
-static void test_order_get_set_roundtrip(void)
+static void test_slot_adapter_operations(void)
 {
     EffectsState state;
     EffectsParams params;
@@ -620,41 +623,37 @@ static void test_order_get_set_roundtrip(void)
     CliServices services;
     setup_adapter(&context, &state, &params, &services, NULL);
 
-    // Default order is overdrive, echo, compression.
-    uint8_t order[8] = {0};
+    uint8_t slots[8] = {0};
+    uint8_t enabled[8] = {0};
     size_t count = 0;
-    expect_true(services.order_get(order, sizeof(order), &count, services.context),
-                "order_get default");
-    expect_eq_size(NUM_EFFECTS, count, "order_get returns all effects");
-    expect_eq_u8(OVERDRIVE, order[0], "order_get default[0]");
-    expect_eq_u8(ECHO, order[1], "order_get default[1]");
-    expect_eq_u8(COMPRESSION, order[2], "order_get default[2]");
+    expect_true(services.slot_get(slots, enabled, sizeof(slots), &count, services.context),
+                "slot_get default");
+    expect_eq_size(NUM_SLOTS, count, "slot_get returns NUM_SLOTS");
+    expect_eq_u8(OVERDRIVE, slots[0], "default slot0 overdrive");
+    expect_eq_u8(ECHO, slots[1], "default slot1 echo");
+    expect_eq_u8(EFFECT_ID_NONE, slots[3], "default slot3 empty");
+    expect_true(enabled[0], "default slot0 enabled");
 
-    const uint8_t new_order[NUM_EFFECTS] = {COMPRESSION, OVERDRIVE, ECHO};
-    expect_true(services.order_set(new_order, NUM_EFFECTS, services.context),
-                "order_set valid permutation");
-    expect_eq_u8(COMPRESSION, state.ordered[0], "order_set mutates state[0]");
-    expect_eq_u8(OVERDRIVE, state.ordered[1], "order_set mutates state[1]");
-    expect_eq_u8(ECHO, state.ordered[2], "order_set mutates state[2]");
+    expect_true(services.slot_assign(3, COMPRESSION, services.context),
+                "assign compression to slot3");
+    expect_eq_u8(COMPRESSION, state.slots[3], "slot3 holds compression");
+    expect_eq_u8(EFFECT_ID_NONE, state.slots[2], "compression vacated old slot");
 
-    expect_true(services.order_get(order, sizeof(order), &count, services.context),
-                "order_get after set");
-    expect_eq_u8(COMPRESSION, order[0], "order_get reflects new order");
+    expect_true(services.slot_set_enabled(3, true, services.context), "enable slot3");
+    expect_true(state.slot_enabled[3], "slot3 enabled via adapter");
 
-    // Invalid orders are rejected and leave the state unchanged.
-    const uint8_t duplicate[NUM_EFFECTS] = {ECHO, ECHO, OVERDRIVE};
-    expect_false(services.order_set(duplicate, NUM_EFFECTS, services.context),
-                 "order_set rejects duplicate");
-    const uint8_t wrong_count[2] = {OVERDRIVE, ECHO};
-    expect_false(services.order_set(wrong_count, 2, services.context),
-                 "order_set rejects wrong count");
-    const uint8_t out_of_range[NUM_EFFECTS] = {OVERDRIVE, ECHO, 99};
-    expect_false(services.order_set(out_of_range, NUM_EFFECTS, services.context),
-                 "order_set rejects out-of-range effect");
+    expect_true(services.slot_clear(0, services.context), "clear slot0");
+    expect_eq_u8(EFFECT_ID_NONE, state.slots[0], "slot0 cleared");
 
-    expect_eq_u8(COMPRESSION, state.ordered[0], "state unchanged after rejected[0]");
-    expect_eq_u8(OVERDRIVE, state.ordered[1], "state unchanged after rejected[1]");
-    expect_eq_u8(ECHO, state.ordered[2], "state unchanged after rejected[2]");
+    expect_true(services.slot_swap(1, 3, services.context), "swap slots 1 and 3");
+    expect_eq_u8(COMPRESSION, state.slots[1], "slot1 now compression after swap");
+
+    expect_false(services.slot_assign(NUM_SLOTS, OVERDRIVE, services.context),
+                 "assign rejects out-of-range pos");
+    expect_false(services.slot_assign(0, (uint8_t)99, services.context),
+                 "assign rejects invalid effect");
+    expect_false(services.slot_clear(NUM_SLOTS, services.context),
+                 "clear rejects out-of-range pos");
 }
 
 int main(void)
@@ -662,7 +661,7 @@ int main(void)
     test_pot_override_precedence();
     test_switch_override_precedence();
     test_config_bounds_and_state_updates();
-    test_order_get_set_roundtrip();
+    test_slot_adapter_operations();
     test_rom_raw_guardrails();
     test_test_input_mode_status_and_validation();
     test_test_output_mode_status_and_validation();

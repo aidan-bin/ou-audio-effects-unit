@@ -123,9 +123,10 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
     effects_pipeline_apply_enabled(task_context->pipeline, &latched_effects_state);
 
     bool any_enabled = false;
-    for (int i = 0; i < NUM_EFFECTS; i++)
+    for (int i = 0; i < NUM_SLOTS; i++)
     {
-        if (latched_effects_state.is_enabled[latched_effects_state.ordered[i]])
+        if (latched_effects_state.slot_enabled[i] &&
+            !effect_id_is_empty(latched_effects_state.slots[i]))
         {
             any_enabled = true;
             break;
@@ -157,16 +158,16 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
         goto cleanup;
     }
 
-    for (int i = 0; i < NUM_EFFECTS; i++)
+    for (int i = 0; i < NUM_SLOTS; i++)
     {
-        Effect effect = latched_effects_state.ordered[i];
+        EffectId slot = latched_effects_state.slots[i];
 
-        if (!latched_effects_state.is_enabled[effect])
+        if (effect_id_is_empty(slot) || !latched_effects_state.slot_enabled[i])
         {
             continue;
         }
 
-        if (effects_pipeline_process(task_context->pipeline, effect, input_buf, output_buf,
+        if (effects_pipeline_process(task_context->pipeline, (Effect)slot, input_buf, output_buf,
                                      task_context->sample_buf_len) != 0)
         {
             (void)log_write(LOG_LEVEL_ERROR, "process_failed: effect pipeline process");
@@ -174,11 +175,24 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
             break;
         }
 
-        if (i < NUM_EFFECTS - 1)
+        // output_buf becomes input_buf for next stage
+        uint16_t *temp = input_buf;
+        input_buf = output_buf;
+        output_buf = temp;
+    }
+    
+    // An even number of stages means input_buf == curr_adc_buf, so check if we need to copy to curr_dac_buf.
+    if (!process_failed && input_buf != curr_dac_buf)
+    {
+        if (!ops->dma_copy(input_buf, curr_dac_buf, task_context->sample_buf_len, ticks_to_wait,
+                           ops->context))
         {
-            uint16_t *temp = input_buf;
-            input_buf = output_buf;
-            output_buf = temp;
+            (void)log_write(LOG_LEVEL_ERROR, "process_failed: final copy to dac");
+            if (ops->panic_write != NULL)
+            {
+                ops->panic_write("panic: final copy failed\n", ops->context);
+            }
+            process_failed = true;
         }
     }
 

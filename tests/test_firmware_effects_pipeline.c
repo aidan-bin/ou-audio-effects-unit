@@ -113,9 +113,9 @@ static void test_pipeline_echo_state_attach_and_reset(void)
     expect_true(effects_pipeline_sync_params(&pipeline, &params) == 0, "sync echo params");
 
     EffectsState enabled;
-    effects_state_set_default_order(&enabled);
-    memset(enabled.is_enabled, 0, sizeof(enabled.is_enabled));
-    enabled.is_enabled[ECHO] = true;
+    effects_state_set_default_slots(&enabled);
+    memset(enabled.slot_enabled, 0, sizeof(enabled.slot_enabled));
+    enabled.slot_enabled[1] = true; // echo occupies slot 1 by default
 
     expect_true(effects_pipeline_apply_enabled(&pipeline, &enabled) == 0, "apply enabled (edge)");
     uint16_t loud[4];
@@ -137,7 +137,7 @@ static void test_pipeline_echo_state_attach_and_reset(void)
     expect_true(history_has_energy, "echo history captured the input frame");
 
     EffectsState disabled = enabled;
-    disabled.is_enabled[ECHO] = false;
+    disabled.slot_enabled[1] = false;
     expect_true(effects_pipeline_apply_enabled(&pipeline, &disabled) == 0, "apply disabled");
     expect_true(effects_pipeline_apply_enabled(&pipeline, &enabled) == 0, "apply re-enabled");
 
