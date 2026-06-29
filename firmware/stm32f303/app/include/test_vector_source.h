@@ -26,6 +26,7 @@ typedef struct
     bool impulse_fired;
     bool (*stream_pop)(int16_t *sample, void *context);
     void *stream_context;
+    uint32_t usb_underruns;
 } TestVectorSource;
 
 void test_vector_source_init(TestVectorSource *source, uint32_t sample_rate_hz);

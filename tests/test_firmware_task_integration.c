@@ -25,7 +25,6 @@ typedef struct
     uint16_t *adc_buffer;
     uint16_t *dac_buffer;
 
-    uint32_t outstanding_allocs;
     uint32_t failure_reports;
 } IntegrationState;
 
@@ -173,34 +172,6 @@ static bool effects_dma_copy(const uint16_t *src, uint16_t *dst, size_t count,
     return true;
 }
 
-static void *effects_alloc(size_t size, void *context)
-{
-    IntegrationState *state = (IntegrationState *)context;
-    void *ptr = malloc(size);
-
-    if (state != NULL && ptr != NULL)
-    {
-        state->outstanding_allocs++;
-    }
-
-    return ptr;
-}
-
-static void effects_free(void *ptr, void *context)
-{
-    IntegrationState *state = (IntegrationState *)context;
-
-    if (ptr != NULL)
-    {
-        free(ptr);
-
-        if (state != NULL)
-        {
-            state->outstanding_allocs--;
-        }
-    }
-}
-
 static bool effects_read_latched_state(EffectsState *state_out, EffectsParams *params_out,
                                        void *context)
 {
@@ -339,6 +310,7 @@ static void test_integration_switch_pot_and_effects_pipeline(void)
     state.adc_buffer = adc_a;
     state.dac_buffer = dac_a;
 
+    static uint16_t echo_scratch[64];
     EffectsTaskContext effects_context = {
         .pipeline = &pipeline,
         .effects_state = NULL,
@@ -348,6 +320,8 @@ static void test_integration_switch_pot_and_effects_pipeline(void)
         .dac_buf_a = dac_a,
         .dac_buf_b = dac_b,
         .delay_samples_buf = delay_samples,
+        .echo_scratch_buf = echo_scratch,
+        .echo_scratch_len = sizeof(echo_scratch) / sizeof(echo_scratch[0]),
         .sample_buf_len = 8,
         .delay_samples_len = 16,
         .sampling_period_us = 25,
@@ -357,8 +331,6 @@ static void test_integration_switch_pot_and_effects_pipeline(void)
         .wait_for_adc_buffer = effects_wait_for_adc,
         .wait_for_dac_buffer = effects_wait_for_dac,
         .dma_copy = effects_dma_copy,
-        .alloc = effects_alloc,
-        .free = effects_free,
         .read_latched_state = effects_read_latched_state,
         .report_failure = effects_report_failure,
         .ms_to_ticks = effects_ms_to_ticks,
@@ -367,7 +339,6 @@ static void test_integration_switch_pot_and_effects_pipeline(void)
 
     expect_true(effects_task_step(&effects_context, &effects_ops), "effects task step succeeds");
     expect_eq_u32(0, state.failure_reports, "effects task reports no failures");
-    expect_eq_u32(0, state.outstanding_allocs, "effects task frees all temporary allocations");
 }
 
 int main(void)

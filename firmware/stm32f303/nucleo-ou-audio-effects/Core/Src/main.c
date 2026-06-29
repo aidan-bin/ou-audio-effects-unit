@@ -103,6 +103,11 @@ static volatile uint16_t adc_buf[ADC_BUF_LEN] = {0};
 static volatile uint16_t dac_buf[DAC_BUF_LEN] = {0};
 static volatile uint16_t delay_samples_buf[NUM_DELAY_SAMPLES] = {0};
 
+/* Scratch for the echo delay-history concatenation, sized to hold the full
+ * delay history plus one fresh half-buffer. */
+#define ECHO_SCRATCH_LEN (NUM_DELAY_SAMPLES + SAMPLE_BUF_LEN)
+static uint16_t echo_scratch_buf[ECHO_SCRATCH_LEN] = {0};
+
 static volatile uint16_t *const adc_buf_a = adc_buf;
 static volatile uint16_t *const adc_buf_b = &adc_buf[SAMPLE_BUF_LEN];
 static volatile uint16_t *const dac_buf_a = dac_buf;
@@ -183,8 +188,6 @@ static bool effects_task_wait_for_dac_buffer(uint32_t timeout_ticks, uint16_t **
                                              void *context);
 static bool effects_task_dma_copy(const uint16_t *src, uint16_t *dst, size_t count,
                                   uint32_t timeout_ticks, void *context);
-static void *effects_task_alloc(size_t size, void *context);
-static void effects_task_free(void *ptr, void *context);
 static bool effects_task_read_latched_state(EffectsState *state, EffectsParams *params,
                                             void *context);
 static bool effects_task_replace_input_for_testing(uint16_t *buf, size_t count, void *context);
@@ -389,21 +392,6 @@ static bool effects_task_dma_copy(const uint16_t *src, uint16_t *dst, size_t cou
 
     (void)memcpy(dst, src, count * sizeof(uint16_t));
     return true;
-}
-
-static void *effects_task_alloc(size_t size, void *context)
-{
-    (void)context;
-    return pvPortMalloc(size);
-}
-
-static void effects_task_free(void *ptr, void *context)
-{
-    (void)context;
-    if (ptr != NULL)
-    {
-        vPortFree(ptr);
-    }
 }
 
 static bool effects_task_read_latched_state(EffectsState *state, EffectsParams *params,
@@ -844,6 +832,8 @@ void startEffectsTask(void const *argument)
         .dac_buf_a = (uint16_t *)dac_buf_a,
         .dac_buf_b = (uint16_t *)dac_buf_b,
         .delay_samples_buf = (uint16_t *)delay_samples_buf,
+        .echo_scratch_buf = echo_scratch_buf,
+        .echo_scratch_len = ECHO_SCRATCH_LEN,
         .sample_buf_len = SAMPLE_BUF_LEN,
         .delay_samples_len = NUM_DELAY_SAMPLES,
         .sampling_period_us = sampling_period_us,
@@ -875,8 +865,6 @@ void startEffectsTask(void const *argument)
         .wait_for_adc_buffer = effects_task_wait_for_adc_buffer,
         .wait_for_dac_buffer = effects_task_wait_for_dac_buffer,
         .dma_copy = effects_task_dma_copy,
-        .alloc = effects_task_alloc,
-        .free = effects_task_free,
         .read_latched_state = effects_task_read_latched_state,
         .replace_input_for_testing = effects_task_replace_input_for_testing,
         .replace_output_for_testing = effects_task_replace_output_for_testing,
@@ -944,27 +932,34 @@ void startCliTask(void const *argument)
         cli_uart_recover_rx_errors();
         cli_session_poll(&cli_session);
 
-        if (audio_stream.output_active &&
-            usb_audio_stream_out_available(&audio_stream) > 0)
+        if (audio_stream.output_active)
         {
-            int16_t tx_samples[200];
-            size_t popped =
-                usb_audio_stream_pop_samples(&audio_stream, tx_samples, 200);
-            if (popped > 0)
+            /*
+             * Staging buffer persists across iterations so a batch is never
+             * dropped on USBD_BUSY: we only pull a fresh batch from the ring
+             * once the previous one has been accepted by the stack, and retry
+             * the in-flight batch on the next tick.
+             */
+            static int16_t audio_tx_staging[200];
+            static size_t audio_tx_staging_len;
+
+            if (audio_tx_staging_len == 0U &&
+                usb_audio_stream_out_available(&audio_stream) > 0U)
             {
-                for (uint8_t attempts = 0; attempts < 10; attempts++)
+                audio_tx_staging_len = usb_audio_stream_pop_samples(
+                    &audio_stream, audio_tx_staging, 200);
+            }
+
+            if (audio_tx_staging_len > 0U)
+            {
+                const uint8_t result = USBD_CDC_Dual_Transmit_FS_Audio(
+                    (uint8_t *)audio_tx_staging,
+                    (uint16_t)(audio_tx_staging_len * 2U));
+                if (result != USBD_BUSY)
                 {
-                    const uint8_t result = USBD_CDC_Dual_Transmit_FS_Audio(
-                        (uint8_t *)tx_samples, (uint16_t)(popped * 2U));
-                    if (result == USBD_OK)
-                    {
-                        break;
-                    }
-                    if (result != USBD_BUSY)
-                    {
-                        break;
-                    }
-                    osDelay(1);
+                    /* Accepted (USBD_OK) or unrecoverable error: release the
+                     * batch. BUSY keeps it staged for the next tick. */
+                    audio_tx_staging_len = 0U;
                 }
             }
         }

@@ -31,6 +31,18 @@ __ALIGN_BEGIN static uint8_t USBD_CDC_Dual_CfgFSDesc[USB_CDC_DUAL_CONFIG_DESC_SI
         0x32, /* bMaxPower: 100 mA */
 
         /* ================================================================ */
+        /* CDC0 (CLI) -- Interface Association Descriptor (groups if0+if1)   */
+        /* ================================================================ */
+        0x08,                  /* bLength */
+        0x0B,                  /* bDescriptorType: Interface Association */
+        0x00,                  /* bFirstInterface = 0 */
+        0x02,                  /* bInterfaceCount = 2 */
+        0x02,                  /* bFunctionClass: CDC Communication */
+        0x02,                  /* bFunctionSubClass: Abstract Control Model */
+        0x01,                  /* bFunctionProtocol: AT commands */
+        0x00,                  /* iFunction */
+
+        /* ================================================================ */
         /* CDC0 (CLI) -- Interface 0 - Communication Class                  */
         /* ================================================================ */
         0x09,
@@ -94,6 +106,18 @@ __ALIGN_BEGIN static uint8_t USBD_CDC_Dual_CfgFSDesc[USB_CDC_DUAL_CONFIG_DESC_SI
         LOBYTE(CDC_DUAL_DATA_FS_PACKET_SIZE),
         HIBYTE(CDC_DUAL_DATA_FS_PACKET_SIZE),
         0x00, /* bInterval */
+
+        /* ================================================================ */
+        /* CDC1 (Audio) -- Interface Association Descriptor (groups if2+if3) */
+        /* ================================================================ */
+        0x08,                  /* bLength */
+        0x0B,                  /* bDescriptorType: Interface Association */
+        0x02,                  /* bFirstInterface = 2 */
+        0x02,                  /* bInterfaceCount = 2 */
+        0x02,                  /* bFunctionClass: CDC Communication */
+        0x02,                  /* bFunctionSubClass: Abstract Control Model */
+        0x01,                  /* bFunctionProtocol: AT commands */
+        0x00,                  /* iFunction */
 
         /* ================================================================ */
         /* CDC1 (Audio) -- Interface 2 - Communication Class                */
@@ -728,13 +752,18 @@ static uint8_t do_transmit(USBD_HandleTypeDef *pdev, int inst,
     __IO uint32_t *tx_state =
         (inst == 0) ? &hdual->cli_tx_state : &hdual->audio_tx_state;
 
+    // Claim the pipe atomically
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
     if (*tx_state != 0U)
     {
+        __set_PRIMASK(primask);
         return USBD_BUSY;
     }
+    *tx_state = 1U;
+    __set_PRIMASK(primask);
 
     set_tx_buffer(hdual, inst, buf, len);
-    *tx_state = 1U;
     pdev->ep_in[ep_addr & 0x7FU].total_length = len;
     return USBD_LL_Transmit(pdev, ep_addr, buf, len);
 }

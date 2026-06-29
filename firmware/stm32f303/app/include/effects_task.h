@@ -19,6 +19,9 @@ typedef struct
     uint16_t *dac_buf_b;
     uint16_t *delay_samples_buf;
 
+    uint16_t *echo_scratch_buf;
+    size_t echo_scratch_len;
+
     size_t sample_buf_len;
     size_t delay_samples_len;
 
@@ -33,9 +36,6 @@ typedef struct
 
     bool (*dma_copy)(const uint16_t *src, uint16_t *dst, size_t count, uint32_t timeout_ticks,
                      void *context);
-
-    void *(*alloc)(size_t size, void *context);
-    void (*free)(void *ptr, void *context);
 
     bool (*read_latched_state)(EffectsState *state, EffectsParams *params, void *context);
     bool (*replace_input_for_testing)(uint16_t *buf, size_t count, void *context);

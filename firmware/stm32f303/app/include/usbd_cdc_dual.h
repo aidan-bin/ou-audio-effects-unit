@@ -18,7 +18,7 @@
 #define CDC_DUAL_CMD_PACKET_SIZE 8U
 
 /* Combined configuration descriptor size */
-#define USB_CDC_DUAL_CONFIG_DESC_SIZ 125U
+#define USB_CDC_DUAL_CONFIG_DESC_SIZ 141U
 
 /*
  * Dual CDC handle: contains state for two logical CDC ACM instances.

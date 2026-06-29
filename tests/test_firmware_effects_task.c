@@ -24,7 +24,6 @@ typedef struct
 
     uint32_t failure_reports;
     uint32_t frame_reports;
-    uint32_t outstanding_allocs;
 
     uint32_t frame_begin_calls;
     uint32_t frame_end_calls;
@@ -83,29 +82,6 @@ static bool dma_copy(const uint16_t *src, uint16_t *dst, size_t count, uint32_t 
 
     memmove(dst, src, count * sizeof(uint16_t));
     return true;
-}
-
-static void *alloc_buf(size_t size, void *context)
-{
-    EffectsTaskTestOpsState *state = (EffectsTaskTestOpsState *)context;
-    void *ptr = malloc(size);
-    if (ptr != NULL)
-    {
-        state->outstanding_allocs++;
-    }
-
-    return ptr;
-}
-
-static void free_buf(void *ptr, void *context)
-{
-    EffectsTaskTestOpsState *state = (EffectsTaskTestOpsState *)context;
-
-    if (ptr != NULL)
-    {
-        free(ptr);
-        state->outstanding_allocs--;
-    }
 }
 
 static bool read_latched_state(EffectsState *state_out, EffectsParams *params_out, void *context)
@@ -206,8 +182,6 @@ static EffectsTaskOps make_ops(EffectsTaskTestOpsState *state)
         .wait_for_adc_buffer = wait_for_adc,
         .wait_for_dac_buffer = wait_for_dac,
         .dma_copy = dma_copy,
-        .alloc = alloc_buf,
-        .free = free_buf,
         .read_latched_state = read_latched_state,
         .replace_input_for_testing = replace_input_for_testing,
         .replace_output_for_testing = replace_output_for_testing,
@@ -225,6 +199,7 @@ static EffectsTaskContext make_task_context(EffectsPipeline *pipeline, uint16_t 
                                             uint16_t *delay_samples, size_t sample_buf_len,
                                             size_t delay_samples_len)
 {
+    static uint16_t echo_scratch[256];
     EffectsTaskContext ctx = {
         .pipeline = pipeline,
         .effects_state = NULL,
@@ -234,6 +209,8 @@ static EffectsTaskContext make_task_context(EffectsPipeline *pipeline, uint16_t 
         .dac_buf_a = dac_a,
         .dac_buf_b = dac_b,
         .delay_samples_buf = delay_samples,
+        .echo_scratch_buf = echo_scratch,
+        .echo_scratch_len = sizeof(echo_scratch) / sizeof(echo_scratch[0]),
         .sample_buf_len = sample_buf_len,
         .delay_samples_len = delay_samples_len,
         .sampling_period_us = 25,
@@ -290,7 +267,6 @@ static void test_effects_task_happy_path_matches_pipeline(void)
     expect_true(step_ok, "effects task step succeeds");
     expect_true(ops_state.replace_input_for_testing_called, "test input replacement hook called");
     expect_eq_u32(1, ops_state.frame_reports, "frame report callback called on success");
-    expect_true(ops_state.outstanding_allocs == 0, "effects task step frees temporary allocations");
 
     uint16_t expected[8] = {0};
     expect_true(effects_pipeline_sync_params(&expected_pipeline, &ops_state.latched_params) == 0,
@@ -342,7 +318,6 @@ static void test_effects_task_rejects_stray_adc_notification(void)
 
     bool step_ok = effects_task_step(&task_context, &ops);
     expect_true(!step_ok, "effects task rejects stray adc notification value");
-    expect_true(ops_state.outstanding_allocs == 0, "no allocations leaked on stray notification");
 }
 
 static void test_effects_task_timing_callbacks_fire(void)
@@ -383,7 +358,6 @@ static void test_effects_task_timing_callbacks_fire(void)
     expect_eq_u32(1, ops_state.frame_begin_calls, "on_frame_begin called once");
     expect_eq_u32(1, ops_state.frame_end_calls, "on_frame_end called once");
     expect_false(ops_state.last_overrun, "no overrun for fast frame");
-    expect_true(ops_state.outstanding_allocs == 0, "no leaks");
 }
 
 static void test_effects_task_output_replacement_overwrites_dac_buffer(void)
@@ -569,7 +543,6 @@ static void test_effects_task_echo_delay_history_from_buffer(void)
     bool step_ok = effects_task_step(&task_context, &ops);
     expect_true(step_ok, "echo effects task step succeeds");
     expect_eq_u32(1, ops_state.frame_reports, "frame report callback called on success");
-    expect_true(ops_state.outstanding_allocs == 0, "echo alloc/free balanced");
 
     uint16_t echo_input_buf[8];
     memcpy(echo_input_buf, &delay_samples[4], 4 * sizeof(uint16_t));

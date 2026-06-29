@@ -17,6 +17,9 @@ typedef struct
     volatile size_t out_head;
     volatile size_t out_tail;
     bool output_active;
+    
+    volatile uint32_t in_dropped;
+    volatile uint32_t out_dropped;
 } UsbAudioStream;
 
 void usb_audio_stream_init(UsbAudioStream *stream);
@@ -44,5 +47,9 @@ void usb_audio_stream_push_bytes(UsbAudioStream *stream,
 
 /* Number of samples available in out_ring. */
 size_t usb_audio_stream_out_available(const UsbAudioStream *stream);
+
+/* Diagnostic counters: total samples dropped on a full ring. */
+uint32_t usb_audio_stream_out_dropped(const UsbAudioStream *stream);
+uint32_t usb_audio_stream_in_dropped(const UsbAudioStream *stream);
 
 #endif

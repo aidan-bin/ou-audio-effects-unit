@@ -72,8 +72,13 @@ bool usb_audio_stream_push_sample(UsbAudioStream *stream, int16_t sample)
         return false;
     }
 
-    return write_to_ring(stream->out_ring, &stream->out_head,
-                         &stream->out_tail, sample, USB_AUDIO_RING_SIZE);
+    bool written = write_to_ring(stream->out_ring, &stream->out_head,
+                                 &stream->out_tail, sample, USB_AUDIO_RING_SIZE);
+    if (!written)
+    {
+        stream->out_dropped++;
+    }
+    return written;
 }
 
 size_t usb_audio_stream_out_available(const UsbAudioStream *stream)
@@ -125,7 +130,20 @@ void usb_audio_stream_push_bytes(UsbAudioStream *stream,
         int16_t sample =
             (int16_t)((uint16_t)bytes[i * 2U] |
                       ((uint16_t)bytes[i * 2U + 1U] << 8));
-        write_to_ring(stream->in_ring, &stream->in_head, &stream->in_tail,
-                      sample, USB_AUDIO_RING_SIZE);
+        if (!write_to_ring(stream->in_ring, &stream->in_head, &stream->in_tail,
+                           sample, USB_AUDIO_RING_SIZE))
+        {
+            stream->in_dropped++;
+        }
     }
+}
+
+uint32_t usb_audio_stream_out_dropped(const UsbAudioStream *stream)
+{
+    return (stream == NULL) ? 0U : stream->out_dropped;
+}
+
+uint32_t usb_audio_stream_in_dropped(const UsbAudioStream *stream)
+{
+    return (stream == NULL) ? 0U : stream->in_dropped;
 }

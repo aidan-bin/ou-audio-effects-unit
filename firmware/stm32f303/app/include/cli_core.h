@@ -124,7 +124,9 @@ typedef struct
 
     bool (*audio_set_input)(uint8_t source, void *context);
     bool (*audio_set_output)(bool enabled, void *context);
-    bool (*audio_get_status)(uint8_t *source_out, bool *output_enabled_out, void *context);
+    bool (*audio_get_status)(uint8_t *source_out, bool *output_enabled_out,
+                             uint32_t *out_dropped_out, uint32_t *in_dropped_out,
+                             void *context);
 
     bool (*audio_get_info)(CliAudioStatus *status_out, void *context);
     void *context;

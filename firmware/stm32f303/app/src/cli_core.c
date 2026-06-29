@@ -774,16 +774,21 @@ static CliStatus handle_audio(char **tokens,
         REQUIRE_SERVICE(services->audio_get_status);
         uint8_t source = 0;
         bool output_enabled = false;
+        uint32_t out_dropped = 0;
+        uint32_t in_dropped = 0;
         if (!services->audio_get_status(&source, &output_enabled,
+                                        &out_dropped, &in_dropped,
                                         services->context))
         {
             return CLI_STATUS_SERVICE_ERROR;
         }
-        char line[64];
+        char line[80];
         (void)snprintf(line, sizeof(line),
-                       "audio input=%s output=%s\n",
+                       "audio input=%s output=%s drops_out=%lu drops_in=%lu\n",
                        source == 0U ? "adc" : "usb",
-                       output_enabled ? "on" : "off");
+                       output_enabled ? "on" : "off",
+                       (unsigned long)out_dropped,
+                       (unsigned long)in_dropped);
         return write_line(io, line) ? CLI_STATUS_OK
                                     : CLI_STATUS_SERVICE_ERROR;
     }

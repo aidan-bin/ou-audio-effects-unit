@@ -107,6 +107,7 @@ void test_vector_source_init(TestVectorSource *source, uint32_t sample_rate_hz)
     source->sweep_freq_hz = TEST_VECTOR_SWEEP_MIN_HZ;
     source->impulse_counter = 0U;
     source->impulse_fired = false;
+    source->usb_underruns = 0U;
 }
 
 bool test_vector_source_fill_buffer(TestVectorSource *source, const CliTestModeStatus *status,
@@ -138,6 +139,7 @@ bool test_vector_source_fill_buffer(TestVectorSource *source, const CliTestModeS
             }
             else
             {
+                source->usb_underruns++;
                 buf[i] = (uint16_t)X_AXIS;
             }
         }

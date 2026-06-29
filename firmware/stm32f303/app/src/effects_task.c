@@ -40,8 +40,8 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
 {
     if (task_context == NULL || ops == NULL || task_context->pipeline == NULL ||
         task_context->delay_samples_buf == NULL || ops->wait_for_adc_buffer == NULL ||
-        ops->wait_for_dac_buffer == NULL || ops->dma_copy == NULL || ops->alloc == NULL ||
-        ops->free == NULL || ops->read_latched_state == NULL || ops->ms_to_ticks == NULL)
+        ops->wait_for_dac_buffer == NULL || ops->dma_copy == NULL ||
+        ops->read_latched_state == NULL || ops->ms_to_ticks == NULL)
     {
         (void)log_write(LOG_LEVEL_ERROR, "effects task invalid context or ops");
         if (ops != NULL && ops->panic_write != NULL)
@@ -201,11 +201,11 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
                 num_delay_samples = task_context->delay_samples_len;
             }
 
-            echo_input_buf = (uint16_t *)ops->alloc(
-                (num_delay_samples + task_context->sample_buf_len) * sizeof(uint16_t), ops->context);
-            if (echo_input_buf == NULL)
+            echo_input_buf = task_context->echo_scratch_buf;
+            if (echo_input_buf == NULL ||
+                num_delay_samples + task_context->sample_buf_len > task_context->echo_scratch_len)
             {
-                (void)log_write(LOG_LEVEL_ERROR, "process_failed: echo_input_buf alloc");
+                (void)log_write(LOG_LEVEL_ERROR, "process_failed: echo scratch too small");
                 process_failed = true;
                 break;
             }
@@ -242,7 +242,6 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
 
         if (echo_input_buf != NULL)
         {
-            ops->free(echo_input_buf, ops->context);
             echo_input_buf = NULL;
         }
 
@@ -255,11 +254,6 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
     }
 
 cleanup:
-    if (echo_input_buf != NULL)
-    {
-        ops->free(echo_input_buf, ops->context);
-    }
-
     if (!process_failed && ops->replace_output_for_testing != NULL &&
         !ops->replace_output_for_testing(curr_dac_buf, task_context->sample_buf_len, ops->context))
     {
