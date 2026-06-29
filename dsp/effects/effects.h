@@ -25,12 +25,12 @@ typedef struct
     size_t mix;   // Wet/dry ratio in QN (0.0 = fully dry, 0.5 = equally wet and dry, 1.0 = fully wet)
 } OverdriveParam;
 
-#define MAX_OVERDRIVE_GAIN QN_ONE      // Max gain is 1.0
-#define MAX_OVERDRIVE_LEVEL INT16_MAX  // Cannot exceed INT16_MAX
-#define MIN_OVERDRIVE_TONE QN_ONE      // Min tone is 1.0 (below this inverts the signal)
+#define MAX_OVERDRIVE_GAIN QN_ONE     // Max gain is 1.0
+#define MAX_OVERDRIVE_LEVEL INT16_MAX // Cannot exceed INT16_MAX
+#define MIN_OVERDRIVE_TONE QN_ONE     // Min tone is 1.0 (below this inverts the signal)
 #define MAX_OVERDRIVE_TONE \
-    (5u * QN_ONE)                      // Note: 5.0 is somewhat arbitrary (should be calibrated as desired)
-#define MAX_OVERDRIVE_MIX QN_ONE       // Max mix is 1.0 (equivalent to fully wet)
+    (5u * QN_ONE)                // Note: 5.0 is somewhat arbitrary (should be calibrated as desired)
+#define MAX_OVERDRIVE_MIX QN_ONE // Max mix is 1.0 (equivalent to fully wet)
 
 typedef struct
 {
@@ -50,8 +50,8 @@ typedef struct
 #define MAX_ECHO_DELAY_SAMPLES 2207 // Note: At 40.54 kHz, 50 ms is 2027 samples
 #define MIN_ECHO_PRE_DELAY 1U       // Min delay before first echo is one unit
 #define MAX_ECHO_PRE_DELAY \
-    MAX_ECHO_DELAY_SAMPLES                     // Max delay before first echo is until end of delay samples (equivalent
-                                               // to a single echo)
+    MAX_ECHO_DELAY_SAMPLES      // Max delay before first echo is until end of delay samples (equivalent
+                                // to a single echo)
 #define MAX_ECHO_DENSITY QN_ONE // Cannot exceed 1 echo per sample
 #define MAX_ECHO_ATTACK QN_ONE  // Max gain is 1.0 (equivalent to dry signal)
 #define MAX_ECHO_DECAY \
@@ -66,15 +66,15 @@ typedef struct
     uint16_t *line;
     size_t line_len;
     size_t write_idx;
-    int32_t lpf_state;   // Persistent one-pole damping accumulator (centered on 0)
+    int32_t lpf_state; // Persistent one-pole damping accumulator (centered on 0)
     int prev_enabled;
 } EchoFeedback;
 
 typedef struct
 {
-    uint16_t *history;   // Multi-tap delay-line ring
-    size_t history_len;  // Capacity in samples; must be >= MAX_ECHO_DELAY_SAMPLES + frame size
-    size_t history_w;    // Persistent ring write position
+    uint16_t *history;  // Multi-tap delay-line ring
+    size_t history_len; // Capacity in samples; must be >= MAX_ECHO_DELAY_SAMPLES + frame size
+    size_t history_w;   // Persistent ring write position
     EchoFeedback fb;
     int prev_enabled;
 } EchoState;

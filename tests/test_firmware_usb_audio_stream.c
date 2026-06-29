@@ -75,7 +75,7 @@ static void test_wraparound(void)
 {
     UsbAudioStream stream;
     usb_audio_stream_init(&stream);
-    
+
     for (int i = 0; i < (int)(USB_AUDIO_RING_SIZE * 4); i++)
     {
         int16_t value = (int16_t)(i & 0x7FFF);
@@ -93,7 +93,7 @@ static void test_overflow_drops_and_counts(void)
 {
     UsbAudioStream stream;
     usb_audio_stream_init(&stream);
-    
+
     size_t capacity = USB_AUDIO_RING_SIZE - 1U;
     for (size_t i = 0; i < capacity; i++)
     {

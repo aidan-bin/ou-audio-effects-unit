@@ -36,7 +36,7 @@ void effects_state_set_default_slots(EffectsState *state)
         state->slots[i] = EFFECT_ID_NONE;
         state->slot_enabled[i] = false;
     }
-    
+
     state->slots[0] = OVERDRIVE;
     state->slots[1] = ECHO;
     state->slots[2] = COMPRESSION;

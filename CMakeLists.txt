@@ -55,6 +55,7 @@ function(ou_add_firmware_app_test test_basename)
     target_include_directories(${test_target}
         PRIVATE
             ${OU_FIRMWARE_APP_INCLUDE_DIR}
+            ${CMAKE_CURRENT_SOURCE_DIR}/dsp/math
     )
 
     target_link_libraries(${test_target} PRIVATE ou_firmware_app ${ARGN})

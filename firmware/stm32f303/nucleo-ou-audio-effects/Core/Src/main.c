@@ -904,7 +904,7 @@ void startEffectsTask(void const *argument)
         vTaskDelete(NULL);
         return;
     }
-    
+
     for (;;)
     {
         bool step_ok = effects_task_step(&task_context, &task_ops);

@@ -154,7 +154,6 @@ run_format() {
 
 	local ruff_bin
 	ruff_bin="$(ensure_ruff)"
-	echo "Formatting Python files..."
 	"$ruff_bin" format "$REPO_ROOT"
 }
 

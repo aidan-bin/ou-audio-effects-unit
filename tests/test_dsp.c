@@ -1475,8 +1475,7 @@ static void test_instance_echo_stateful_delays_prior_input(void)
     EffectInstance inst;
     effect_instance_init(&inst, EFFECT_TYPE_ECHO);
     const EchoParam p = {
-        .delay_samples = 4, .pre_delay = 1, .density = Q_ONE, .attack = Q_ONE, .decay = 0,
-        .feedback = 0, .feedback_delay = 0, .damping = 0};
+        .delay_samples = 4, .pre_delay = 1, .density = Q_ONE, .attack = Q_ONE, .decay = 0, .feedback = 0, .feedback_delay = 0, .damping = 0};
     expect_true(effect_instance_set_echo_params(&inst, &p) == 0, "set echo params");
     expect_true(effect_instance_attach_echo_state(&inst, &st) == 0, "attach echo state");
 

@@ -17,7 +17,7 @@ typedef struct
     volatile size_t out_head;
     volatile size_t out_tail;
     bool output_active;
-    
+
     volatile uint32_t in_dropped;
     volatile uint32_t out_dropped;
 } UsbAudioStream;

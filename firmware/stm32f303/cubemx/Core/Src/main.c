@@ -154,10 +154,6 @@ static volatile uint16_t adc_buf[ADC_BUF_LEN] = {0};
 static volatile uint16_t *const adc_buf_a = adc_buf;
 static volatile uint16_t *const adc_buf_b = &adc_buf[SAMPLE_BUF_LEN];
 
-/* Extra buffer for carrying over enough past samples for echo.
-                Note: This is constantly filled with last NUM_DELAY_SAMPLES samples, regardless of echo configuration */
-static volatile uint16_t delay_samples_buf[NUM_DELAY_SAMPLES] = {0};
-
 /* Buffer for filter outputs (note: samples are in order of decreasing age) */
 static volatile uint16_t dac_buf[DAC_BUF_LEN] = {0};
 
@@ -229,8 +225,6 @@ static void button_task_dispatch(uint16_t pin, void *context);
 
 static uint8_t *allocate_payload_adapter(size_t size, void *context);
 static void free_payload_adapter(uint8_t *payload, void *context);
-static void *effects_task_alloc_adapter(size_t size, void *context);
-static void effects_task_free_adapter(void *ptr, void *context);
 static void set_rom_write_disable_adapter(bool disable_writes, void *context);
 static bool log_is_enabled(void *context);
 static uint8_t log_get_level(void *context);
@@ -550,9 +544,9 @@ static bool switch_task_write_state(const EffectsState *state, void *context)
     CliServiceAdapter *adapter_context = (CliServiceAdapter *)context;
     if (adapter_context != NULL)
     {
-        const bool switch_a_enabled = state->is_enabled[state->ordered[0]];
-        const bool switch_b_enabled = state->is_enabled[state->ordered[1]];
-        const bool switch_c_enabled = state->is_enabled[state->ordered[2]];
+        const bool switch_a_enabled = state->slot_enabled[0];
+        const bool switch_b_enabled = state->slot_enabled[1];
+        const bool switch_c_enabled = state->slot_enabled[2];
         return cli_service_adapter_apply_switches(adapter_context,
                                                   switch_a_enabled,
                                                   switch_b_enabled,
@@ -612,16 +606,6 @@ static void free_payload_adapter(uint8_t *payload, void *context)
     {
         vPortFree(payload);
     }
-}
-
-static void *effects_task_alloc_adapter(size_t size, void *context)
-{
-    return allocate_payload_adapter(size, context);
-}
-
-static void effects_task_free_adapter(void *ptr, void *context)
-{
-    free_payload_adapter((uint8_t *)ptr, context);
 }
 
 static void set_rom_write_disable_adapter(bool disable_writes, void *context)
@@ -1628,9 +1612,7 @@ void startEffectsTask(void const *argument)
         .adc_buf_b = (uint16_t *)adc_buf_b,
         .dac_buf_a = (uint16_t *)dac_buf_a,
         .dac_buf_b = (uint16_t *)dac_buf_b,
-        .delay_samples_buf = (uint16_t *)delay_samples_buf,
         .sample_buf_len = SAMPLE_BUF_LEN,
-        .delay_samples_len = NUM_DELAY_SAMPLES,
         .sampling_period_us = sampling_period_us,
         .processing_slack_ms = 2,
     };
@@ -1646,8 +1628,6 @@ void startEffectsTask(void const *argument)
         .wait_for_adc_buffer = effects_task_wait_for_adc_buffer,
         .wait_for_dac_buffer = effects_task_wait_for_dac_buffer,
         .dma_copy = effects_task_dma_copy,
-        .alloc = effects_task_alloc_adapter,
-        .free = effects_task_free_adapter,
         .read_latched_state = effects_task_read_latched_state,
         .report_failure = NULL,
         .ms_to_ticks = effects_task_ms_to_ticks,

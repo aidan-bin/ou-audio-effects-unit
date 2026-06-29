@@ -9,54 +9,50 @@ int failures = 0;
 
 typedef struct
 {
-    char output[512];
     size_t output_used;
-
-    uint8_t last_pot_index;
-    uint32_t last_pot_value;
-    uint8_t last_switch_index;
-    bool last_switch_enabled;
-    char last_config_key[32];
-    int32_t last_config_value;
-
-    bool fail_service;
-    uint8_t rom_read_bytes[4];
     size_t rom_read_size;
+    size_t i2c_scanned_count;
+    size_t i2c_transfer_tx_len;
+    size_t i2c_transfer_rx_len;
+    size_t slot_count;
 
-    bool log_enabled;
-    bool log_stream_enabled;
-    uint8_t log_level;
+    uint32_t last_pot_value;
+    int32_t last_config_value;
     uint32_t frame_count;
     uint32_t failure_count;
     uint32_t step_failure_count;
     uint32_t step_failure_streak;
-    uint8_t stream_batch_size;
-    uint8_t stream_queue_count;
 
-    bool test_input_mode_enabled;
-    uint8_t test_input_vector;
     uint16_t test_input_frequency_hz;
     uint16_t test_input_amplitude;
-
-    bool test_output_mode_enabled;
-    uint8_t test_output_vector;
     uint16_t test_output_frequency_hz;
     uint16_t test_output_amplitude;
 
-    uint8_t i2c_scanned_addrs[128];
-    size_t i2c_scanned_count;
+    uint8_t last_pot_index;
+    uint8_t last_switch_index;
+    bool last_switch_enabled;
+    bool fail_service;
+    bool log_enabled;
+    bool log_stream_enabled;
+    uint8_t log_level;
+    uint8_t stream_batch_size;
+    uint8_t stream_queue_count;
+    bool test_input_mode_enabled;
+    uint8_t test_input_vector;
+    bool test_output_mode_enabled;
+    uint8_t test_output_vector;
     uint8_t i2c_last_address;
-    uint8_t i2c_transfer_tx_buf[64];
-    size_t i2c_transfer_tx_len;
-    uint8_t i2c_transfer_rx_buf[64];
-    size_t i2c_transfer_rx_len;
-
     bool reboot_called;
+    uint8_t active_slot;
 
+    uint8_t rom_read_bytes[4];
     uint8_t slots[8];
     uint8_t slot_enabled[8];
-    size_t slot_count;
-    uint8_t active_slot;
+    char last_config_key[32];
+    uint8_t i2c_transfer_tx_buf[64];
+    uint8_t i2c_transfer_rx_buf[64];
+    uint8_t i2c_scanned_addrs[128];
+    char output[512];
 } CliCoreTestContext;
 
 static void reset_output(CliCoreTestContext *ctx)
@@ -918,10 +914,10 @@ static void test_effects_command(void)
     CliServices services = make_services(&ctx);
     CliIo io = make_io(&ctx);
 
-    ctx.slots[0] = 0;      // overdrive
-    ctx.slots[1] = 0xFFu;  // empty
-    ctx.slots[2] = 2;      // compression
-    ctx.slots[3] = 0xFFu;  // empty
+    ctx.slots[0] = 0;     // overdrive
+    ctx.slots[1] = 0xFFu; // empty
+    ctx.slots[2] = 2;     // compression
+    ctx.slots[3] = 0xFFu; // empty
     ctx.slot_count = 4;
 
     expect_eq_u32(CLI_STATUS_OK, cli_core_process_line("effects", &services, &io), "effects ok");

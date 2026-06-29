@@ -180,7 +180,7 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
         input_buf = output_buf;
         output_buf = temp;
     }
-    
+
     // An even number of stages means input_buf == curr_adc_buf, so check if we need to copy to curr_dac_buf.
     if (!process_failed && input_buf != curr_dac_buf)
     {
