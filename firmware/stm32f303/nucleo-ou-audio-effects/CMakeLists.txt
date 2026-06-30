@@ -102,6 +102,7 @@ target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
     SYSINFO_BOARD="nucleo-f303re"
     SYSINFO_MCU="stm32f303re"
     SYSINFO_VERSION="0.1.0"
+    # B1_TOGGLE_INPUT           # uncomment to toggle test input mode instead of output
 )
 
 # Remove wrong libob.a library dependency when using cpp files

@@ -1001,7 +1001,11 @@ static void effects_task_on_frame_begin(void *context)
     b1_pressed = false;
 
     taskENTER_CRITICAL();
+#ifdef B1_TOGGLE_INPUT
     adapter->test_input.enabled = !adapter->test_input.enabled;
+#else
+    adapter->test_output.enabled = !adapter->test_output.enabled;
+#endif
     taskEXIT_CRITICAL();
 }
 
