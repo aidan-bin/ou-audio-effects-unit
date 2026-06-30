@@ -91,8 +91,7 @@
   */
 
 /** CDC Interface callback. */
-extern USBD_CDC_ItfTypeDef USBD_Interface_fops_FS_CLI;
-extern USBD_CDC_ItfTypeDef USBD_Interface_fops_FS_Audio;
+extern USBD_CDC_ItfTypeDef USBD_Interface_fops_FS;
 
 /* USER CODE BEGIN EXPORTED_VARIABLES */
 

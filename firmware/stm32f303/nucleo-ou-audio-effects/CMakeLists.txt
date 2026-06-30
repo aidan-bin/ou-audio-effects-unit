@@ -74,6 +74,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ../app/src/effects_task.c
     ../app/src/test_vector_source.c
     ../app/src/usb_audio_stream.c
+    ../app/src/usb_cdc_dual_init.c
     ../app/src/usbd_cdc_dual.c
     ../app/src/sysinfo.c
     ../app/src/i2c_handler.c
