@@ -336,8 +336,12 @@ static uint8_t USBD_CDC_Dual_Init(USBD_HandleTypeDef *pdev,
     (void)cfgidx;
 
     USBD_CDC_Dual_HandleTypeDef *hdual = &usbd_cdc_dual_handle;
+    USBD_CDC_ItfTypeDef *cli_fops = hdual->cli_fops;
+    USBD_CDC_ItfTypeDef *audio_fops = hdual->audio_fops;
     // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
     memset(hdual, 0, sizeof(*hdual));
+    hdual->cli_fops = cli_fops;
+    hdual->audio_fops = audio_fops;
     pdev->pClassData = hdual;
 
     /* Open all CDC0/CDC1 endpoints */
