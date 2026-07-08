@@ -137,7 +137,7 @@ static const char *command_help_text(const char *command)
 {
     if (command == NULL)
     {
-        return "commands: help ping override config slot effects rom log audio test i2c reboot info sysinfo\n";
+        return "commands: help ping override config slot effects rom log audio test i2c crash reboot info sysinfo\n";
     }
 
     if (strcmp(command, "help") == 0)
@@ -180,6 +180,10 @@ static const char *command_help_text(const char *command)
     {
         return "test mode <0|1> | vector <sine|lut|sweep|wav|impulse|usb> | freq <hz> | amp <value> | status\n";
     }
+    if (strcmp(command, "crash") == 0)
+    {
+        return "crash null|udf|div0\n";
+    }
     if (strcmp(command, "reboot") == 0)
     {
         return "reboot\n";
@@ -217,6 +221,45 @@ const char *cli_core_error_text(CliStatus status)
     default:
         return NULL;
     }
+}
+
+static CliStatus handle_crash(char **tokens,
+                              size_t token_count,
+                              const CliServices *services,
+                              const CliIo *io,
+                              CliCommandResult *result)
+{
+    (void)services;
+    (void)io;
+    (void)result;
+
+    if (token_count != 2)
+    {
+        return CLI_STATUS_INVALID_ARGUMENTS;
+    }
+
+    if (strcmp(tokens[1], "null") == 0)
+    {
+        volatile uint32_t *volatile p = (volatile uint32_t *)(uintptr_t)0;
+        *p = 0xDEADBEEF;
+    }
+    else if (strcmp(tokens[1], "udf") == 0)
+    {
+        __asm volatile("udf #0");
+    }
+    else if (strcmp(tokens[1], "div0") == 0)
+    {
+        volatile int x = 1;
+        volatile int y = 0;
+        volatile int z = x / y;
+        (void)z;
+    }
+    else
+    {
+        return CLI_STATUS_INVALID_ARGUMENTS;
+    }
+
+    return CLI_STATUS_OK;
 }
 
 static CliStatus handle_reboot(char **tokens,
@@ -1511,6 +1554,7 @@ CliStatus cli_core_process_line_ex(const char *line,
         {.name = "audio", .handler = handle_audio},
         {.name = "test", .handler = handle_test},
         {.name = "i2c", .handler = handle_i2c},
+        {.name = "crash", .handler = handle_crash},
         {.name = "reboot", .handler = handle_reboot},
         {.name = "info", .handler = handle_info},
         {.name = "sysinfo", .handler = handle_sysinfo},

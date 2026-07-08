@@ -22,6 +22,7 @@ Commands:
   check
   check-full
   clean
+  decode-fault
   demo
   doctor
   format
@@ -31,12 +32,11 @@ Commands:
 EOF
 }
 
-if [[ $# -gt 1 ]]; then
-	usage
-	exit 1
+if [[ $# -eq 0 ]]; then
+	command_name="check"
+else
+	command_name="${1}"
 fi
-
-command_name="${1:-check}"
 
 case "$command_name" in
 	build) run_build ;;
@@ -46,7 +46,8 @@ case "$command_name" in
 	check) run_check ;;
 	check-full) run_check_full ;;
 	clean) run_clean ;;
-	demo) run_demo ;;
+	decode-fault) run_decode_fault "${@:2}" ;;
+	demo) run_demo ;; 
 	doctor) run_doctor ;;
 	format) run_format ;;
 	format-check) run_format_check ;;

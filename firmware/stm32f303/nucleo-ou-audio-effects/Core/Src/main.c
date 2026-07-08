@@ -72,6 +72,15 @@
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
 
+#ifdef ENABLE_DIAGNOSTICS
+#define PANIC_USB_STR_(x) #x
+#define PANIC_USB_STR(x) PANIC_USB_STR_(x)
+#define PANIC_USB(msg) \
+    effects_task_panic_write("[usb] " __FILE__ ":" PANIC_USB_STR(__LINE__) " " msg "\n", NULL)
+#else
+#define PANIC_USB(msg) ((void)0)
+#endif
+
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -538,12 +547,6 @@ static void effects_task_panic_write(const char *text, void *context)
     {
         (void)HAL_UART_Transmit(&huart2, (uint8_t *)text, strlen(text), 25);
     }
-
-    if (text != NULL)
-    {
-        (void)USBD_CDC_Dual_Transmit_FS_CLI((uint8_t *)text,
-                                            (uint16_t)strlen(text));
-    }
 }
 
 static void effects_task_on_output_frame(const uint16_t *buf, size_t count, void *context)
@@ -560,6 +563,16 @@ static void effects_task_on_output_frame(const uint16_t *buf, size_t count, void
         int16_t sample = (int16_t)(centered > INT16_MAX ? INT16_MAX : (centered < INT16_MIN ? INT16_MIN : centered));
         usb_audio_stream_push_sample(&audio_stream, sample);
     }
+
+#ifdef ENABLE_DIAGNOSTICS
+    static uint32_t out_drop_last_reported = 0U;
+    uint32_t out_dropped_now = usb_audio_stream_out_dropped(&audio_stream);
+    if (out_dropped_now - out_drop_last_reported >= 256U)
+    {
+        out_drop_last_reported = out_dropped_now;
+        PANIC_USB("out_ring dropping");
+    }
+#endif
 }
 
 static bool test_vector_stream_pop_sample(int16_t *sample, void *context)
@@ -945,37 +958,73 @@ void startCliTask(void const *argument)
         cli_uart_recover_rx_errors();
         cli_session_poll(&cli_session);
 
-        if (audio_stream.output_active)
         {
-            /*
-             * Staging buffer persists across iterations so a batch is never
-             * dropped on USBD_BUSY: we only pull a fresh batch from the ring
-             * once the previous one has been accepted by the stack, and retry
-             * the in-flight batch on the next tick.
-             */
             static int16_t audio_tx_staging[200];
             static size_t audio_tx_staging_len;
+            static uint32_t audio_tx_staging_busy_ticks;
+            static bool was_output_active;
 
-            if (audio_tx_staging_len == 0U &&
-                usb_audio_stream_out_available(&audio_stream) > 0U)
+            if (audio_stream.output_active)
             {
-                audio_tx_staging_len = usb_audio_stream_pop_samples(
-                    &audio_stream, audio_tx_staging, 200);
-            }
+                was_output_active = true;
 
-            if (audio_tx_staging_len > 0U)
-            {
-                const uint8_t result = USBD_CDC_Dual_Transmit_FS_Audio(
-                    (uint8_t *)audio_tx_staging,
-                    (uint16_t)(audio_tx_staging_len * 2U));
-                if (result != USBD_BUSY)
+                if (audio_tx_staging_len == 0U &&
+                    usb_audio_stream_out_available(&audio_stream) > 0U)
                 {
-                    /* Accepted (USBD_OK) or unrecoverable error: release the
-                     * batch. BUSY keeps it staged for the next tick. */
-                    audio_tx_staging_len = 0U;
+                    audio_tx_staging_len = usb_audio_stream_pop_samples(
+                        &audio_stream, audio_tx_staging, 200);
+                }
+
+                if (audio_tx_staging_len > 0U)
+                {
+                    const uint8_t result = USBD_CDC_Dual_Transmit_FS_Audio(
+                        (uint8_t *)audio_tx_staging,
+                        (uint16_t)(audio_tx_staging_len * 2U));
+                    if (result != USBD_BUSY)
+                    {
+                        audio_tx_staging_busy_ticks = 0U;
+                        if (result != USBD_OK)
+                        {
+                            PANIC_USB("audio tx fail");
+                        }
+                        audio_tx_staging_len = 0U;
+                    }
+                    else
+                    {
+                        /*
+                         * Host stopped reading: the pipe is stuck.
+                         * Reboot after 2s so the warm-reset USB
+                         * fix brings the device back cleanly.
+                         */
+                        audio_tx_staging_busy_ticks++;
+                        if (audio_tx_staging_busy_ticks >= 2000U)
+                        {
+                            NVIC_SystemReset();
+                        }
+                    }
                 }
             }
+            else if (was_output_active)
+            {
+                was_output_active = false;
+                audio_tx_staging_len = 0U;
+                audio_tx_staging_busy_ticks = 0U;
+            }
         }
+
+#ifdef ENABLE_DIAGNOSTICS
+        /* in_ring drop reporting deferred from ISR — PANIC_USB calls
+         * a blocking UART transmit. */
+        {
+            static uint32_t in_drop_last_reported = 0U;
+            uint32_t in_dropped_now = usb_audio_stream_in_dropped(&audio_stream);
+            if (in_dropped_now - in_drop_last_reported >= 256U)
+            {
+                in_drop_last_reported = in_dropped_now;
+                PANIC_USB("in_ring dropping");
+            }
+        }
+#endif
 
         osDelay(1);
     }
@@ -1372,11 +1421,13 @@ static int8_t CDC_CLI_Init(void)
 {
     USBD_CDC_Dual_SetRxBuffer_CLI(UserRxBufferFS_CLI);
     USBD_CDC_Dual_SetTxBuffer_CLI(UserTxBufferFS_CLI, 0);
+    PANIC_USB("CDC0 cli up");
     return 0;
 }
 
 static int8_t CDC_CLI_DeInit(void)
 {
+    PANIC_USB("CDC0 cli down");
     return 0;
 }
 
@@ -1432,11 +1483,13 @@ static int8_t CDC_Audio_Init(void)
 {
     USBD_CDC_Dual_SetRxBuffer_Audio(UserRxBufferFS_Audio);
     USBD_CDC_Dual_SetTxBuffer_Audio(UserTxBufferFS_Audio, 0);
+    PANIC_USB("CDC1 audio up");
     return 0;
 }
 
 static int8_t CDC_Audio_DeInit(void)
 {
+    PANIC_USB("CDC1 audio down");
     return 0;
 }
 
@@ -1456,6 +1509,8 @@ static int8_t CDC_Audio_Receive(uint8_t *buf, uint32_t *len)
     if (buf != NULL && len != NULL && *len >= 2U)
     {
         usb_audio_stream_push_bytes(&audio_stream, buf, *len);
+        /* in_ring drops deferred to CLI task loop; HAL_UART_Transmit
+         * must not be called from ISR. */
     }
     return 0;
 }

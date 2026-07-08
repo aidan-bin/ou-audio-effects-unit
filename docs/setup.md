@@ -63,10 +63,12 @@ Other common targets:
 ./scripts/run.sh clean
 ./scripts/run.sh check-full
 ./scripts/run.sh doctor
+./scripts/run.sh decode-fault
 ```
 
 - `build` builds host test targets and both firmware variants (custom board + Nucleo).
 - `build-firmware` builds both firmware variants without building host tests.
+- `decode-fault` decodes a Nucleo USART2 fault dump into `function at file:line`.
 
 ## Host Demo
 
@@ -77,3 +79,13 @@ Other common targets:
 Notes:
 
 - The Python binding in [host/python-demo/effects.py](../host/python-demo/effects.py) loads the shared library relative to the module and supports dll/so/dylib.
+
+## Fault Diagnostics
+
+Trigger faults from the CLI (`crash null`, `crash udf`, `crash div0`). The Nucleo build outputs a register dump and call stack via USART2. Decode:
+
+```sh
+./scripts/run.sh decode-fault fault_dump.txt
+```
+
+Defaults to the Nucleo Debug ELF; override with `-e`.

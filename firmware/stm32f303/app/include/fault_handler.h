@@ -27,4 +27,16 @@ typedef enum
 __attribute__((noreturn)) void fault_handler_dump(uint32_t msp, uint32_t psp, uint32_t exc_return,
                                                   FaultHandler_FaultType fault_type);
 
+extern uint32_t fault_frame_ptr;
+
+/* Naked to suppress prologue: a prologue would clobber r7 before the handler's inline
+ * asm can capture it. Declared here since the definitions are CubeMX-generated.
+ * Suppressed on clang (causes lint issues) */
+#ifndef __clang__
+void HardFault_Handler(void) __attribute__((naked));
+void MemManage_Handler(void) __attribute__((naked));
+void BusFault_Handler(void) __attribute__((naked));
+void UsageFault_Handler(void) __attribute__((naked));
+#endif
+
 #endif

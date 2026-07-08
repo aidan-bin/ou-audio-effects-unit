@@ -89,4 +89,30 @@ void usb_cdc_dual_init(void)
     {
         Error_Handler();
     }
+
+    /* Drive D+/D- LOW for 200 ms to force a clean USB disconnect after warm reset. */
+    USB->CNTR |= (uint16_t)USB_CNTR_PDWN;
+
+    GPIO_InitTypeDef gpio_off = {
+        .Pin = GPIO_PIN_11 | GPIO_PIN_12,
+        .Mode = GPIO_MODE_OUTPUT_PP,
+        .Pull = GPIO_NOPULL,
+        .Speed = GPIO_SPEED_FREQ_LOW,
+    };
+    HAL_GPIO_Init(GPIOA, &gpio_off);
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_11 | GPIO_PIN_12, GPIO_PIN_RESET);
+
+    HAL_Delay(200);
+
+    GPIO_InitTypeDef gpio_usb = {
+        .Pin = GPIO_PIN_11 | GPIO_PIN_12,
+        .Mode = GPIO_MODE_AF_PP,
+        .Pull = GPIO_NOPULL,
+        .Speed = GPIO_SPEED_FREQ_HIGH,
+        .Alternate = GPIO_AF14_USB,
+    };
+    HAL_GPIO_Init(GPIOA, &gpio_usb);
+
+    USB->ISTR = 0U;
+    USB_EnableGlobalInt(USB);
 }

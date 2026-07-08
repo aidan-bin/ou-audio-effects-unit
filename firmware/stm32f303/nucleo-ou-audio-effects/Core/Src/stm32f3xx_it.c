@@ -96,6 +96,8 @@ void HardFault_Handler(void)
       "mrs r1, psp             \n"
       "mov r2, lr              \n"
       "mov r3, %[type]         \n"
+      "ldr r12, =fault_frame_ptr \n"
+      "str r7, [r12]           \n"
       "b   fault_handler_dump  \n"
       :
       : [type] "i"(FAULT_TYPE_HARD_FAULT));
@@ -118,6 +120,8 @@ void MemManage_Handler(void)
       "mrs r1, psp             \n"
       "mov r2, lr              \n"
       "mov r3, %[type]         \n"
+      "ldr r12, =fault_frame_ptr \n"
+      "str r7, [r12]           \n"
       "b   fault_handler_dump  \n"
       :
       : [type] "i"(FAULT_TYPE_MEM_MANAGE));
@@ -140,6 +144,8 @@ void BusFault_Handler(void)
       "mrs r1, psp             \n"
       "mov r2, lr              \n"
       "mov r3, %[type]         \n"
+      "ldr r12, =fault_frame_ptr \n"
+      "str r7, [r12]           \n"
       "b   fault_handler_dump  \n"
       :
       : [type] "i"(FAULT_TYPE_BUS_FAULT));
@@ -162,6 +168,8 @@ void UsageFault_Handler(void)
       "mrs r1, psp             \n"
       "mov r2, lr              \n"
       "mov r3, %[type]         \n"
+      "ldr r12, =fault_frame_ptr \n"
+      "str r7, [r12]           \n"
       "b   fault_handler_dump  \n"
       :
       : [type] "i"(FAULT_TYPE_USAGE_FAULT));

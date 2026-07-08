@@ -12,6 +12,8 @@ static const char *fault_type_names[] = {
     [FAULT_TYPE_USAGE_FAULT] = "USAGE FAULT",
 };
 
+uint32_t fault_frame_ptr;
+
 // NOLINTBEGIN(performance-no-int-to-ptr)
 static bool uart_ready(void)
 {
@@ -61,8 +63,60 @@ static void uart_send_hex32(uint32_t val)
 
 static bool stack_frame_is_valid(uint32_t pc)
 {
-    return (pc >= FLASH_BASE && pc < (FLASH_BASE + 512U * 1024U)) ||
-           (pc >= SRAM_BASE && pc < (SRAM_BASE + 80U * 1024U));
+    return (pc >= FLASH_BASE && pc < (FLASH_BASE + 512U * 1024U));
+}
+
+static bool frame_pointer_is_valid(uint32_t fp)
+{
+    return fp >= SRAM_BASE && fp < (SRAM_BASE + 80U * 1024U) && (fp & 0x3U) == 0U;
+}
+
+static void unwind_call_stack(uint32_t fp)
+{
+    uart_send_str("--- Call stack (best-effort, r7-chain) ---\r\n");
+
+    int frame_count = 0;
+    while (fp != 0U && frame_count < 32)
+    {
+        const uint32_t *frame_words = (const uint32_t *)fp;
+        uint32_t prev_fp = 0;
+        uint32_t return_addr = 0;
+        bool found = false;
+
+        for (int n = 0; n < 64; n++)
+        {
+            if (frame_pointer_is_valid(frame_words[n]) &&
+                frame_words[n] > fp &&
+                frame_words[n + 1] >= FLASH_BASE &&
+                frame_words[n + 1] < (FLASH_BASE + 512U * 1024U) &&
+                (frame_words[n + 1] & 1U))
+            {
+                prev_fp = frame_words[n];
+                return_addr = frame_words[n + 1];
+                found = true;
+                break;
+            }
+        }
+
+        if (!found)
+        {
+            break;
+        }
+
+        uart_send_str("[");
+        uart_send_hex32((uint32_t)frame_count);
+        uart_send_str("] ");
+        uart_send_hex32(return_addr);
+        uart_send_str("\r\n");
+
+        if (prev_fp <= fp)
+        {
+            break;
+        }
+
+        fp = prev_fp;
+        frame_count++;
+    }
 }
 
 static void dump_stacked_frame(const uint32_t *frame, bool is_fpu_stacked)
@@ -216,6 +270,47 @@ static const uint32_t *find_stacked_frame(uint32_t msp, uint32_t psp,
 }
 // NOLINTEND(performance-no-int-to-ptr)
 
+static void dump_usb_regs(void)
+{
+    uart_send_str("--- USB registers ---\r\n");
+
+    if ((RCC->APB1ENR & RCC_APB1ENR_USBEN) == 0U)
+    {
+        uart_send_str("USB: disabled\r\n");
+        return;
+    }
+
+    uart_send_str("CNTR: ");
+    uart_send_hex32(USB->CNTR);
+    uart_send_str("  ISTR: ");
+    uart_send_hex32(USB->ISTR);
+    uart_send_str("  FNR: ");
+    uart_send_hex32(USB->FNR);
+    uart_send_str("  DADDR: ");
+    uart_send_hex32(USB->DADDR);
+    uart_send_str("\r\n");
+
+    static volatile uint16_t *const ep_regs[8] = {
+        &USB->EP0R,
+        &USB->EP1R,
+        &USB->EP2R,
+        &USB->EP3R,
+        &USB->EP4R,
+        &USB->EP5R,
+        &USB->EP6R,
+        &USB->EP7R,
+    };
+
+    for (int i = 0; i < 8; i++)
+    {
+        uart_send_str("EP");
+        uart_send_byte((char)('0' + i));
+        uart_send_str(": ");
+        uart_send_hex32(*ep_regs[i]);
+        uart_send_str(i == 7 ? "\r\n" : "  ");
+    }
+}
+
 __attribute__((noreturn)) void fault_handler_dump(uint32_t msp, uint32_t psp, uint32_t exc_return,
                                                   FaultHandler_FaultType fault_type)
 {
@@ -234,6 +329,9 @@ __attribute__((noreturn)) void fault_handler_dump(uint32_t msp, uint32_t psp, ui
         uint32_t cfsr = SCB->CFSR;
         uint32_t hfsr = SCB->HFSR;
         dump_fault_reasons(cfsr, hfsr);
+
+        unwind_call_stack(fault_frame_ptr);
+        dump_usb_regs();
     }
 
     while (1)

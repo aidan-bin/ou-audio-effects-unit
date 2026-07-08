@@ -467,3 +467,7 @@ run_demo() {
 	"$venv_dir/bin/python" -m pip install -r "$REPO_ROOT/host/python-demo/requirements.txt"
 	"$venv_dir/bin/python" "$REPO_ROOT/host/python-demo/main.py"
 }
+
+run_decode_fault() {
+	python3 "$WORKFLOWS_DIR/decode_fault.py" "$@"
+}

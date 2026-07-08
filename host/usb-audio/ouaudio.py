@@ -157,13 +157,15 @@ class CliPort:
 
     def command(self, text: str, *, timeout_s: float | None = None) -> list[str]:
         self._serial.reset_input_buffer()
+        log.debug("CLI[%s] tx: %r", self.port, text)
         for char in text + "\n":
             self._serial.write(char.encode("ascii"))
             self._serial.flush()
             if self._char_delay_s:
                 time.sleep(self._char_delay_s)
 
-        deadline = time.monotonic() + (timeout_s or self._timeout_s)
+        start = time.monotonic()
+        deadline = start + (timeout_s or self._timeout_s)
         buffer = bytearray()
         while time.monotonic() < deadline:
             chunk = self._serial.read(256)
@@ -179,6 +181,12 @@ class CliPort:
         lines = [ln for ln in lines if ln and ln != CLI_PROMPT.strip()]
         if lines and lines[0] == text:
             lines = lines[1:]
+        log.debug(
+            "CLI[%s] rx (%d lines, %.1f ms)",
+            self.port,
+            len(lines),
+            (time.monotonic() - start) * 1000.0,
+        )
         return lines
 
     @staticmethod
@@ -457,6 +465,69 @@ class SpeakerSink(Sink):
         self._stream.close()
 
 
+class RampSource(Source):
+    """Fixed-length int16 ramp generated directly at device rate (no resampling),
+    for byte-exact loopback comparison."""
+
+    def __init__(self, length: int) -> None:
+        self._buf = (np.arange(length, dtype=np.int64) % 65536 - 32768).astype(np.int16)
+        self._pos = 0
+
+    @property
+    def buffer(self) -> np.ndarray:
+        return self._buf
+
+    @property
+    def finished(self) -> bool:
+        return self._pos >= self._buf.size
+
+    def read(self, max_samples: int) -> np.ndarray:
+        chunk = self._buf[self._pos : self._pos + max_samples]
+        self._pos += chunk.size
+        return chunk
+
+
+class InfiniteRampSource(Source):
+    """Unbounded int16 ramp at device rate, for sustained throughput testing."""
+
+    finished = False
+
+    def __init__(self) -> None:
+        self._next = 0
+
+    def read(self, max_samples: int) -> np.ndarray:
+        values = np.arange(self._next, self._next + max_samples, dtype=np.int64) % 65536 - 32768
+        self._next += max_samples
+        return values.astype(np.int16)
+
+
+class RecordingSink(Sink):
+    """Accumulates every sample written, for byte-exact comparison against a source."""
+
+    def __init__(self) -> None:
+        self._chunks: list[np.ndarray] = []
+
+    def write(self, samples: np.ndarray) -> None:
+        if samples.size:
+            self._chunks.append(samples.copy())
+
+    @property
+    def recorded(self) -> np.ndarray:
+        if not self._chunks:
+            return np.empty(0, dtype=np.int16)
+        return np.concatenate(self._chunks)
+
+
+class DiscardSink(Sink):
+    """Tallies sample count without retaining data, for sustained throughput testing."""
+
+    def __init__(self) -> None:
+        self.count = 0
+
+    def write(self, samples: np.ndarray) -> None:
+        self.count += samples.size
+
+
 # --- Streaming engine ---
 
 
@@ -673,6 +744,21 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         help="effect parameter, e.g. overdrive.mix=256 (repeatable)",
     )
     p.add_argument("--list", action="store_true", help="identify ports, print device info, exit")
+    p.add_argument(
+        "--debug",
+        choices=["probe", "loopback", "stress", "resolve"],
+        metavar="MODE",
+        help="debug modes: probe, loopback, stress, resolve",
+    )
+    p.add_argument(
+        "--addr",
+        action="append",
+        default=[],
+        metavar="0xADDR",
+        help="repeatable, for --debug resolve",
+    )
+    p.add_argument("--duration", type=float, default=5.0, help="--debug stress duration in seconds")
+    p.add_argument("--elf", type=Path, default=None, help="firmware ELF for --debug resolve")
     p.add_argument("-v", "--verbose", action="store_true")
     return p.parse_args(argv)
 
@@ -779,12 +865,189 @@ def _cmd_stream(args: argparse.Namespace) -> int:
     return 0
 
 
+FIRMWARE_ELF_DEFAULT = (
+    Path(__file__).resolve().parents[2]
+    / "firmware/stm32f303/nucleo-ou-audio-effects/build/Debug/nucleo-ou-audio-effects.elf"
+)
+
+
+def _cmd_debug_resolve(args: argparse.Namespace) -> int:
+    import shutil
+    import subprocess
+
+    elf = args.elf or FIRMWARE_ELF_DEFAULT
+    addr2line = shutil.which("arm-none-eabi-addr2line")
+    if not addr2line or not elf.exists():
+        if not addr2line:
+            log.warning("arm-none-eabi-addr2line not found on PATH; printing raw addresses")
+        else:
+            log.warning("ELF not found at %s; printing raw addresses", elf)
+        for addr in args.addr:
+            print(addr)
+        return 0
+
+    for addr in args.addr:
+        result = subprocess.run(  # noqa: S603
+            [addr2line, "-e", str(elf), "-f", "-C", "-p", addr],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        line = result.stdout.strip() or addr
+        print(f"{addr}  {line}")
+    return 0
+
+
+def _cmd_debug_probe(args: argparse.Namespace) -> int:
+    start = time.monotonic()
+
+    def elapsed_ms() -> int:
+        return int((time.monotonic() - start) * 1000)
+
+    dev = open_device(
+        cli_port=args.cli_port,
+        audio_port=args.audio_port,
+        char_delay_s=args.cli_char_delay,
+        open_audio=False,
+    )
+    try:
+        print(
+            f"[+{elapsed_ms():4d}ms] open {dev.cli.port}"
+            f"{' (ST-Link VCP)' if dev.via_stlink else ''}"
+        )
+        steps: list[tuple[str, object]] = [
+            ("ping", dev.cli.ping),
+            ("info", dev.cli.info),
+            ("sysinfo", dev.cli.sysinfo),
+            ("audio status", dev.cli.audio_status),
+            ("effects", dev.cli.effects_catalog),
+            ("chain", dev.cli.get_slots),
+        ]
+        for name, step in steps:
+            try:
+                result = step()
+            except Exception as exc:  # noqa: BLE001 - report and stop on first failure
+                print(f"[+{elapsed_ms():4d}ms] {name:<12} -> FAILED: {exc}")
+                return 1
+            print(f"[+{elapsed_ms():4d}ms] {name:<12} -> {result}")
+    finally:
+        dev.close()
+    print("OK")
+    return 0
+
+
+def _cmd_debug_loopback(args: argparse.Namespace) -> int:
+    dev = open_device(
+        cli_port=args.cli_port, audio_port=args.audio_port, char_delay_s=args.cli_char_delay
+    )
+    try:
+        if dev.audio is None:
+            raise SystemExit(
+                f"audio port unavailable: the native USB ({VID:04x}:{PID:04x}) is not "
+                "enumerated (only the ST-Link VCP is present). Connect the native cable."
+            )
+        dev.verify_audio_support(need_input=True, need_output=True)
+
+        # Query pipeline delay before streaming (CLI is still fast at this
+        # point).  Also disable effects and set unity gain on the test input
+        # so the ramp passes through unmodified.
+        info = dev.cli.info()
+        delay = info.delay_samples
+
+        dev.cli.command("slot enable 0 0")
+        dev.cli.command("test input mode 1")
+        dev.cli.command("test input vector usb")
+        dev.cli.command("test input amp 32767")  # INT16_MAX = unity gain
+        dev.cli.command("test output mode 0")  # don't replace DAC buffer
+
+        length = 2048
+        source = RampSource(length)
+        expected = source.buffer.copy()
+        sink = RecordingSink()
+        with dev.usb_routing(input_usb=True, output_on=True):
+            engine = StreamEngine(dev.audio, source, sink, device_rate=dev.device_rate)
+            engine.run()
+            status = dev.cli.audio_status()
+
+        received = sink.recorded
+        # Skip pipeline latency plus one frame of pre-fill data.
+        skip = delay + FRAME_SAMPLES
+        if skip > 0 and received.size > skip:
+            received = received[skip:]
+        n = min(expected.size, received.size)
+        mismatches = np.flatnonzero(expected[:n] != received[:n])
+        ok = mismatches.size == 0 and n == expected.size
+        print(
+            f"compare: {n}/{expected.size} received, "
+            f"{mismatches.size} mismatches, delay={delay} skip={skip}"
+        )
+        if mismatches.size:
+            i = int(mismatches[0])
+            print(f"first mismatch at offset {i}: expected {expected[i]}, got {received[i]}")
+        print("audio status:", status)
+        drops = int(status.get("drops_out", 0)) + int(status.get("drops_in", 0))
+        if drops:
+            ok = False
+            print(f"drops detected: {status.get('drops_out')=} {status.get('drops_in')=}")
+    finally:
+        dev.close()
+    print("OK" if ok else "FAILED")
+    return 0 if ok else 1
+
+
+def _cmd_debug_stress(args: argparse.Namespace) -> int:
+    dev = open_device(
+        cli_port=args.cli_port, audio_port=args.audio_port, char_delay_s=args.cli_char_delay
+    )
+    try:
+        if dev.audio is None:
+            raise SystemExit(
+                f"audio port unavailable: the native USB ({VID:04x}:{PID:04x}) is not "
+                "enumerated (only the ST-Link VCP is present). Connect the native cable."
+            )
+        dev.verify_audio_support(need_input=True, need_output=True)
+
+        source = InfiniteRampSource()
+        sink = DiscardSink()
+        stop = threading.Event()
+        timer = threading.Timer(args.duration, stop.set)
+        with dev.usb_routing(input_usb=True, output_on=True):
+            print(f"streaming {dev.device_rate:.0f} Hz for {args.duration:.0f}s ...")
+            engine = StreamEngine(dev.audio, source, sink, device_rate=dev.device_rate)
+            timer.start()
+            engine.run(stop_event=stop)
+            timer.cancel()
+            status = dev.cli.audio_status()
+
+        print(f"done: {sink.count} samples ({sink.count * 2} bytes)")
+        print("audio status:", status)
+        drops = int(status.get("drops_out", 0)) + int(status.get("drops_in", 0))
+    finally:
+        dev.close()
+    print("OK" if drops == 0 else "FAILED")
+    return 0 if drops == 0 else 1
+
+
+def _dispatch_debug(args: argparse.Namespace) -> int:
+    if args.debug == "resolve":
+        return _cmd_debug_resolve(args)
+    if args.debug == "probe":
+        return _cmd_debug_probe(args)
+    if args.debug == "loopback":
+        return _cmd_debug_loopback(args)
+    if args.debug == "stress":
+        return _cmd_debug_stress(args)
+    raise SystemExit(f"unknown --debug mode: {args.debug!r}")
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO, format="%(levelname)s %(message)s"
     )
     try:
+        if args.debug:
+            return _dispatch_debug(args)
         return _cmd_list(args) if args.list else _cmd_stream(args)
     except (DiscoveryError, DeviceUnsupportedError, CliError) as exc:
         log.error("%s", exc)
