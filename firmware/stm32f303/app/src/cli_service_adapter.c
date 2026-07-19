@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "usb_audio_stream.h"
+
 #define TEST_FREQ_MIN_HZ 20U
 #define TEST_DEFAULT_FREQ_HZ 1000
 #define MAX_TEST_VECTOR_INDEX 5U
@@ -1315,6 +1317,11 @@ static bool service_audio_set_input(uint8_t source, void *ctx)
     {
         c->test_input.enabled = true;
         c->test_input.vector = 5U;
+        c->test_output.enabled = false;
+        if (c->audio_stream != NULL)
+        {
+            usb_audio_stream_reset(c->audio_stream);
+        }
     }
     unlock_ctx(c);
     return true;
@@ -1331,6 +1338,7 @@ static bool service_audio_set_output(bool enabled, void *ctx)
     lock_ctx(c);
     if (c->audio_stream != NULL)
     {
+        usb_audio_stream_reset_output(c->audio_stream);
         c->audio_stream->output_active = enabled;
     }
     unlock_ctx(c);

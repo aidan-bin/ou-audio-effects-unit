@@ -12,6 +12,35 @@ void usb_audio_stream_init(UsbAudioStream *stream)
     memset(stream, 0, sizeof(*stream));
 }
 
+void usb_audio_stream_reset(UsbAudioStream *stream)
+{
+    if (stream == NULL)
+    {
+        return;
+    }
+
+    /* Callers should hold taskENTER_CRITICAL (or equivalent) to prevent races with ISR writes */
+    stream->in_head = 0U;
+    stream->in_tail = 0U;
+    stream->out_head = 0U;
+    stream->out_tail = 0U;
+    stream->in_dropped = 0U;
+    stream->out_dropped = 0U;
+}
+
+void usb_audio_stream_reset_output(UsbAudioStream *stream)
+{
+    if (stream == NULL)
+    {
+        return;
+    }
+
+    /* Callers should hold taskENTER_CRITICAL (or equivalent) to prevent races with ISR writes */
+    stream->out_head = 0U;
+    stream->out_tail = 0U;
+    stream->out_dropped = 0U;
+}
+
 static bool write_to_ring(int16_t *ring, volatile size_t *head,
                           volatile size_t *tail, int16_t sample,
                           size_t ring_size)

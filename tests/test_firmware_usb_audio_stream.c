@@ -146,6 +146,264 @@ static void test_push_bytes_ignores_odd_trailing(void)
     expect_false(usb_audio_stream_pop_sample(&stream, &sample), "single byte ignored");
 }
 
+static void test_reset_clears_rings(void)
+{
+    UsbAudioStream stream;
+    usb_audio_stream_init(&stream);
+
+    for (size_t i = 0; i < 5; i++)
+    {
+        usb_audio_stream_push_sample(&stream, (int16_t)(100 + (int)i));
+    }
+    uint8_t bytes[4] = {0x01, 0x00, 0x02, 0x00};
+    usb_audio_stream_push_bytes(&stream, bytes, sizeof(bytes));
+
+    stream.in_dropped = 42;
+    stream.out_dropped = 99;
+
+    usb_audio_stream_reset(&stream);
+
+    int16_t s = 0;
+    expect_false(usb_audio_stream_pop_sample(&stream, &s), "in_ring empty after reset");
+    expect_eq_size(0, usb_audio_stream_pop_samples(&stream, &s, 1), "out_ring empty after reset");
+    expect_eq_u32(0, usb_audio_stream_out_dropped(&stream), "out_dropped zeroed");
+    expect_eq_u32(0, usb_audio_stream_in_dropped(&stream), "in_dropped zeroed");
+    expect_eq_size(0, usb_audio_stream_out_available(&stream), "out_available zero after reset");
+}
+
+static void test_reset_null_safe(void)
+{
+    usb_audio_stream_reset(NULL);
+}
+
+static void test_reset_output_leaves_input_intact(void)
+{
+    UsbAudioStream stream;
+    usb_audio_stream_init(&stream);
+
+    for (size_t i = 0; i < 5; i++)
+    {
+        usb_audio_stream_push_sample(&stream, (int16_t)(100 + (int)i));
+    }
+
+    uint8_t bytes[6] = {0x01, 0x00, 0x02, 0x00, 0x03, 0x00};
+    usb_audio_stream_push_bytes(&stream, bytes, sizeof(bytes));
+
+    stream.in_dropped = 7;
+    stream.out_dropped = 42;
+
+    usb_audio_stream_reset_output(&stream);
+
+    int16_t s = 0;
+    expect_eq_u32(0, usb_audio_stream_out_dropped(&stream), "out_dropped zeroed");
+    expect_eq_size(0, usb_audio_stream_out_available(&stream), "out_available zero after reset_output");
+
+    expect_true(usb_audio_stream_pop_sample(&stream, &s), "in_ring intact after reset_output");
+    expect_eq_u32(7, usb_audio_stream_in_dropped(&stream), "in_dropped untouched");
+}
+
+static void test_reset_output_null_safe(void)
+{
+    usb_audio_stream_reset_output(NULL);
+}
+
+static void test_in_ring_overflow_drops(void)
+{
+    UsbAudioStream stream;
+    usb_audio_stream_init(&stream);
+
+    size_t capacity = USB_AUDIO_RING_SIZE - 1U;
+    for (size_t i = 0; i < capacity; i++)
+    {
+        uint8_t b[2] = {(uint8_t)(i & 0xFF), (uint8_t)((i >> 8) & 0xFF)};
+        usb_audio_stream_push_bytes(&stream, b, sizeof(b));
+    }
+    expect_eq_u32(0, usb_audio_stream_in_dropped(&stream), "no drops while filling in_ring to capacity");
+
+    uint8_t overflow[2] = {0xFF, 0x7F};
+    usb_audio_stream_push_bytes(&stream, overflow, sizeof(overflow));
+    expect_eq_u32(1, usb_audio_stream_in_dropped(&stream), "in_ring drop counted on overflow");
+}
+
+static void test_push_bytes_cdc_packet_size(void)
+{
+    UsbAudioStream stream;
+    usb_audio_stream_init(&stream);
+
+    uint8_t packet[64];
+    for (int pkt = 0; pkt < 16; pkt++)
+    {
+        for (int i = 0; i < 32; i++)
+        {
+            int16_t val = (int16_t)((pkt * 32 + i) & 0x7FFF);
+            packet[(size_t)i * 2] = (uint8_t)(val & 0xFF);
+            packet[(size_t)i * 2 + 1] = (uint8_t)((val >> 8) & 0xFF);
+        }
+        usb_audio_stream_push_bytes(&stream, packet, sizeof(packet));
+    }
+
+    expect_eq_u32(0, usb_audio_stream_in_dropped(&stream), "no drops for 16 full CDC packets");
+
+    int16_t expected = 0;
+    int16_t actual = 0;
+    while (usb_audio_stream_pop_sample(&stream, &actual))
+    {
+        expect_eq_i16(expected, actual, "cdc packet sample in order");
+        expected = (int16_t)(((int)expected + 1) & 0x7FFF);
+    }
+    expect_eq_i16(512, expected, "exactly 512 samples (16*32) popped");
+}
+
+static void test_interleaved_isr_push_task_pop(void)
+{
+    UsbAudioStream stream;
+    usb_audio_stream_init(&stream);
+
+    int16_t expected[405];
+    int16_t received[405];
+
+    for (int frame = 0; frame < 8; frame++)
+    {
+        for (size_t i = 0; i < 405; i++)
+        {
+            expected[i] = (int16_t)((frame * 405 + (int)i) & 0xFFFF);
+        }
+
+        for (size_t i = 0; i < 405; i++)
+        {
+            usb_audio_stream_push_sample(&stream, expected[i]);
+        }
+
+        size_t popped = usb_audio_stream_pop_samples(&stream, received, 405);
+        expect_eq_size(405, popped, "full frame popped");
+
+        for (size_t i = 0; i < 405; i++)
+        {
+            if (expected[i] != received[i])
+            {
+                expect_eq_i16(expected[i], received[i], "interleaved frame sample match");
+                break;
+            }
+        }
+    }
+
+    expect_eq_u32(0, usb_audio_stream_out_dropped(&stream), "no drops during interleaved");
+    expect_eq_size(0, usb_audio_stream_out_available(&stream), "ring drained after interleaved");
+}
+
+static void test_interleaved_in_ring_bytes_task_pop(void)
+{
+    UsbAudioStream stream;
+    usb_audio_stream_init(&stream);
+
+    uint8_t packet[64];
+    int16_t popped[32];
+    int16_t next_val = 0;
+    size_t total_popped = 0;
+
+    for (int pkt = 0; pkt < 256; pkt++)
+    {
+        for (int i = 0; i < 32; i++)
+        {
+            packet[(size_t)i * 2] = (uint8_t)(next_val & 0xFF);
+            packet[(size_t)i * 2 + 1] = (uint8_t)((next_val >> 8) & 0xFF);
+            next_val++;
+        }
+        usb_audio_stream_push_bytes(&stream, packet, sizeof(packet));
+
+        if (pkt % 12 == 11)
+        {
+            size_t n = 0;
+            int16_t s;
+            while (usb_audio_stream_pop_sample(&stream, &s))
+            {
+                popped[n++] = s;
+                total_popped++;
+                if (n >= 32)
+                    break;
+            }
+        }
+    }
+
+    int16_t s;
+    while (usb_audio_stream_pop_sample(&stream, &s))
+    {
+        total_popped++;
+    }
+
+    size_t total_in = (size_t)256 * 32;
+    size_t drops = (size_t)usb_audio_stream_in_dropped(&stream);
+    expect_eq_size(total_in, total_popped + drops, "in_ring: all samples accounted (popped + dropped = pushed)");
+}
+
+static void test_push_bytes_at_wrap_boundary(void)
+{
+    UsbAudioStream stream;
+    usb_audio_stream_init(&stream);
+
+    size_t capacity = USB_AUDIO_RING_SIZE - 1U;
+    for (size_t i = 0; i < capacity - 1; i++)
+    {
+        uint8_t b[2] = {(uint8_t)((i + 1) & 0xFF), (uint8_t)(((i + 1) >> 8) & 0xFF)};
+        usb_audio_stream_push_bytes(&stream, b, sizeof(b));
+    }
+
+    uint8_t at_wrap[6] = {0x01, 0x01, 0x02, 0x01, 0x03, 0x01};
+    usb_audio_stream_push_bytes(&stream, at_wrap, sizeof(at_wrap));
+
+    expect_eq_u32(2, usb_audio_stream_in_dropped(&stream), "two pairs dropped at wrap (1 slot free, 3 pushed)");
+
+    int16_t first = 0;
+    expect_true(usb_audio_stream_pop_sample(&stream, &first), "first sample after wrap");
+    expect_eq_i16(1, first, "first pushed sample preserved");
+}
+
+static void test_throughput_stress(void)
+{
+    UsbAudioStream stream;
+    usb_audio_stream_init(&stream);
+
+    const size_t total_samples = 40500;
+    uint8_t pair[2];
+
+    for (size_t i = 0; i < total_samples; i++)
+    {
+        uint16_t val = (uint16_t)(i & 0xFFFF);
+        pair[0] = (uint8_t)(val & 0xFF);
+        pair[1] = (uint8_t)((val >> 8) & 0xFF);
+        usb_audio_stream_push_bytes(&stream, pair, sizeof(pair));
+    }
+
+    size_t burst_size = 405;
+    int16_t buf[405];
+    size_t total_popped = 0;
+    for (;;)
+    {
+        size_t n = 0;
+        int16_t s;
+        while (n < burst_size && usb_audio_stream_pop_sample(&stream, &s))
+        {
+            buf[n++] = s;
+        }
+        if (n == 0)
+            break;
+        total_popped += n;
+
+        for (size_t j = 0; j < n; j++)
+        {
+            int16_t expected_val = (int16_t)((total_popped - n + j) & 0xFFFF);
+            if (buf[j] != expected_val)
+            {
+                expect_eq_i16(expected_val, buf[j], "throughput stress sample correct");
+                break;
+            }
+        }
+    }
+
+    size_t drops = (size_t)usb_audio_stream_in_dropped(&stream);
+    expect_eq_size(total_samples, total_popped + drops, "throughput: total pushed = popped + dropped");
+}
+
 static void test_null_safe(void)
 {
     int16_t sample = 0;
@@ -156,7 +414,7 @@ static void test_null_safe(void)
     expect_eq_u32(0, usb_audio_stream_out_dropped(NULL), "out_dropped NULL safe");
     expect_eq_u32(0, usb_audio_stream_in_dropped(NULL), "in_dropped NULL safe");
     // Does not crash
-    usb_audio_stream_push_bytes(NULL, (const uint8_t *)&sample, 2);
+    usb_audio_stream_push_bytes(NULL, (const uint8_t *)&sample, 1);
 }
 
 int main(void)
@@ -169,7 +427,17 @@ int main(void)
     test_overflow_drops_and_counts();
     test_push_bytes_little_endian();
     test_push_bytes_ignores_odd_trailing();
+    test_in_ring_overflow_drops();
+    test_push_bytes_cdc_packet_size();
+    test_interleaved_isr_push_task_pop();
+    test_interleaved_in_ring_bytes_task_pop();
+    test_push_bytes_at_wrap_boundary();
+    test_throughput_stress();
     test_null_safe();
+    test_reset_clears_rings();
+    test_reset_null_safe();
+    test_reset_output_leaves_input_intact();
+    test_reset_output_null_safe();
 
     if (failures != 0)
     {

@@ -446,8 +446,63 @@ static bool effects_task_replace_input_for_testing(uint16_t *buf, size_t count, 
         return false;
     }
 
+    static bool dma_redirected = false;
+
+    if ((!status.enabled || status.vector != 5U) && dma_redirected)
+    {
+        if (HAL_ADC_Stop_DMA(&hadc3) != HAL_OK)
+        {
+            (void)log_write(LOG_LEVEL_WARN, "adc dma restore: stop failed");
+            return false;
+        }
+        if (HAL_ADC_Start_DMA(&hadc3, (uint32_t *)adc_buf, ADC_BUF_LEN) != HAL_OK)
+        {
+            (void)log_write(LOG_LEVEL_WARN, "adc dma restore: start failed, retrying");
+            return false;
+        }
+        dma_redirected = false;
+    }
+
     if (!status.enabled)
     {
+        return true;
+    }
+
+    if (status.vector == 5U)
+    {
+        if (!dma_redirected)
+        {
+            static uint16_t discard[ADC_BUF_LEN];
+            if (HAL_ADC_Stop_DMA(&hadc3) != HAL_OK)
+            {
+                (void)log_write(LOG_LEVEL_WARN, "adc dma redirect: stop failed");
+                return false;
+            }
+            if (HAL_ADC_Start_DMA(&hadc3, (uint32_t *)discard, ADC_BUF_LEN) != HAL_OK)
+            {
+                (void)log_write(LOG_LEVEL_WARN, "adc dma redirect: start failed, retrying");
+                return false;
+            }
+            dma_redirected = true;
+        }
+        for (size_t i = 0; i < count; i++)
+        {
+            int16_t s;
+            if (usb_audio_stream_pop_sample(&audio_stream, &s))
+            {
+                int32_t centered = (int32_t)X_AXIS + (int32_t)s;
+                if (centered < 0)
+                    buf[i] = 0U;
+                else if (centered > (int32_t)UINT16_MAX)
+                    buf[i] = UINT16_MAX;
+                else
+                    buf[i] = (uint16_t)centered;
+            }
+            else
+            {
+                buf[i] = (uint16_t)X_AXIS;
+            }
+        }
         return true;
     }
 
@@ -553,6 +608,11 @@ static void effects_task_on_output_frame(const uint16_t *buf, size_t count, void
 {
     (void)context;
     if (buf == NULL || count == 0)
+    {
+        return;
+    }
+
+    if (!audio_stream.output_active)
     {
         return;
     }
@@ -963,9 +1023,14 @@ void startCliTask(void const *argument)
             static size_t audio_tx_staging_len;
             static uint32_t audio_tx_staging_busy_ticks;
             static bool was_output_active;
+            static uint32_t stuck_count;
 
             if (audio_stream.output_active)
             {
+                if (!was_output_active)
+                {
+                    stuck_count = 0U;
+                }
                 was_output_active = true;
 
                 if (audio_tx_staging_len == 0U &&
@@ -983,6 +1048,7 @@ void startCliTask(void const *argument)
                     if (result != USBD_BUSY)
                     {
                         audio_tx_staging_busy_ticks = 0U;
+                        stuck_count = 0U;
                         if (result != USBD_OK)
                         {
                             PANIC_USB("audio tx fail");
@@ -991,15 +1057,19 @@ void startCliTask(void const *argument)
                     }
                     else
                     {
-                        /*
-                         * Host stopped reading: the pipe is stuck.
-                         * Reboot after 2s so the warm-reset USB
-                         * fix brings the device back cleanly.
-                         */
                         audio_tx_staging_busy_ticks++;
                         if (audio_tx_staging_busy_ticks >= 2000U)
                         {
-                            NVIC_SystemReset();
+                            (void)log_write(LOG_LEVEL_WARN, "audio tx stuck, disabling output");
+                            audio_stream.output_active = false;
+                            audio_tx_staging_len = 0U;
+                            audio_tx_staging_busy_ticks = 0U;
+                            was_output_active = false;
+                            stuck_count++;
+                            if (stuck_count >= 3U)
+                            {
+                                NVIC_SystemReset();
+                            }
                         }
                     }
                 }

@@ -16,13 +16,17 @@ typedef struct
     int16_t out_ring[USB_AUDIO_RING_SIZE];
     volatile size_t out_head;
     volatile size_t out_tail;
-    bool output_active;
+    volatile bool output_active;
 
     volatile uint32_t in_dropped;
     volatile uint32_t out_dropped;
 } UsbAudioStream;
 
 void usb_audio_stream_init(UsbAudioStream *stream);
+
+void usb_audio_stream_reset(UsbAudioStream *stream);
+
+void usb_audio_stream_reset_output(UsbAudioStream *stream);
 
 bool usb_audio_stream_pop_sample(UsbAudioStream *stream, int16_t *sample_out);
 
