@@ -29,17 +29,5 @@ jobs:
         run: cmake --preset Debug
         working-directory: firmware/stm32f303/nucleo-ou-audio-effects
 
-      - name: Auto-format and save patch
-        run: |
-          cp firmware/stm32f303/app/src/cli_service_adapter.c /tmp/backup.c
-          clang-format-19 -i firmware/stm32f303/app/src/cli_service_adapter.c
-          diff /tmp/backup.c firmware/stm32f303/app/src/cli_service_adapter.c > /tmp/format.patch || true
-          cp /tmp/backup.c firmware/stm32f303/app/src/cli_service_adapter.c
-      - name: Upload format patch
-        uses: actions/upload-artifact@v4
-        with:
-          name: format-patch
-          path: /tmp/format.patch
-
       - name: Check
         run: ./scripts/run.sh check-full
