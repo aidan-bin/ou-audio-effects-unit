@@ -254,16 +254,20 @@ typedef struct
     size_t max_offset;
 } PotMapping;
 
-#define POT_FIELD(group, group_min, group_max, group_type, field)           \
-    {                                                                       \
-        true, offsetof(EffectsParams, group) + offsetof(group_type, field), \
-        offsetof(EffectsParams, group_min) + offsetof(group_type, field),   \
-        offsetof(EffectsParams, group_max) + offsetof(group_type, field)}
+#define POT_FIELD(group, group_min, group_max, group_type, field)             \
+    {                                                                         \
+        true, offsetof(EffectsParams, group) + offsetof(group_type, field),   \
+            offsetof(EffectsParams, group_min) + offsetof(group_type, field), \
+            offsetof(EffectsParams, group_max) + offsetof(group_type, field)  \
+    }
 #define POT_OVERDRIVE(field) POT_FIELD(overdrive, overdrive_min, overdrive_max, OverdriveParam, field)
 #define POT_ECHO(field) POT_FIELD(echo, echo_min, echo_max, EchoParam, field)
 #define POT_COMPRESSION(field) \
     POT_FIELD(compression, compression_min, compression_max, CompressionParam, field)
-#define POT_UNUSED {false, 0, 0, 0}
+#define POT_UNUSED     \
+    {                  \
+        false, 0, 0, 0 \
+    }
 
 static const PotMapping pot_map[NUM_EFFECTS][NUM_POTS] = {
     [OVERDRIVE] = {POT_OVERDRIVE(gain), POT_OVERDRIVE(level), POT_OVERDRIVE(tone),

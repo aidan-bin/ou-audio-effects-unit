@@ -58,11 +58,12 @@ typedef struct
     size_t max_offset;
 } ParamMapping;
 
-#define PARAM_ENTRY(key, group, group_min, group_max, group_type, field)     \
-    {                                                                        \
-        (key), offsetof(EffectsParams, group) + offsetof(group_type, field), \
-        offsetof(EffectsParams, group_min) + offsetof(group_type, field),    \
-        offsetof(EffectsParams, group_max) + offsetof(group_type, field)}
+#define PARAM_ENTRY(key, group, group_min, group_max, group_type, field)      \
+    {                                                                         \
+        (key), offsetof(EffectsParams, group) + offsetof(group_type, field),  \
+            offsetof(EffectsParams, group_min) + offsetof(group_type, field), \
+            offsetof(EffectsParams, group_max) + offsetof(group_type, field)  \
+    }
 
 #define OVERDRIVE_ENTRY(key, field) \
     PARAM_ENTRY(key, overdrive, overdrive_min, overdrive_max, OverdriveParam, field)
