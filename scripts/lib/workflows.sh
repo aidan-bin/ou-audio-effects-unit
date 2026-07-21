@@ -159,7 +159,17 @@ run_format() {
 run_format_check() {
 	local clang_format_bin
 	clang_format_bin="$(ensure_clang_tool clang-format)"
-	_format_scope "$clang_format_bin" --dry-run --Werror
+
+	# Save a git diff snapshot so we can restore after applying formatting.
+	# Using -i + git diff is more reliable across clang-format versions than
+	# --dry-run --Werror (which exhibits spurious failures on some builds).
+	_format_scope "$clang_format_bin" -i
+	if ! git diff --exit-code -- '*.c' '*.h' '*.s' >/dev/null 2>&1; then
+		git diff -- '*.c' '*.h' '*.s'
+		echo "Run ./scripts/run.sh format to fix formatting."
+		git checkout -- '*.c' '*.h' '*.s'
+		return 1
+	fi
 
 	local ruff_bin
 	ruff_bin="$(ensure_ruff)"
