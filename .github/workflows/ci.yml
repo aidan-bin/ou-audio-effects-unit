@@ -29,5 +29,10 @@ jobs:
         run: cmake --preset Debug
         working-directory: firmware/stm32f303/nucleo-ou-audio-effects
 
+      - name: Show CI-expected format (temp)
+        run: |
+          echo "=== CI expected formatting ==="
+          clang-format-19 firmware/stm32f303/app/src/cli_service_adapter.c | sed -n '61,66p'
+
       - name: Check
         run: ./scripts/run.sh check-full
