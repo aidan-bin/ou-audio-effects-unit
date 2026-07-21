@@ -6,6 +6,16 @@
 
 #include "sysinfo.h"
 
+static inline size_t cli_strnlen(const char *s, size_t maxlen)
+{
+    size_t n = 0;
+    while (n < maxlen && s[n] != '\0')
+    {
+        n++;
+    }
+    return n;
+}
+
 #define CONFIG_LINE_BUF_SIZE 48
 #define SLOT_LINE_BUF_SIZE 128
 #define CLI_SLOT_EMPTY 0xFFu
@@ -1521,7 +1531,7 @@ CliStatus cli_core_process_line_ex(const char *line,
         return CLI_STATUS_INVALID_ARGUMENTS;
     }
 
-    size_t line_length = strnlen(line, CLI_MAX_LINE_LENGTH + 1);
+    size_t line_length = cli_strnlen(line, CLI_MAX_LINE_LENGTH + 1);
     if (line_length == 0 || line_length > CLI_MAX_LINE_LENGTH)
     {
         return CLI_STATUS_INVALID_ARGUMENTS;
