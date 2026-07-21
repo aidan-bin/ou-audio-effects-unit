@@ -271,7 +271,8 @@ run_lint() {
 			"$($arm_gcc_bin -print-file-name=include-fixed)" \
 			"$($arm_gcc_bin -print-file-name=include)" \
 			"$($arm_gcc_bin -print-file-name=../../../../arm-none-eabi/include)" \
-			"$(dirname "$($arm_gcc_bin -print-libgcc-file-name)")/include"; do
+			"$(dirname "$($arm_gcc_bin -print-libgcc-file-name)")/include" \
+			"$(dirname "$(dirname "$arm_gcc_bin")")/arm-none-eabi/include"; do
 			if [[ "$include_dir" != /* ]]; then
 				include_dir="$(cd "$(dirname "$arm_gcc_bin")" && cd "$include_dir" >/dev/null 2>&1 && pwd || true)"
 			fi
