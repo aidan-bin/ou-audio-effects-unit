@@ -255,7 +255,9 @@ static CliStatus handle_crash(char **tokens,
     }
     else if (strcmp(tokens[1], "udf") == 0)
     {
+#ifdef __arm__
         __asm volatile("udf #0");
+#endif
     }
     else if (strcmp(tokens[1], "div0") == 0)
     {
