@@ -302,6 +302,12 @@ run_lint() {
 			return 0
 		fi
 
+		if [[ -n "$nucleo_compile_db_dir" ]] &&
+			compile_commands_contains_file "$nucleo_compile_db_dir/compile_commands.json" "$file"; then
+			echo "$nucleo_compile_db_dir"
+			return 0
+		fi
+
 		return 1
 	}
 
@@ -395,7 +401,7 @@ run_lint() {
 		if [[ "$file" == firmware/stm32f303/app/* ]]; then
 			header_filter='(^|/)(dsp|firmware/stm32f303/app)/'
 			if ! compile_db_dir="$(select_app_compile_db_dir "$file")"; then
-				echo "Lint requires compile_commands entry for $file in root or CubeMX compile database."
+				echo "Lint requires compile_commands entry for $file in a firmware or host compile database."
 				return 1
 			fi
 		elif [[ "$file" == tests/* ]]; then
