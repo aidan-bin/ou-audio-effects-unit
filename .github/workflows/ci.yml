@@ -30,5 +30,18 @@ jobs:
         run: cmake --preset Debug
         working-directory: firmware/stm32f303/nucleo-ou-audio-effects
 
+      - name: Debug ARM paths (temp)
+        run: |
+          gcc="$(grep -m1 -o '/[^ ]*arm-none-eabi-gcc' firmware/stm32f303/nucleo-ou-audio-effects/build/Debug/compile_commands.json || command -v arm-none-eabi-gcc)"
+          echo "compiler: $gcc"
+          echo "include:"; $gcc -print-file-name=include
+          echo "include-fixed:"; $gcc -print-file-name=include-fixed
+          echo "sysroot:"; $gcc -print-sysroot
+          echo "libgcc:"; $gcc -print-libgcc-file-name
+          ls "$($gcc -print-file-name=include)/stdio.h" 2>&1 || true
+          ls "$(dirname "$($gcc -print-libgcc-file-name)")/include/stdio.h" 2>&1 || true
+          ls "$(dirname "$(dirname "$gcc")")/arm-none-eabi/include/stdio.h" 2>&1 || true
+          find /usr -name "stdio.h" -path "*/arm-none*" 2>/dev/null | head -5
+
       - name: Check
         run: ./scripts/run.sh check-full
