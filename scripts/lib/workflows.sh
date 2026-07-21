@@ -269,10 +269,7 @@ run_lint() {
 
 		for include_dir in \
 			"$($arm_gcc_bin -print-file-name=include-fixed)" \
-			"$($arm_gcc_bin -print-file-name=include)" \
-			"$($arm_gcc_bin -print-file-name=../../../../arm-none-eabi/include)" \
-			"$(dirname "$($arm_gcc_bin -print-libgcc-file-name)")/include" \
-			"$(dirname "$(dirname "$arm_gcc_bin")")/arm-none-eabi/include"; do
+			"$($arm_gcc_bin -print-file-name=include)"; do
 			if [[ "$include_dir" != /* ]]; then
 				include_dir="$(cd "$(dirname "$arm_gcc_bin")" && cd "$include_dir" >/dev/null 2>&1 && pwd || true)"
 			fi
@@ -281,6 +278,18 @@ run_lint() {
 				extra_args+=("--extra-arg-before=-isystem$include_dir")
 			fi
 		done
+
+		# Resolve the newlib C library include directories from the
+		# compiler's internal search path.  -print-file-name=include
+		# only yields compiler built-in headers; newlib lives elsewhere.
+		while IFS= read -r include_dir; do
+			[[ -z "$include_dir" ]] && continue
+			if [[ -d "$include_dir" ]]; then
+				extra_args+=("--extra-arg-before=-isystem$include_dir")
+			fi
+		done < <("$arm_gcc_bin" -E -Wp,-v - </dev/null 2>&1 | \
+			sed -n '/^#include <...> search starts here:/,/^End of search list/p' | \
+			grep '^ ' | sed 's/^[[:space:]]*//')
 
 		if [[ "${#extra_args[@]}" -eq 0 ]]; then
 			echo "No valid ARM GCC include directories found for CubeMX lint."
