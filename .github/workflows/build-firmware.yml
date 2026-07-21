@@ -2,6 +2,11 @@ name: build-firmware
 
 on:
   workflow_dispatch:
+    inputs:
+      preset:
+        description: CMake build preset
+        required: false
+        default: Release
 
 permissions:
   contents: read
