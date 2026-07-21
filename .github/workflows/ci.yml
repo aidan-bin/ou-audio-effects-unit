@@ -23,16 +23,13 @@ jobs:
           sudo add-apt-repository -y "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-19 main"
           sudo apt-get update
           sudo apt-get install -y cmake build-essential clang-format-19 clang-tidy-19 python3 python3-pip gcc-arm-none-eabi ninja-build
+          sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-19 100
+          sudo update-alternatives --install /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-19 100
           pip install ruff
 
       - name: Configure Nucleo firmware (for compile database)
         run: cmake --preset Debug
         working-directory: firmware/stm32f303/nucleo-ou-audio-effects
-
-      - name: Show CI-expected format (temp)
-        run: |
-          echo "=== CI expected formatting ==="
-          clang-format-19 firmware/stm32f303/app/src/cli_service_adapter.c | sed -n '61,66p'
 
       - name: Check
         run: ./scripts/run.sh check-full
