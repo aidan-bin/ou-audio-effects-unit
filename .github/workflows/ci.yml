@@ -29,10 +29,5 @@ jobs:
         run: cmake --preset Debug
         working-directory: firmware/stm32f303/nucleo-ou-audio-effects
 
-      - name: Show format diff (temp debug)
-        run: |
-          clang-format-19 firmware/stm32f303/app/src/cli_service_adapter.c > /tmp/formatted.c
-          diff firmware/stm32f303/app/src/cli_service_adapter.c /tmp/formatted.c || true
-
       - name: Check
         run: ./scripts/run.sh check-full
