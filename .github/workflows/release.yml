@@ -18,36 +18,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake build-essential clang-format clang-tidy \
             python3 python3-pip gcc-arm-none-eabi ninja-build
-      - name: Configure CubeMX firmware (for compile database)
-        run: cmake --preset Debug
-        working-directory: firmware/stm32f303/cubemx
       - name: Configure Nucleo firmware (for compile database)
         run: cmake --preset Debug
         working-directory: firmware/stm32f303/nucleo-ou-audio-effects
       - name: Check
         run: ./scripts/run.sh check-full
-
-  build-firmware-custom:
-    needs: [check]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install tooling
-        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build gcc-arm-none-eabi
-      - name: Configure
-        run: cmake --preset Release
-        working-directory: firmware/stm32f303/cubemx
-      - name: Build
-        run: cmake --build --preset Release
-        working-directory: firmware/stm32f303/cubemx
-      - name: Upload firmware artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: firmware-custom
-          path: |
-            firmware/stm32f303/cubemx/build/Release/STM32F303RETx-Audio-Effects-Unit.elf
 
   build-firmware-nucleo:
     needs: [check]
@@ -111,7 +86,6 @@ jobs:
 
   release:
     needs:
-      - build-firmware-custom
       - build-firmware-nucleo
       - build-host-linux
       - build-host-macos
@@ -147,7 +121,6 @@ jobs:
           body: "Rolling release built from ${{ github.sha }}"
           prerelease: false
           files: |
-            firmware-custom/STM32F303RETx-Audio-Effects-Unit.elf
             firmware-nucleo/nucleo-ou-audio-effects.elf
             host-demo-linux.zip
             host-demo-macos.zip

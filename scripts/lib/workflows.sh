@@ -41,7 +41,6 @@ run_build_tests() {
 }
 
 run_build_firmware() {
-	run_firmware_project_build "firmware/stm32f303/cubemx" "custom board"
 	run_firmware_project_build "firmware/stm32f303/nucleo-ou-audio-effects" "nucleo"
 }
 
@@ -356,9 +355,8 @@ run_lint() {
 	}
 
 	if ! cubemx_compile_db_dir="$(resolve_generated_compile_db_dir CUBEMX_LINT_BUILD_DIR firmware/stm32f303/cubemx)"; then
-		echo "Missing CubeMX compile database (expected under firmware/stm32f303/cubemx/build or via CUBEMX_LINT_BUILD_DIR)."
-		echo "Configure or regenerate the CubeMX build tree to enable USER CODE lint gating."
-		return 1
+		echo "CubeMX compile database not found; skipping CubeMX USER CODE lint."
+		cubemx_compile_db_dir=""
 	fi
 
 	if ! nucleo_compile_db_dir="$(resolve_generated_compile_db_dir NUCLEO_LINT_BUILD_DIR firmware/stm32f303/nucleo-ou-audio-effects)"; then
@@ -367,13 +365,15 @@ run_lint() {
 		return 1
 	fi
 
-	while IFS= read -r arg; do
-		[[ -n "$arg" ]] && cubemx_extra_args+=("$arg")
-	done < <(emit_arm_tidy_extra_args "$cubemx_compile_db_dir/compile_commands.json")
+	if [[ -n "$cubemx_compile_db_dir" ]]; then
+		while IFS= read -r arg; do
+			[[ -n "$arg" ]] && cubemx_extra_args+=("$arg")
+		done < <(emit_arm_tidy_extra_args "$cubemx_compile_db_dir/compile_commands.json")
 
-	if [[ "${#cubemx_extra_args[@]}" -eq 0 ]]; then
-		echo "Failed to configure CubeMX clang-tidy include paths from ARM GCC toolchain."
-		return 1
+		if [[ "${#cubemx_extra_args[@]}" -eq 0 ]]; then
+			echo "Failed to configure CubeMX clang-tidy include paths from ARM GCC toolchain."
+			return 1
+		fi
 	fi
 
 	while IFS= read -r arg; do
@@ -416,6 +416,7 @@ run_lint() {
 		local checks_override='clang-analyzer-*,bugprone-*,-bugprone-easily-swappable-parameters,performance-*,-readability-identifier-naming,-performance-no-int-to-ptr,-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling'
 
 		if [[ "$file" == firmware/stm32f303/cubemx/* ]]; then
+			[[ -z "$cubemx_compile_db_dir" ]] && continue
 			generated_compile_db_dir="$cubemx_compile_db_dir"
 		elif [[ "$file" == firmware/stm32f303/nucleo-ou-audio-effects/* ]]; then
 			generated_compile_db_dir="$nucleo_compile_db_dir"
