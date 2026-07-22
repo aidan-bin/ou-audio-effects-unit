@@ -55,3 +55,36 @@ size_t clamp_min(size_t value, size_t min)
 {
     return clamp_range(value, min, SIZE_MAX);
 }
+
+int32_t saturate_i32(int64_t v)
+{
+    if (v > INT32_MAX)
+        return INT32_MAX;
+    else if (v < INT32_MIN)
+        return INT32_MIN;
+    else
+        return (int32_t)v;
+}
+
+int32_t saturate_min(int32_t num, int32_t min)
+{
+    if (num < min)
+        return min;
+    else
+        return num;
+}
+
+uint16_t saturate_u16(int32_t num)
+{
+    if (num < 0)
+    {
+        return 0;
+    }
+
+    if (num > (int32_t)UINT16_MAX)
+    {
+        return UINT16_MAX;
+    }
+
+    return (uint16_t)num;
+}

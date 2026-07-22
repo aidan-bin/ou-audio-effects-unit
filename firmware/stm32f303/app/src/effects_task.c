@@ -167,7 +167,7 @@ bool effects_task_step(const EffectsTaskContext *task_context, const EffectsTask
             continue;
         }
 
-        if (effects_pipeline_process(task_context->pipeline, (Effect)slot, input_buf, output_buf,
+        if (effects_pipeline_process(task_context->pipeline, (EffectType)slot, input_buf, output_buf,
                                      task_context->sample_buf_len) != 0)
         {
             (void)log_write(LOG_LEVEL_ERROR, "process_failed: effect pipeline process");

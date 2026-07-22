@@ -1,3 +1,7 @@
+/*
+ * fault_handler — formats and emits diagnostic output on a hard fault.
+ */
+
 #ifndef FAULT_HANDLER_H
 #define FAULT_HANDLER_H
 

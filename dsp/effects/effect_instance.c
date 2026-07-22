@@ -1,5 +1,6 @@
-#include "effect_runtime.h"
+#include "effect_instance.h"
 #include "fast_math.h"
+#include "ring_buffer.h"
 
 #include <string.h>
 
@@ -172,25 +173,28 @@ static void echo_process_stateful(EchoState *st, const EchoParam *param, const u
 {
     if (st->history != NULL && st->history_len > 0)
     {
+        // Persist dry input in the history ring
         size_t len = st->history_len;
         for (size_t k = 0; k < num_samples; k++)
         {
-            st->history[(st->history_w + k) % len] = in_buf[k];
+            ring_write(st->history, len, st->history_w + k, in_buf[k]);
         }
 
-        size_t delay_mod = param->delay_samples % len;
-        size_t start_idx = (st->history_w + len - delay_mod) % len;
+        // Apply FIR echo using history ring
+        size_t start_idx = ring_rewind(st->history_w, param->delay_samples, len);
         buf_echo_ring(st->history, len, start_idx, out_buf, num_samples, param);
-        st->history_w = (st->history_w + num_samples) % len;
+        st->history_w = ring_advance(st->history_w, num_samples, len);
     }
     else
     {
+        // Fallback: if no history ring is available, just copy input to output
         for (size_t k = 0; k < num_samples; k++)
         {
             out_buf[k] = in_buf[k];
         }
     }
 
+    // Apply IIR echo for long tails
     buf_echo_feedback(&st->fb, in_buf, out_buf, num_samples, param);
 }
 
@@ -208,6 +212,7 @@ int effect_instance_process(const EffectInstance *instance, const uint16_t *in_b
         buf_overdrive(in_buf, out_buf, num_samples, &instance->params.overdrive);
         return 0;
     case EFFECT_TYPE_ECHO:
+        // Default to stateful echo if echo state is available
         if (instance->echo_state != NULL)
         {
             echo_process_stateful(instance->echo_state, &instance->params.echo, in_buf, out_buf,
@@ -226,122 +231,15 @@ int effect_instance_process(const EffectInstance *instance, const uint16_t *in_b
     }
 }
 
-int effect_handle_init(EffectHandle *handle, EffectType type)
+int effect_instance_get_echo_delay_samples(const EffectInstance *instance, size_t *delay_samples)
 {
-    if (handle == NULL)
+    if (instance == NULL || delay_samples == NULL || instance->type != EFFECT_TYPE_ECHO)
     {
         return -1;
     }
 
-    effect_instance_init(&handle->instance, type);
-    handle->initialized = 1;
+    *delay_samples = instance->params.echo.delay_samples;
     return 0;
-}
-
-int effect_handle_reset(EffectHandle *handle)
-{
-    if (handle == NULL || handle->initialized == 0)
-    {
-        return -1;
-    }
-
-    effect_instance_reset(&handle->instance);
-    return 0;
-}
-
-int effect_handle_set_overdrive_params(EffectHandle *handle, const OverdriveParam *param)
-{
-    if (handle == NULL || handle->initialized == 0)
-    {
-        return -1;
-    }
-
-    return effect_instance_set_overdrive_params(&handle->instance, param);
-}
-
-int effect_handle_set_echo_params(EffectHandle *handle, const EchoParam *param)
-{
-    if (handle == NULL || handle->initialized == 0)
-    {
-        return -1;
-    }
-
-    return effect_instance_set_echo_params(&handle->instance, param);
-}
-
-int effect_handle_set_compression_params(EffectHandle *handle, const CompressionParam *param)
-{
-    if (handle == NULL || handle->initialized == 0)
-    {
-        return -1;
-    }
-
-    return effect_instance_set_compression_params(&handle->instance, param);
-}
-
-int effect_handle_set_params(EffectHandle *handle, const void *param)
-{
-    if (handle == NULL || handle->initialized == 0)
-    {
-        return -1;
-    }
-
-    return effect_instance_set_params(&handle->instance, param);
-}
-
-int effect_handle_get_echo_delay_samples(const EffectHandle *handle, size_t *delay_samples)
-{
-    if (handle == NULL || delay_samples == NULL || handle->initialized == 0 ||
-        handle->instance.type != EFFECT_TYPE_ECHO)
-    {
-        return -1;
-    }
-
-    *delay_samples = handle->instance.params.echo.delay_samples;
-    return 0;
-}
-
-int effect_handle_attach_echo_state(EffectHandle *handle, EchoState *state)
-{
-    if (handle == NULL || handle->initialized == 0)
-    {
-        return -1;
-    }
-
-    return effect_instance_attach_echo_state(&handle->instance, state);
-}
-
-int effect_handle_reset_state(EffectHandle *handle)
-{
-    if (handle == NULL || handle->initialized == 0)
-    {
-        return -1;
-    }
-
-    effect_instance_reset_state(&handle->instance);
-    return 0;
-}
-
-int effect_handle_set_enabled(EffectHandle *handle, int enabled)
-{
-    if (handle == NULL || handle->initialized == 0)
-    {
-        return -1;
-    }
-
-    effect_instance_set_enabled(&handle->instance, enabled);
-    return 0;
-}
-
-int effect_handle_process(const EffectHandle *handle, const uint16_t *in_buf, uint16_t *out_buf,
-                          size_t num_samples)
-{
-    if (handle == NULL || handle->initialized == 0)
-    {
-        return -1;
-    }
-
-    return effect_instance_process(&handle->instance, in_buf, out_buf, num_samples);
 }
 
 static OverdriveParam normalize_overdrive_params(const OverdriveParam *param)

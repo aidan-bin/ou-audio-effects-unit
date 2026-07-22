@@ -131,8 +131,8 @@ static void test_state_is_normalized_before_write(void)
     init_state(&state);
 
     state.source_state.slots[0] = (uint8_t)99;
-    state.source_state.slots[1] = ECHO;
-    state.source_state.slots[2] = ECHO;
+    state.source_state.slots[1] = EFFECT_TYPE_ECHO;
+    state.source_state.slots[2] = EFFECT_TYPE_ECHO;
     state.source_state.active_slot = 99;
 
     SwitchTaskContext context = make_context();

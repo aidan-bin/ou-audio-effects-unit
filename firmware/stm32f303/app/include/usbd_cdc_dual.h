@@ -1,3 +1,7 @@
+/*
+ * usbd_cdc_dual — Dual-CDC USB device CLI (CDC0) + audio (CDC1).
+ */
+
 #ifndef USBD_CDC_DUAL_H
 #define USBD_CDC_DUAL_H
 

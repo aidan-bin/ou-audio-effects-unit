@@ -1,3 +1,7 @@
+/*
+ * sysinfo — key/value table for system information.
+ */
+
 #ifndef SYSINFO_H
 #define SYSINFO_H
 

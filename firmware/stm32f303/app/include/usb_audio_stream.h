@@ -1,3 +1,7 @@
+/*
+ * usb_audio_stream — CDC1 audio stream ring buffers.
+ */
+
 #ifndef USB_AUDIO_STREAM_H
 #define USB_AUDIO_STREAM_H
 

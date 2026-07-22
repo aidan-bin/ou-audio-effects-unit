@@ -46,68 +46,9 @@ static bool assign_bounded_size_t(int32_t value, size_t min, size_t max, size_t 
     return true;
 }
 
-// Maps a "group.field" config key to byte offsets of the current value and its
-// min/max bounds within EffectsParams, so a single getter/setter can serve all
-// keys. PARAM_ENTRY composes the EffectsParams group offset with the field
-// offset inside the parameter struct.
-typedef struct
-{
-    const char *key;
-    size_t value_offset;
-    size_t min_offset;
-    size_t max_offset;
-} ParamMapping;
-
-#define PARAM_ENTRY(key, group, group_min, group_max, group_type, field)      \
-    {                                                                         \
-        (key), offsetof(EffectsParams, group) + offsetof(group_type, field),  \
-            offsetof(EffectsParams, group_min) + offsetof(group_type, field), \
-            offsetof(EffectsParams, group_max) + offsetof(group_type, field)  \
-    }
-
-#define OVERDRIVE_ENTRY(key, field) \
-    PARAM_ENTRY(key, overdrive, overdrive_min, overdrive_max, OverdriveParam, field)
-#define ECHO_ENTRY(key, field) PARAM_ENTRY(key, echo, echo_min, echo_max, EchoParam, field)
-#define COMPRESSION_ENTRY(key, field) \
-    PARAM_ENTRY(key, compression, compression_min, compression_max, CompressionParam, field)
-
-static const ParamMapping param_map[] = {
-    OVERDRIVE_ENTRY("overdrive.gain", gain),
-    OVERDRIVE_ENTRY("overdrive.level", level),
-    OVERDRIVE_ENTRY("overdrive.tone", tone),
-    OVERDRIVE_ENTRY("overdrive.mix", mix),
-    ECHO_ENTRY("echo.delay_samples", delay_samples),
-    ECHO_ENTRY("echo.pre_delay", pre_delay),
-    ECHO_ENTRY("echo.density", density),
-    ECHO_ENTRY("echo.attack", attack),
-    ECHO_ENTRY("echo.decay", decay),
-    ECHO_ENTRY("echo.feedback", feedback),
-    ECHO_ENTRY("echo.feedback_delay", feedback_delay),
-    ECHO_ENTRY("echo.damping", damping),
-    COMPRESSION_ENTRY("compression.threshold", threshold),
-    COMPRESSION_ENTRY("compression.ratio", ratio),
-};
-
-#undef PARAM_ENTRY
-#undef OVERDRIVE_ENTRY
-#undef ECHO_ENTRY
-#undef COMPRESSION_ENTRY
-
 static size_t param_value_at(const EffectsParams *params, size_t offset)
 {
     return *(const size_t *)((const char *)params + offset);
-}
-
-static const ParamMapping *find_param_mapping(const char *key)
-{
-    for (size_t i = 0; i < sizeof(param_map) / sizeof(param_map[0]); i++)
-    {
-        if (strcmp(param_map[i].key, key) == 0)
-        {
-            return &param_map[i];
-        }
-    }
-    return NULL;
 }
 
 static bool set_param_value(EffectsParams *params, const char *key, int32_t value)
@@ -117,15 +58,14 @@ static bool set_param_value(EffectsParams *params, const char *key, int32_t valu
         return false;
     }
 
-    const ParamMapping *mapping = find_param_mapping(key);
-    if (mapping == NULL)
+    const EffectParamMeta *meta = effect_params_meta_find(key);
+    if (meta == NULL)
     {
         return false;
     }
 
-    return assign_bounded_size_t(value, param_value_at(params, mapping->min_offset),
-                                 param_value_at(params, mapping->max_offset),
-                                 (size_t *)((char *)params + mapping->value_offset));
+    return assign_bounded_size_t(value, meta->min, meta->max,
+                                 (size_t *)((char *)params + meta->offset));
 }
 
 static bool get_param_value(const EffectsParams *params, const char *key, int32_t *value_out)
@@ -135,13 +75,13 @@ static bool get_param_value(const EffectsParams *params, const char *key, int32_
         return false;
     }
 
-    const ParamMapping *mapping = find_param_mapping(key);
-    if (mapping == NULL)
+    const EffectParamMeta *meta = effect_params_meta_find(key);
+    if (meta == NULL)
     {
         return false;
     }
 
-    size_t value = param_value_at(params, mapping->value_offset);
+    size_t value = param_value_at(params, meta->offset);
     if (value > (size_t)INT32_MAX)
     {
         return false;
@@ -425,7 +365,7 @@ static bool service_slot_assign(uint8_t pos, uint8_t effect, void *ctx)
     }
 
     lock_ctx(context);
-    bool success = effects_state_assign_slot(context->state, pos, (Effect)effect);
+    bool success = effects_state_assign_slot(context->state, pos, (EffectType)effect);
     unlock_ctx(context);
     return success;
 }
@@ -958,7 +898,7 @@ void cli_service_adapter_bind(CliServiceAdapter *context, CliServices *services_
     services_out->context = context;
 }
 
-bool cli_service_adapter_apply_pot_sample(CliServiceAdapter *context, Effect active_effect,
+bool cli_service_adapter_apply_pot_sample(CliServiceAdapter *context, EffectType active_effect,
                                           uint8_t pot_index, uint32_t adc_value)
 {
     if (context == NULL || context->params == NULL || pot_index >= CLI_POT_COUNT)

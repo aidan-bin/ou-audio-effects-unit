@@ -65,7 +65,7 @@ function(ou_add_firmware_app_test test_basename)
 endfunction()
 
 set(OU_DSP_SOURCES
-    dsp/effects/effect_runtime.c
+    dsp/effects/effect_instance.c
     dsp/effects/effects.c
     dsp/math/bam.c
     dsp/math/fast_math.c
@@ -97,6 +97,7 @@ target_include_directories(ou_dsp
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/dsp/effects
         ${CMAKE_CURRENT_SOURCE_DIR}/dsp/math
+        ${CMAKE_CURRENT_SOURCE_DIR}/dsp/audio
 )
 
 if(OU_BUILD_SHARED_LIB)
@@ -105,6 +106,7 @@ if(OU_BUILD_SHARED_LIB)
         PUBLIC
             ${CMAKE_CURRENT_SOURCE_DIR}/dsp/effects
             ${CMAKE_CURRENT_SOURCE_DIR}/dsp/math
+            ${CMAKE_CURRENT_SOURCE_DIR}/dsp/audio
     )
 
     ou_link_math_library(ou_effects_shared)
@@ -129,6 +131,7 @@ target_include_directories(ou_firmware_app
         ${OU_FIRMWARE_APP_INCLUDE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/dsp/effects
         ${CMAKE_CURRENT_SOURCE_DIR}/dsp/math
+        ${CMAKE_CURRENT_SOURCE_DIR}/dsp/audio
 )
 
 target_link_libraries(ou_firmware_app PRIVATE ou_dsp)
@@ -171,6 +174,20 @@ if(OU_BUILD_TESTS)
     ou_link_math_library(ou_dsp_tests)
     add_test(NAME ou_dsp_tests COMMAND ou_dsp_tests)
     list(APPEND OU_TEST_BUILD_TARGETS ou_dsp_tests)
+
+    add_executable(ou_dsp_sample_convert_tests
+        tests/test_dsp_sample_convert.c
+    )
+
+    target_include_directories(ou_dsp_sample_convert_tests
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests
+    )
+
+    target_link_libraries(ou_dsp_sample_convert_tests PRIVATE ou_dsp)
+    ou_link_math_library(ou_dsp_sample_convert_tests)
+    add_test(NAME ou_dsp_sample_convert_tests COMMAND ou_dsp_sample_convert_tests)
+    list(APPEND OU_TEST_BUILD_TARGETS ou_dsp_sample_convert_tests)
 
     foreach(test_basename IN LISTS OU_FIRMWARE_APP_STANDARD_TESTS)
         ou_add_firmware_app_test(${test_basename})

@@ -1,11 +1,8 @@
 #include "effects.h"
 #include "fast_math.h"
+#include "ring_buffer.h"
 
 #include <string.h>
-
-static int32_t saturate_i32(int64_t v);
-static int32_t saturate_min(int32_t num, int32_t min);
-static uint16_t saturate_u16(int32_t num);
 
 /* Buffered overdrive/distortion:
  * - Distortion/overdrive clips input signal to a threshold, which makes it resemble a square
@@ -23,7 +20,7 @@ void buf_overdrive(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples
 
     for (size_t n = 0; n < num_samples; n++)
     {
-        int32_t input = (int32_t)in_buf[n] - X_AXIS;
+        int32_t input = sample_center(in_buf[n]);
         int32_t output;
 
         // Make sure q_tanh arg does not overflow for larger N
@@ -36,10 +33,18 @@ void buf_overdrive(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples
     }
 }
 
+static void mix_echo_tap(uint16_t *out_buf, size_t out_idx, int32_t src_sample, size_t tap_gain)
+{
+    int32_t wet = ((int32_t)tap_gain * src_sample) >> FIXED_POINT_Q;
+    out_buf[out_idx] = saturate_u16((int32_t)out_buf[out_idx] + wet);
+}
+
 /* Buffered echo:
  * - Echo with maximum delay of (MAX_DELAY_SAMPLES / sample rate); equivalent to FIR.
  * - Uses ring buffer for multi-tap delay line.
  * - Useful for discrete early reflections, but cannot produce a long tail.
+ * - out_buf[k] = dry sample at start_idx + delay_samples + k; each older dry sample
+ *   then sprays decaying echo taps forward onto whichever out_buf indices they land on.
  */
 void buf_echo_ring(const uint16_t *ring, size_t ring_len, size_t start_idx, uint16_t *out_buf,
                    size_t num_samples, const EchoParam *param)
@@ -57,7 +62,7 @@ void buf_echo_ring(const uint16_t *ring, size_t ring_len, size_t start_idx, uint
 
     for (size_t k = 0; k < num_samples; k++)
     {
-        out_buf[k] = ring[(start_idx + delay_samples + k) % ring_len];
+        out_buf[k] = ring_read(ring, ring_len, start_idx + delay_samples + k);
     }
 
     if (delay_samples == 0 || density == 0 || pre_delay > delay_samples)
@@ -65,29 +70,26 @@ void buf_echo_ring(const uint16_t *ring, size_t ring_len, size_t start_idx, uint
         return;
     }
 
-    size_t echo_spacing = QN_ONE / density;
+    size_t echo_spacing = QN_ONE / density; // num samples between consecutive taps
     if (echo_spacing == 0)
     {
         echo_spacing = 1;
     }
 
-    for (size_t n = 0; n < delay_samples + num_samples - 1; n++)
+    for (size_t src_idx = 0; src_idx < delay_samples + num_samples - 1; src_idx++)
     {
-        int32_t dry_input = (int32_t)ring[(start_idx + n) % ring_len] - X_AXIS;
+        int32_t src_sample = sample_center(ring_read(ring, ring_len, start_idx + src_idx));
 
-        size_t curr_echo_gain = attack;
+        size_t tap_gain = attack;
 
-        for (size_t delay = pre_delay; delay <= delay_samples; delay += echo_spacing)
+        for (size_t tap_delay = pre_delay; tap_delay <= delay_samples; tap_delay += echo_spacing)
         {
-            if (n + delay >= delay_samples && n + delay < delay_samples + num_samples)
+            if (src_idx + tap_delay >= delay_samples && src_idx + tap_delay < delay_samples + num_samples)
             {
-                const size_t out_idx = n + delay - delay_samples;
-                int32_t wet = ((int32_t)curr_echo_gain * dry_input) >> FIXED_POINT_Q;
-                int32_t mixed = (int32_t)out_buf[out_idx] + wet;
-                out_buf[out_idx] = saturate_u16(mixed);
+                mix_echo_tap(out_buf, src_idx + tap_delay - delay_samples, src_sample, tap_gain);
             }
 
-            curr_echo_gain = saturate_min((int32_t)curr_echo_gain - (int32_t)decay, 0);
+            tap_gain = saturate_min((int32_t)tap_gain - (int32_t)decay, 0);
         }
     }
 }
@@ -108,6 +110,9 @@ void buf_echo(const uint16_t *in_buf, uint16_t *out_buf, size_t num_samples,
  * - Echo with feedback path (recirculating reflections); equivalent to comb IIR.
  * - Uses one-pole low-pass filter in feedback path for damping.
  * - Useful for long tails.
+ * - fb->line recirculates: each write is a damped, attenuated copy of its own
+ *   past output (from fb_delay samples ago) plus fresh dry input.
+ * - out_buf[k] += that recirculating line content from fb_delay samples ago.
  */
 void buf_echo_feedback(EchoFeedback *fb, const uint16_t *in_buf, uint16_t *out_buf,
                        size_t num_samples, const EchoParam *param)
@@ -130,15 +135,15 @@ void buf_echo_feedback(EchoFeedback *fb, const uint16_t *in_buf, uint16_t *out_b
 
     for (size_t n = 0; n < num_samples; n++)
     {
-        size_t read_idx = (fb->write_idx + fb->line_len - fb_delay) % fb->line_len;
-        int32_t delayed = (int32_t)fb->line[read_idx] - X_AXIS;
-        int32_t dry = (int32_t)in_buf[n] - X_AXIS;
+        size_t read_idx = ring_rewind(fb->write_idx, fb_delay, fb->line_len);
+        int32_t delayed = sample_center(fb->line[read_idx]);
+        int32_t dry = sample_center(in_buf[n]);
 
         int32_t fb_in = dry + (((int32_t)feedback * delayed) >> FIXED_POINT_Q);
 
         fb->lpf_state += (lpf_coeff * (fb_in - fb->lpf_state)) >> FIXED_POINT_Q;
-        fb->line[fb->write_idx] = saturate_u16(fb->lpf_state + X_AXIS);
-        fb->write_idx = (fb->write_idx + 1U) % fb->line_len;
+        ring_write(fb->line, fb->line_len, fb->write_idx, sample_uncenter_saturate(fb->lpf_state));
+        fb->write_idx = ring_advance(fb->write_idx, 1, fb->line_len);
 
         out_buf[n] = saturate_u16((int32_t)out_buf[n] + delayed);
     }
@@ -153,10 +158,7 @@ void echo_feedback_reset(EchoFeedback *fb)
 
     if (fb->line != NULL)
     {
-        for (size_t i = 0; i < fb->line_len; i++)
-        {
-            fb->line[i] = (uint16_t)X_AXIS;
-        }
+        ring_fill(fb->line, fb->line_len, (uint16_t)X_AXIS);
     }
     fb->write_idx = 0;
     fb->lpf_state = 0;
@@ -171,10 +173,7 @@ void echo_state_reset(EchoState *state)
 
     if (state->history != NULL)
     {
-        for (size_t i = 0; i < state->history_len; i++)
-        {
-            state->history[i] = (uint16_t)X_AXIS;
-        }
+        ring_fill(state->history, state->history_len, (uint16_t)X_AXIS);
     }
     state->history_w = 0;
     echo_feedback_reset(&state->fb);
@@ -195,7 +194,7 @@ void buf_compression(const uint16_t *in_buf, uint16_t *out_buf, size_t num_sampl
 
     for (size_t n = 0; n < num_samples; n++)
     {
-        int32_t sample = (int32_t)in_buf[n] - X_AXIS;
+        int32_t sample = sample_center(in_buf[n]);
 
         if (sample > threshold)
         {
@@ -212,37 +211,4 @@ void buf_compression(const uint16_t *in_buf, uint16_t *out_buf, size_t num_sampl
 
         out_buf[n] = (uint16_t)sample + X_AXIS;
     }
-}
-
-static int32_t saturate_i32(int64_t v)
-{
-    if (v > INT32_MAX)
-        return INT32_MAX;
-    else if (v < INT32_MIN)
-        return INT32_MIN;
-    else
-        return (int32_t)v;
-}
-
-static int32_t saturate_min(int32_t num, int32_t min)
-{
-    if (num < min)
-        return min;
-    else
-        return num;
-}
-
-static uint16_t saturate_u16(int32_t num)
-{
-    if (num < 0)
-    {
-        return 0;
-    }
-
-    if (num > (int32_t)UINT16_MAX)
-    {
-        return UINT16_MAX;
-    }
-
-    return (uint16_t)num;
 }

@@ -1,3 +1,9 @@
+/*
+ * bam — binary-angle measurement helpers.
+ *
+ * Fixed-width angle type where the integer range wraps to exactly one turn.
+ */
+
 #ifndef BAM_H
 #define BAM_H
 

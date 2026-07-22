@@ -1,3 +1,7 @@
+/*
+ * cli_core — transport-agnostic command-line engine.
+ */
+
 #ifndef CLI_CORE_H
 #define CLI_CORE_H
 

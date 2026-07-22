@@ -1,3 +1,7 @@
+/*
+ * cli_service_adapter — binds abstract CLI services to implementations.
+ */
+
 #ifndef CLI_SERVICE_ADAPTER_H
 #define CLI_SERVICE_ADAPTER_H
 
@@ -148,7 +152,7 @@ void cli_service_adapter_bind_heartbeat_period(CliServiceAdapter *context,
                                                uint32_t max_ms);
 void cli_service_adapter_bind(CliServiceAdapter *context, CliServices *services_out);
 
-bool cli_service_adapter_apply_pot_sample(CliServiceAdapter *context, Effect active_effect,
+bool cli_service_adapter_apply_pot_sample(CliServiceAdapter *context, EffectType active_effect,
                                           uint8_t pot_index, uint32_t adc_value);
 bool cli_service_adapter_apply_switches(CliServiceAdapter *context, bool switch_a_enabled,
                                         bool switch_b_enabled, bool switch_c_enabled);

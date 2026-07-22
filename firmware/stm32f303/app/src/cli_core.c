@@ -44,7 +44,10 @@ typedef struct
 {
     const char *name;
     CliCommandHandler handler;
+    const char *usage;
 } CliCommandDefinition;
+
+static const CliCommandDefinition *cli_commands(size_t *count);
 
 static bool write_line(const CliIo *io, const char *line)
 {
@@ -107,7 +110,7 @@ static bool test_vector_id(const char *name, uint8_t *vector_out)
     return false;
 }
 
-// Effect name <-> id table
+// EffectType name <-> id table
 static const struct
 {
     const char *name;
@@ -145,70 +148,20 @@ static bool effect_id(const char *name, uint8_t *id_out)
 
 static const char *command_help_text(const char *command)
 {
+    size_t count = 0;
+    const CliCommandDefinition *commands = cli_commands(&count);
+
     if (command == NULL)
     {
-        return "commands: help ping override config slot effects rom log audio test i2c crash reboot info sysinfo\n";
+        return NULL;
     }
 
-    if (strcmp(command, "help") == 0)
+    for (size_t i = 0; i < count; i++)
     {
-        return "help [command]\n";
-    }
-    if (strcmp(command, "ping") == 0)
-    {
-        return "ping\n";
-    }
-    if (strcmp(command, "override") == 0)
-    {
-        return "override pot|switch set|clear <index> [value] | clear-all\n";
-    }
-    if (strcmp(command, "config") == 0)
-    {
-        return "config set|get <key> [value]\n";
-    }
-    if (strcmp(command, "slot") == 0)
-    {
-        return "slot [get] | set <pos> <effect> | clear <pos> | swap <a> <b> | enable <pos> <0|1> | active [<pos>]\n";
-    }
-    if (strcmp(command, "effects") == 0)
-    {
-        return "effects (list catalog + slot assignment)\n";
-    }
-    if (strcmp(command, "rom") == 0)
-    {
-        return "rom save-state|load-state|read <addr> <len>|write <addr> <hex>\n";
-    }
-    if (strcmp(command, "log") == 0)
-    {
-        return "log enable <0|1> | level <0-255> | stream [0|1] [batch <N>] (q to stop) | stats [reset|timing]\n";
-    }
-    if (strcmp(command, "audio") == 0)
-    {
-        return "audio input adc|usb | output on|off | status\n";
-    }
-    if (strcmp(command, "test") == 0)
-    {
-        return "test mode <0|1> | vector <sine|lut|sweep|wav|impulse|usb> | freq <hz> | amp <value> | status\n";
-    }
-    if (strcmp(command, "crash") == 0)
-    {
-        return "crash null|udf|div0\n";
-    }
-    if (strcmp(command, "reboot") == 0)
-    {
-        return "reboot\n";
-    }
-    if (strcmp(command, "i2c") == 0)
-    {
-        return "i2c scan [start] [end] | ping <addr> | read <addr> <reg> [len] | write <addr> <reg> <hex> | send <addr> <hex> | recv <addr> <len>\n";
-    }
-    if (strcmp(command, "info") == 0)
-    {
-        return "info\n";
-    }
-    if (strcmp(command, "sysinfo") == 0)
-    {
-        return "sysinfo\n";
+        if (strcmp(commands[i].name, command) == 0)
+        {
+            return commands[i].usage;
+        }
     }
     return NULL;
 }
@@ -305,18 +258,38 @@ static CliStatus handle_help(char **tokens,
         return CLI_STATUS_INVALID_ARGUMENTS;
     }
 
-    const char *help = command_help_text(token_count == 2 ? tokens[1] : NULL);
-    if (help == NULL)
+    if (token_count == 2)
     {
-        return CLI_STATUS_UNKNOWN_COMMAND;
+        const char *help = command_help_text(tokens[1]);
+        if (help == NULL)
+        {
+            return CLI_STATUS_UNKNOWN_COMMAND;
+        }
+        return write_line(io, help) ? CLI_STATUS_OK : CLI_STATUS_SERVICE_ERROR;
     }
 
-    if (!write_line(io, help))
+    // No argument: list every command name from the single command table.
+    size_t count = 0;
+    const CliCommandDefinition *commands = cli_commands(&count);
+
+    char summary[160];
+    size_t len = 0;
+    int written = snprintf(summary, sizeof(summary), "commands:");
+    len = (written > 0) ? (size_t)written : 0;
+    for (size_t i = 0; i < count && len < sizeof(summary); i++)
     {
-        return CLI_STATUS_SERVICE_ERROR;
+        written = snprintf(summary + len, sizeof(summary) - len, " %s", commands[i].name);
+        if (written > 0)
+        {
+            len += (size_t)written;
+        }
+    }
+    if (len < sizeof(summary))
+    {
+        (void)snprintf(summary + len, sizeof(summary) - len, "\n");
     }
 
-    return CLI_STATUS_OK;
+    return write_line(io, summary) ? CLI_STATUS_OK : CLI_STATUS_SERVICE_ERROR;
 }
 
 static CliStatus handle_ping(char **tokens,
@@ -1508,6 +1481,33 @@ static CliStatus handle_sysinfo(char **tokens,
     return CLI_STATUS_OK;
 }
 
+static const CliCommandDefinition command_table[] = {
+    {"help", handle_help, "help [command]\n"},
+    {"ping", handle_ping, "ping\n"},
+    {"override", handle_override, "override pot|switch set|clear <index> [value] | clear-all\n"},
+    {"config", handle_config, "config set|get <key> [value]\n"},
+    {"slot", handle_slot, "slot [get] | set <pos> <effect> | clear <pos> | swap <a> <b> | enable <pos> <0|1> | active [<pos>]\n"},
+    {"effects", handle_effects, "effects (list catalog + slot assignment)\n"},
+    {"rom", handle_rom, "rom save-state|load-state|read <addr> <len>|write <addr> <hex>\n"},
+    {"log", handle_log, "log enable <0|1> | level <0-255> | stream [0|1] [batch <N>] (q to stop) | stats [reset|timing]\n"},
+    {"audio", handle_audio, "audio input adc|usb | output on|off | status\n"},
+    {"test", handle_test, "test mode <0|1> | vector <sine|lut|sweep|wav|impulse|usb> | freq <hz> | amp <value> | status\n"},
+    {"i2c", handle_i2c, "i2c scan [start] [end] | ping <addr> | read <addr> <reg> [len] | write <addr> <reg> <hex> | send <addr> <hex> | recv <addr> <len>\n"},
+    {"crash", handle_crash, "crash null|udf|div0\n"},
+    {"reboot", handle_reboot, "reboot\n"},
+    {"info", handle_info, "info\n"},
+    {"sysinfo", handle_sysinfo, "sysinfo\n"},
+};
+
+static const CliCommandDefinition *cli_commands(size_t *count)
+{
+    if (count != NULL)
+    {
+        *count = sizeof(command_table) / sizeof(command_table[0]);
+    }
+    return command_table;
+}
+
 CliStatus cli_core_process_line(const char *line, const CliServices *services, const CliIo *io)
 {
     return cli_core_process_line_ex(line, services, io, NULL);
@@ -1554,26 +1554,11 @@ CliStatus cli_core_process_line_ex(const char *line,
     CliCommandResult *result = result_out == NULL ? &local_result : result_out;
     result->action = CLI_COMMAND_ACTION_NONE;
 
-    static const CliCommandDefinition command_table[] = {
-        {.name = "help", .handler = handle_help},
-        {.name = "ping", .handler = handle_ping},
-        {.name = "override", .handler = handle_override},
-        {.name = "config", .handler = handle_config},
-        {.name = "slot", .handler = handle_slot},
-        {.name = "effects", .handler = handle_effects},
-        {.name = "rom", .handler = handle_rom},
-        {.name = "log", .handler = handle_log},
-        {.name = "audio", .handler = handle_audio},
-        {.name = "test", .handler = handle_test},
-        {.name = "i2c", .handler = handle_i2c},
-        {.name = "crash", .handler = handle_crash},
-        {.name = "reboot", .handler = handle_reboot},
-        {.name = "info", .handler = handle_info},
-        {.name = "sysinfo", .handler = handle_sysinfo},
-    };
+    size_t command_count = 0;
+    const CliCommandDefinition *command_table = cli_commands(&command_count);
 
     CliStatus status = CLI_STATUS_UNKNOWN_COMMAND;
-    for (size_t i = 0; i < (sizeof(command_table) / sizeof(command_table[0])); i++)
+    for (size_t i = 0; i < command_count; i++)
     {
         if (strcmp(tokens[0], command_table[i].name) == 0)
         {

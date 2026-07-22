@@ -1,3 +1,7 @@
+/*
+ * switch_task — reads the toggle switches and drives the enable mask.
+ */
+
 #ifndef SWITCH_TASK_H
 #define SWITCH_TASK_H
 

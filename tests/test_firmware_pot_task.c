@@ -15,7 +15,7 @@ typedef struct
     uint32_t samples[4];
 
     bool active_effect_valid[4];
-    Effect active_effects[4];
+    EffectType active_effects[4];
 
     uint8_t current_pot;
 
@@ -24,7 +24,7 @@ typedef struct
     uint32_t apply_calls;
 
     uint8_t applied_pots[4];
-    Effect applied_effects[4];
+    EffectType applied_effects[4];
     uint32_t applied_samples[4];
     uint32_t applied_adc_max[4];
 } PotTaskTestState;
@@ -53,7 +53,7 @@ static bool wait_for_sample(uint32_t timeout_ticks, uint32_t *value_out, void *c
     return true;
 }
 
-static bool read_active_effect(Effect *active_effect, void *context)
+static bool read_active_effect(EffectType *active_effect, void *context)
 {
     PotTaskTestState *state = (PotTaskTestState *)context;
 
@@ -66,7 +66,7 @@ static bool read_active_effect(Effect *active_effect, void *context)
     return true;
 }
 
-static void apply_pot_sample(Effect active_effect, uint8_t pot_index, uint32_t adc_value,
+static void apply_pot_sample(EffectType active_effect, uint8_t pot_index, uint32_t adc_value,
                              uint32_t adc_max, void *context)
 {
     PotTaskTestState *state = (PotTaskTestState *)context;
@@ -118,7 +118,7 @@ static void init_state(PotTaskTestState *state)
         state->wait_succeeds[i] = true;
         state->samples[i] = (uint32_t)(10 + i);
         state->active_effect_valid[i] = true;
-        state->active_effects[i] = OVERDRIVE;
+        state->active_effects[i] = EFFECT_TYPE_OVERDRIVE;
     }
 }
 

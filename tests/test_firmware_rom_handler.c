@@ -23,7 +23,7 @@ static void test_encode_address_big_endian(void)
 static void test_encode_write_and_decode_round_trip(void)
 {
     EffectsState state = {
-        .slots = {ECHO, COMPRESSION, OVERDRIVE, EFFECT_ID_NONE},
+        .slots = {EFFECT_TYPE_ECHO, EFFECT_TYPE_COMPRESSION, EFFECT_TYPE_OVERDRIVE, EFFECT_ID_NONE},
         .slot_enabled = {true, false, true, false},
         .active_slot = 2,
     };
@@ -50,9 +50,9 @@ static void test_encode_write_and_decode_round_trip(void)
                                                 &decoded_state, &decoded_params),
                 "decode read payload success");
 
-    expect_true(decoded_state.slots[0] == ECHO, "decode slots[0]");
-    expect_true(decoded_state.slots[1] == COMPRESSION, "decode slots[1]");
-    expect_true(decoded_state.slots[2] == OVERDRIVE, "decode slots[2]");
+    expect_true(decoded_state.slots[0] == EFFECT_TYPE_ECHO, "decode slots[0]");
+    expect_true(decoded_state.slots[1] == EFFECT_TYPE_COMPRESSION, "decode slots[1]");
+    expect_true(decoded_state.slots[2] == EFFECT_TYPE_OVERDRIVE, "decode slots[2]");
     expect_true(decoded_state.slots[3] == EFFECT_ID_NONE, "decode slots[3] empty");
     expect_true(decoded_state.active_slot == 2, "decode active slot");
 
@@ -64,7 +64,7 @@ static void test_encode_write_and_decode_round_trip(void)
 static void test_decode_rejects_bad_header(void)
 {
     EffectsState state = {
-        .slots = {OVERDRIVE, ECHO, COMPRESSION, EFFECT_ID_NONE},
+        .slots = {EFFECT_TYPE_OVERDRIVE, EFFECT_TYPE_ECHO, EFFECT_TYPE_COMPRESSION, EFFECT_ID_NONE},
         .slot_enabled = {true, false, true, false},
         .active_slot = 0,
     };

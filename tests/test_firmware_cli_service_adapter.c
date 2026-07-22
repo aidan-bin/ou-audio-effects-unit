@@ -29,37 +29,6 @@ static void set_default_effects_state(EffectsState *state)
 static void set_default_effects_params(EffectsParams *params)
 {
     memset(params, 0, sizeof(*params));
-
-    params->overdrive_min.gain = 10;
-    params->overdrive_max.gain = 110;
-    params->overdrive_min.level = 20;
-    params->overdrive_max.level = 120;
-    params->overdrive_min.tone = 30;
-    params->overdrive_max.tone = 130;
-    params->overdrive_min.mix = 40;
-    params->overdrive_max.mix = 140;
-
-    params->echo_min.delay_samples = 5;
-    params->echo_max.delay_samples = 50;
-    params->echo_min.pre_delay = 1;
-    params->echo_max.pre_delay = 20;
-    params->echo_min.density = 2;
-    params->echo_max.density = 22;
-    params->echo_min.attack = 3;
-    params->echo_max.attack = 23;
-    params->echo_min.decay = 4;
-    params->echo_max.decay = 24;
-    params->echo_min.feedback = 0;
-    params->echo_max.feedback = 200;
-    params->echo_min.feedback_delay = 0;
-    params->echo_max.feedback_delay = 8000;
-    params->echo_min.damping = 0;
-    params->echo_max.damping = 255;
-
-    params->compression_min.threshold = 100;
-    params->compression_max.threshold = 400;
-    params->compression_min.ratio = 1;
-    params->compression_max.ratio = 32;
 }
 
 static void setup_adapter(CliServiceAdapter *context, EffectsState *state, EffectsParams *params,
@@ -147,19 +116,19 @@ static void test_pot_override_precedence(void)
     CliServices services;
     setup_adapter(&context, &state, &params, &services, NULL);
 
-    expect_true(cli_service_adapter_apply_pot_sample(&context, OVERDRIVE, 0, 0),
+    expect_true(cli_service_adapter_apply_pot_sample(&context, EFFECT_TYPE_OVERDRIVE, 0, 0),
                 "pot apply without override");
-    expect_eq_size(10, params.overdrive.gain, "raw pot input applied");
+    expect_eq_size(0, params.overdrive.gain, "raw pot input applied");
 
     expect_true(services.set_pot_override(0, 255, services.context), "set pot override");
-    expect_true(cli_service_adapter_apply_pot_sample(&context, OVERDRIVE, 0, 0),
+    expect_true(cli_service_adapter_apply_pot_sample(&context, EFFECT_TYPE_OVERDRIVE, 0, 0),
                 "pot apply with override");
-    expect_eq_size(110, params.overdrive.gain, "override value takes precedence");
+    expect_eq_size(MAX_OVERDRIVE_GAIN, params.overdrive.gain, "override value takes precedence");
 
     expect_true(services.clear_pot_override(0, services.context), "clear pot override");
-    expect_true(cli_service_adapter_apply_pot_sample(&context, OVERDRIVE, 0, 0),
+    expect_true(cli_service_adapter_apply_pot_sample(&context, EFFECT_TYPE_OVERDRIVE, 0, 0),
                 "pot apply after clear");
-    expect_eq_size(10, params.overdrive.gain, "hardware value restored after clear");
+    expect_eq_size(0, params.overdrive.gain, "hardware value restored after clear");
 }
 
 static void test_switch_override_precedence(void)
@@ -196,7 +165,7 @@ static void test_config_bounds_and_state_updates(void)
     CliServices services = {0};
     cli_service_adapter_bind(&context, &services);
 
-    expect_false(services.config_set("overdrive.gain", 9, services.context),
+    expect_false(services.config_set("overdrive.gain", MAX_OVERDRIVE_GAIN + 1, services.context),
                  "reject out-of-range config write");
     expect_true(services.config_set("overdrive.gain", 50, services.context),
                 "accept in-range config write");
@@ -629,14 +598,14 @@ static void test_slot_adapter_operations(void)
     expect_true(services.slot_get(slots, enabled, sizeof(slots), &count, services.context),
                 "slot_get default");
     expect_eq_size(NUM_SLOTS, count, "slot_get returns NUM_SLOTS");
-    expect_eq_u8(OVERDRIVE, slots[0], "default slot0 overdrive");
-    expect_eq_u8(ECHO, slots[1], "default slot1 echo");
+    expect_eq_u8(EFFECT_TYPE_OVERDRIVE, slots[0], "default slot0 overdrive");
+    expect_eq_u8(EFFECT_TYPE_ECHO, slots[1], "default slot1 echo");
     expect_eq_u8(EFFECT_ID_NONE, slots[3], "default slot3 empty");
     expect_true(enabled[0], "default slot0 enabled");
 
-    expect_true(services.slot_assign(3, COMPRESSION, services.context),
+    expect_true(services.slot_assign(3, EFFECT_TYPE_COMPRESSION, services.context),
                 "assign compression to slot3");
-    expect_eq_u8(COMPRESSION, state.slots[3], "slot3 holds compression");
+    expect_eq_u8(EFFECT_TYPE_COMPRESSION, state.slots[3], "slot3 holds compression");
     expect_eq_u8(EFFECT_ID_NONE, state.slots[2], "compression vacated old slot");
 
     expect_true(services.slot_set_enabled(3, true, services.context), "enable slot3");
@@ -646,9 +615,9 @@ static void test_slot_adapter_operations(void)
     expect_eq_u8(EFFECT_ID_NONE, state.slots[0], "slot0 cleared");
 
     expect_true(services.slot_swap(1, 3, services.context), "swap slots 1 and 3");
-    expect_eq_u8(COMPRESSION, state.slots[1], "slot1 now compression after swap");
+    expect_eq_u8(EFFECT_TYPE_COMPRESSION, state.slots[1], "slot1 now compression after swap");
 
-    expect_false(services.slot_assign(NUM_SLOTS, OVERDRIVE, services.context),
+    expect_false(services.slot_assign(NUM_SLOTS, EFFECT_TYPE_OVERDRIVE, services.context),
                  "assign rejects out-of-range pos");
     expect_false(services.slot_assign(0, (uint8_t)99, services.context),
                  "assign rejects invalid effect");

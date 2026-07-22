@@ -1,3 +1,9 @@
+/*
+ * effects_task — runs the real-time audio processing loop.
+ *
+ * Hard real-time: never blocks, allocates, or logs.
+ */
+
 #ifndef EFFECTS_TASK_H
 #define EFFECTS_TASK_H
 

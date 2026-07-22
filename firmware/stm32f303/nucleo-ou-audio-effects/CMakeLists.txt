@@ -82,7 +82,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ../app/src/peripheral_dispatch.c
     ../app/src/rom_handler.c
     ../app/src/rom_task_support.c
-    ../../../dsp/effects/effect_runtime.c
+    ../../../dsp/effects/effect_instance.c
     ../../../dsp/effects/effects.c
     ../../../dsp/math/bam.c
     ../../../dsp/math/fast_math.c
@@ -93,6 +93,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     ../app/include
     ../../../dsp/effects
     ../../../dsp/math
+    ../../../dsp/audio
 )
 
 # Add project symbols (macros)

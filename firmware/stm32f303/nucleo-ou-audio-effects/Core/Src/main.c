@@ -47,6 +47,8 @@
 #include "rom_task_support.h"
 #include "usbd_cdc_if.h"
 
+#include "sample_convert.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -490,13 +492,7 @@ static bool effects_task_replace_input_for_testing(uint16_t *buf, size_t count, 
             int16_t s;
             if (usb_audio_stream_pop_sample(&audio_stream, &s))
             {
-                int32_t centered = (int32_t)X_AXIS + (int32_t)s;
-                if (centered < 0)
-                    buf[i] = 0U;
-                else if (centered > (int32_t)UINT16_MAX)
-                    buf[i] = UINT16_MAX;
-                else
-                    buf[i] = (uint16_t)centered;
+                buf[i] = usb_i16_to_sample(s);
             }
             else
             {
@@ -619,9 +615,7 @@ static void effects_task_on_output_frame(const uint16_t *buf, size_t count, void
 
     for (size_t i = 0; i < count; i++)
     {
-        int32_t centered = (int32_t)buf[i] - (int32_t)X_AXIS;
-        int16_t sample = (int16_t)(centered > INT16_MAX ? INT16_MAX : (centered < INT16_MIN ? INT16_MIN : centered));
-        usb_audio_stream_push_sample(&audio_stream, sample);
+        usb_audio_stream_push_sample(&audio_stream, sample_to_usb_i16(buf[i]));
     }
 
 #ifdef ENABLE_DIAGNOSTICS
@@ -833,39 +827,6 @@ static void init_effects_defaults(void)
 
     effects_params.compression.threshold = X_AXIS;
     effects_params.compression.ratio = 0;
-
-    effects_params.overdrive_min.gain = 0;
-    effects_params.overdrive_min.level = 0;
-    effects_params.overdrive_min.tone = MIN_OVERDRIVE_TONE;
-    effects_params.overdrive_min.mix = 0;
-
-    effects_params.overdrive_max.gain = MAX_OVERDRIVE_GAIN;
-    effects_params.overdrive_max.level = MAX_OVERDRIVE_LEVEL;
-    effects_params.overdrive_max.tone = MAX_OVERDRIVE_TONE;
-    effects_params.overdrive_max.mix = MAX_OVERDRIVE_MIX;
-
-    effects_params.echo_min.delay_samples = 0;
-    effects_params.echo_min.pre_delay = MIN_ECHO_PRE_DELAY;
-    effects_params.echo_min.density = 0;
-    effects_params.echo_min.attack = 0;
-    effects_params.echo_min.decay = 0;
-    effects_params.echo_min.feedback = 0;
-    effects_params.echo_min.feedback_delay = 0;
-    effects_params.echo_min.damping = 0;
-
-    effects_params.echo_max.delay_samples = MAX_ECHO_DELAY_SAMPLES;
-    effects_params.echo_max.pre_delay = MAX_ECHO_PRE_DELAY;
-    effects_params.echo_max.density = MAX_ECHO_DENSITY;
-    effects_params.echo_max.attack = MAX_ECHO_ATTACK;
-    effects_params.echo_max.decay = MAX_ECHO_DECAY;
-    effects_params.echo_max.feedback = MAX_ECHO_FEEDBACK;
-    effects_params.echo_max.feedback_delay = MAX_ECHO_FEEDBACK_DELAY;
-    effects_params.echo_max.damping = MAX_ECHO_DAMPING;
-
-    effects_params.compression_min.threshold = 0;
-    effects_params.compression_min.ratio = 0;
-    effects_params.compression_max.threshold = MAX_COMPRESSION_THRESHOLD;
-    effects_params.compression_max.ratio = MAX_COMPRESSION_RATIO;
 
     taskEXIT_CRITICAL();
 }

@@ -1,7 +1,9 @@
 /*
- *  Note: Input/output data convention is uint16_t with UIN16_MAX / 2 representing the x-axis
- *  Note: If no MIN_ definition is specified for a parameter, assume it is 0
- *	Note: For memoryless effects, the input buffer can be the output buffer
+ * effects — effect algorithms and the data they operate on.
+ *
+ * - Samples are uint16_t biased about X_AXIS (UINT16_MAX / 2).
+ * - Parameter with no MIN_ macro has a minimum of 0.
+ * - Memoryless effects may share the input and output buffer.
  */
 
 #ifndef EFFECTS_H
@@ -11,9 +13,14 @@
 #include <stdlib.h>
 
 #include "fixed_point.h"
+#include "sample_convert.h"
 
-/* Data convention definitions */
-#define X_AXIS (UINT16_MAX / 2) // x-axis is the median representable signal
+typedef enum
+{
+    EFFECT_TYPE_OVERDRIVE = 0,
+    EFFECT_TYPE_ECHO = 1,
+    EFFECT_TYPE_COMPRESSION = 2,
+} EffectType;
 
 /* Effects parameters */
 typedef struct

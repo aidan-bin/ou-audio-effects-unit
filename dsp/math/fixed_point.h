@@ -1,3 +1,7 @@
+/*
+ * fixed_point — QN fixed-point format definition and helpers.
+ */
+
 #ifndef OU_FIXED_POINT_H
 #define OU_FIXED_POINT_H
 

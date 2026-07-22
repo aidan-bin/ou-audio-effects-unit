@@ -1,3 +1,7 @@
+/*
+ * rom_handler — ROM driver and encoder/decoder for effects configuration.
+ */
+
 #ifndef ROM_HANDLER_H
 #define ROM_HANDLER_H
 

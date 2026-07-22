@@ -1,3 +1,9 @@
+/*
+ * i2c_task_support — glue between the I2C task and the HAL/RTOS.
+ *
+ * TODO: Move to peripheral layer?
+ */
+
 #ifndef I2C_TASK_SUPPORT_H
 #define I2C_TASK_SUPPORT_H
 

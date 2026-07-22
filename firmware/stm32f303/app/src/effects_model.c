@@ -1,8 +1,9 @@
 #include "effects_model.h"
 
 #include <stddef.h>
+#include <string.h>
 
-bool effect_is_valid(Effect effect)
+bool effect_is_valid(EffectType effect)
 {
     return (int)effect >= 0 && (int)effect < NUM_EFFECTS;
 }
@@ -12,7 +13,7 @@ bool effect_id_is_empty(EffectId id)
     return id == EFFECT_ID_NONE;
 }
 
-static size_t find_effect_slot(const EffectsState *state, Effect effect)
+static size_t find_effect_slot(const EffectsState *state, EffectType effect)
 {
     for (size_t i = 0; i < NUM_SLOTS; i++)
     {
@@ -37,9 +38,9 @@ void effects_state_set_default_slots(EffectsState *state)
         state->slot_enabled[i] = false;
     }
 
-    state->slots[0] = OVERDRIVE;
-    state->slots[1] = ECHO;
-    state->slots[2] = COMPRESSION;
+    state->slots[0] = EFFECT_TYPE_OVERDRIVE;
+    state->slots[1] = EFFECT_TYPE_ECHO;
+    state->slots[2] = EFFECT_TYPE_COMPRESSION;
     state->slot_enabled[0] = true;
     state->active_slot = 0;
 }
@@ -61,7 +62,7 @@ bool effects_state_slots_valid(const EffectsState *state)
             continue;
         }
 
-        if (!effect_is_valid((Effect)slot) || seen[slot])
+        if (!effect_is_valid((EffectType)slot) || seen[slot])
         {
             return false;
         }
@@ -89,7 +90,7 @@ void effects_state_normalize(EffectsState *state)
             continue;
         }
 
-        if (!effect_is_valid((Effect)slot) || seen[slot])
+        if (!effect_is_valid((EffectType)slot) || seen[slot])
         {
             state->slots[i] = EFFECT_ID_NONE;
             state->slot_enabled[i] = false;
@@ -105,7 +106,7 @@ void effects_state_normalize(EffectsState *state)
     }
 }
 
-bool effects_state_assign_slot(EffectsState *state, size_t pos, Effect effect)
+bool effects_state_assign_slot(EffectsState *state, size_t pos, EffectType effect)
 {
     if (state == NULL || pos >= NUM_SLOTS || !effect_is_valid(effect))
     {
@@ -165,7 +166,7 @@ bool effects_state_set_slot_enabled(EffectsState *state, size_t pos, bool enable
     return true;
 }
 
-bool effects_state_get_active_effect(const EffectsState *state, Effect *active_effect)
+bool effects_state_get_active_effect(const EffectsState *state, EffectType *active_effect)
 {
     if (state == NULL || active_effect == NULL || state->active_slot >= NUM_SLOTS)
     {
@@ -173,16 +174,16 @@ bool effects_state_get_active_effect(const EffectsState *state, Effect *active_e
     }
 
     uint8_t slot = state->slots[state->active_slot];
-    if (effect_id_is_empty(slot) || !effect_is_valid((Effect)slot))
+    if (effect_id_is_empty(slot) || !effect_is_valid((EffectType)slot))
     {
         return false;
     }
 
-    *active_effect = (Effect)slot;
+    *active_effect = (EffectType)slot;
     return true;
 }
 
-bool effects_state_effect_enabled(const EffectsState *state, Effect effect)
+bool effects_state_effect_enabled(const EffectsState *state, EffectType effect)
 {
     if (state == NULL || !effect_is_valid(effect))
     {
@@ -244,45 +245,43 @@ void effects_state_apply_switches(EffectsState *state, bool switch_a_enabled, bo
 
 #define NUM_POTS 4
 
-// Mapping of each effect's pot parameters to the EffectsParams struct offsets.
-// assignable == false indicates valid pot that drives nothing.
-typedef struct
-{
-    bool assignable;
-    size_t value_offset;
-    size_t min_offset;
-    size_t max_offset;
-} PotMapping;
-
-#define POT_FIELD(group, group_min, group_max, group_type, field)             \
-    {                                                                         \
-        true, offsetof(EffectsParams, group) + offsetof(group_type, field),   \
-            offsetof(EffectsParams, group_min) + offsetof(group_type, field), \
-            offsetof(EffectsParams, group_max) + offsetof(group_type, field)  \
-    }
-#define POT_OVERDRIVE(field) POT_FIELD(overdrive, overdrive_min, overdrive_max, OverdriveParam, field)
-#define POT_ECHO(field) POT_FIELD(echo, echo_min, echo_max, EchoParam, field)
-#define POT_COMPRESSION(field) \
-    POT_FIELD(compression, compression_min, compression_max, CompressionParam, field)
-#define POT_UNUSED     \
-    {                  \
-        false, 0, 0, 0 \
-    }
-
-static const PotMapping pot_map[NUM_EFFECTS][NUM_POTS] = {
-    [OVERDRIVE] = {POT_OVERDRIVE(gain), POT_OVERDRIVE(level), POT_OVERDRIVE(tone),
-                   POT_OVERDRIVE(mix)},
-    [ECHO] = {POT_ECHO(pre_delay), POT_ECHO(density), POT_ECHO(attack), POT_ECHO(decay)},
-    [COMPRESSION] = {POT_COMPRESSION(threshold), POT_COMPRESSION(ratio), POT_UNUSED, POT_UNUSED},
+static const EffectParamMeta param_meta[] = {
+    {EFFECT_TYPE_OVERDRIVE, "overdrive.gain", offsetof(EffectsParams, overdrive.gain), 0, MAX_OVERDRIVE_GAIN, 0},
+    {EFFECT_TYPE_OVERDRIVE, "overdrive.level", offsetof(EffectsParams, overdrive.level), 0, MAX_OVERDRIVE_LEVEL, 1},
+    {EFFECT_TYPE_OVERDRIVE, "overdrive.tone", offsetof(EffectsParams, overdrive.tone), MIN_OVERDRIVE_TONE, MAX_OVERDRIVE_TONE, 2},
+    {EFFECT_TYPE_OVERDRIVE, "overdrive.mix", offsetof(EffectsParams, overdrive.mix), 0, MAX_OVERDRIVE_MIX, 3},
+    {EFFECT_TYPE_ECHO, "echo.delay_samples", offsetof(EffectsParams, echo.delay_samples), 0, MAX_ECHO_DELAY_SAMPLES, -1},
+    {EFFECT_TYPE_ECHO, "echo.pre_delay", offsetof(EffectsParams, echo.pre_delay), MIN_ECHO_PRE_DELAY, MAX_ECHO_PRE_DELAY, 0},
+    {EFFECT_TYPE_ECHO, "echo.density", offsetof(EffectsParams, echo.density), 0, MAX_ECHO_DENSITY, 1},
+    {EFFECT_TYPE_ECHO, "echo.attack", offsetof(EffectsParams, echo.attack), 0, MAX_ECHO_ATTACK, 2},
+    {EFFECT_TYPE_ECHO, "echo.decay", offsetof(EffectsParams, echo.decay), 0, MAX_ECHO_DECAY, 3},
+    {EFFECT_TYPE_ECHO, "echo.feedback", offsetof(EffectsParams, echo.feedback), 0, MAX_ECHO_FEEDBACK, -1},
+    {EFFECT_TYPE_ECHO, "echo.feedback_delay", offsetof(EffectsParams, echo.feedback_delay), 0, MAX_ECHO_FEEDBACK_DELAY, -1},
+    {EFFECT_TYPE_ECHO, "echo.damping", offsetof(EffectsParams, echo.damping), 0, MAX_ECHO_DAMPING, -1},
+    {EFFECT_TYPE_COMPRESSION, "compression.threshold", offsetof(EffectsParams, compression.threshold), 0, MAX_COMPRESSION_THRESHOLD, 0},
+    {EFFECT_TYPE_COMPRESSION, "compression.ratio", offsetof(EffectsParams, compression.ratio), 0, MAX_COMPRESSION_RATIO, 1},
 };
 
-#undef POT_FIELD
-#undef POT_OVERDRIVE
-#undef POT_ECHO
-#undef POT_COMPRESSION
-#undef POT_UNUSED
+#define PARAM_META_COUNT (sizeof(param_meta) / sizeof(param_meta[0]))
 
-bool effects_params_apply_pot_sample(EffectsParams *params, Effect active_effect, uint8_t pot_index,
+const EffectParamMeta *effect_params_meta_find(const char *key)
+{
+    if (key == NULL)
+    {
+        return NULL;
+    }
+
+    for (size_t i = 0; i < PARAM_META_COUNT; i++)
+    {
+        if (strcmp(param_meta[i].key, key) == 0)
+        {
+            return &param_meta[i];
+        }
+    }
+    return NULL;
+}
+
+bool effects_params_apply_pot_sample(EffectsParams *params, EffectType active_effect, uint8_t pot_index,
                                      uint32_t adc_value, uint32_t adc_max)
 {
     if (params == NULL || !effect_is_valid(active_effect) || pot_index >= NUM_POTS)
@@ -290,25 +289,27 @@ bool effects_params_apply_pot_sample(EffectsParams *params, Effect active_effect
         return false;
     }
 
-    const PotMapping *mapping = &pot_map[active_effect][pot_index];
-    if (mapping->assignable)
+    for (size_t i = 0; i < PARAM_META_COUNT; i++)
     {
-        size_t min = *(size_t *)((char *)params + mapping->min_offset);
-        size_t max = *(size_t *)((char *)params + mapping->max_offset);
-        *(size_t *)((char *)params + mapping->value_offset) =
-            map_adc_to_param(adc_value, min, max, adc_max);
+        const EffectParamMeta *meta = &param_meta[i];
+        if (meta->effect == active_effect && meta->pot == (int)pot_index)
+        {
+            *(size_t *)((char *)params + meta->offset) =
+                map_adc_to_param(adc_value, meta->min, meta->max, adc_max);
+            break;
+        }
     }
 
     return true;
 }
 
 static const size_t param_member_offset[NUM_EFFECTS] = {
-    [OVERDRIVE] = offsetof(EffectsParams, overdrive),
-    [ECHO] = offsetof(EffectsParams, echo),
-    [COMPRESSION] = offsetof(EffectsParams, compression),
+    [EFFECT_TYPE_OVERDRIVE] = offsetof(EffectsParams, overdrive),
+    [EFFECT_TYPE_ECHO] = offsetof(EffectsParams, echo),
+    [EFFECT_TYPE_COMPRESSION] = offsetof(EffectsParams, compression),
 };
 
-const void *effects_params_value_for(const EffectsParams *params, Effect effect)
+const void *effects_params_value_for(const EffectsParams *params, EffectType effect)
 {
     if (params == NULL || !effect_is_valid(effect))
     {

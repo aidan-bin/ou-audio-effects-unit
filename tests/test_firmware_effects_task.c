@@ -284,7 +284,7 @@ static void test_effects_task_happy_path_matches_pipeline(void)
         expected_input[i] = ops_state.replace_input_value;
     }
 
-    expect_true(effects_pipeline_process(&expected_pipeline, OVERDRIVE, expected_input, expected, 8) == 0,
+    expect_true(effects_pipeline_process(&expected_pipeline, EFFECT_TYPE_OVERDRIVE, expected_input, expected, 8) == 0,
                 "expected overdrive process succeeds");
 
     for (size_t i = 0; i < 8; i++)
@@ -486,7 +486,7 @@ static void test_effects_task_uses_matching_dac_buffer_when_wait_times_out(void)
     {
         expected_input[i] = ops_state.replace_input_value;
     }
-    expect_true(effects_pipeline_process(&expected_pipeline, OVERDRIVE, expected_input, expected, 8) == 0,
+    expect_true(effects_pipeline_process(&expected_pipeline, EFFECT_TYPE_OVERDRIVE, expected_input, expected, 8) == 0,
                 "expected overdrive process succeeds");
 
     for (size_t i = 0; i < 8; i++)

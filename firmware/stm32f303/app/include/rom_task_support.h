@@ -1,3 +1,7 @@
+/*
+ * rom_task_support — dependency-injection layer for ROM operations.
+ */
+
 #ifndef ROM_TASK_SUPPORT_H
 #define ROM_TASK_SUPPORT_H
 

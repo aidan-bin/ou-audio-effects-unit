@@ -1,3 +1,7 @@
+/*
+ * cli_parse — pure tokenizer/parser for the CLI.
+ */
+
 #ifndef CLI_PARSE_H
 #define CLI_PARSE_H
 

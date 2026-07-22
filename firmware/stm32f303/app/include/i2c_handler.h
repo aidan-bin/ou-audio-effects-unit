@@ -1,3 +1,7 @@
+/*
+ * i2c_handler — I2C message wrapper/sequencing.
+ */
+
 #ifndef I2C_HANDLER_H
 #define I2C_HANDLER_H
 

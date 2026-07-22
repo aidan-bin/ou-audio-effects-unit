@@ -49,6 +49,9 @@ class EchoParam(ctypes.Structure):
         ("density", ctypes.c_size_t),
         ("attack", ctypes.c_size_t),
         ("decay", ctypes.c_size_t),
+        ("feedback", ctypes.c_size_t),
+        ("feedback_delay", ctypes.c_size_t),
+        ("damping", ctypes.c_size_t),
     ]
 
     def __str__(self):
@@ -57,7 +60,10 @@ class EchoParam(ctypes.Structure):
             f"pre_delay = {self.pre_delay}\n"
             f"density = {self.density}\n"
             f"attack = {self.attack}\n"
-            f"decay = {self.decay}"
+            f"decay = {self.decay}\n"
+            f"feedback = {self.feedback}\n"
+            f"feedback_delay = {self.feedback_delay}\n"
+            f"damping = {self.damping}"
         )
 
 
@@ -83,80 +89,70 @@ class EffectInstance(ctypes.Structure):
     _fields_ = [
         ("type", ctypes.c_int),
         ("params", EffectParams),
-    ]
-
-
-class EffectHandle(ctypes.Structure):
-    _fields_ = [
-        ("instance", EffectInstance),
-        ("initialized", ctypes.c_int),
+        ("echo_state", ctypes.c_void_p),
     ]
 
 
 UINT16_PTR = ctypes.POINTER(ctypes.c_uint16)
 
-libeffects.effect_handle_init.argtypes = [ctypes.POINTER(EffectHandle), ctypes.c_int]
-libeffects.effect_handle_init.restype = ctypes.c_int
+libeffects.effect_instance_init.argtypes = [ctypes.POINTER(EffectInstance), ctypes.c_int]
+libeffects.effect_instance_init.restype = None
 
-libeffects.effect_handle_reset.argtypes = [ctypes.POINTER(EffectHandle)]
-libeffects.effect_handle_reset.restype = ctypes.c_int
+libeffects.effect_instance_reset.argtypes = [ctypes.POINTER(EffectInstance)]
+libeffects.effect_instance_reset.restype = None
 
-libeffects.effect_handle_set_overdrive_params.argtypes = [
-    ctypes.POINTER(EffectHandle),
+libeffects.effect_instance_set_overdrive_params.argtypes = [
+    ctypes.POINTER(EffectInstance),
     ctypes.POINTER(OverdriveParam),
 ]
-libeffects.effect_handle_set_overdrive_params.restype = ctypes.c_int
+libeffects.effect_instance_set_overdrive_params.restype = ctypes.c_int
 
-libeffects.effect_handle_set_echo_params.argtypes = [
-    ctypes.POINTER(EffectHandle),
+libeffects.effect_instance_set_echo_params.argtypes = [
+    ctypes.POINTER(EffectInstance),
     ctypes.POINTER(EchoParam),
 ]
-libeffects.effect_handle_set_echo_params.restype = ctypes.c_int
+libeffects.effect_instance_set_echo_params.restype = ctypes.c_int
 
-libeffects.effect_handle_set_compression_params.argtypes = [
-    ctypes.POINTER(EffectHandle),
+libeffects.effect_instance_set_compression_params.argtypes = [
+    ctypes.POINTER(EffectInstance),
     ctypes.POINTER(CompressionParam),
 ]
-libeffects.effect_handle_set_compression_params.restype = ctypes.c_int
+libeffects.effect_instance_set_compression_params.restype = ctypes.c_int
 
-libeffects.effect_handle_process.argtypes = [
-    ctypes.POINTER(EffectHandle),
+libeffects.effect_instance_process.argtypes = [
+    ctypes.POINTER(EffectInstance),
     UINT16_PTR,
     UINT16_PTR,
     ctypes.c_size_t,
 ]
-libeffects.effect_handle_process.restype = ctypes.c_int
+libeffects.effect_instance_process.restype = ctypes.c_int
 
 
 class EffectRuntime:
     def __init__(self, effect_type):
-        self.handle = EffectHandle()
-        result = libeffects.effect_handle_init(ctypes.byref(self.handle), effect_type)
-        if result != 0:
-            raise RuntimeError(f"Failed to initialize effect runtime (type={effect_type})")
+        self.instance = EffectInstance()
+        libeffects.effect_instance_init(ctypes.byref(self.instance), effect_type)
 
     def reset(self):
-        result = libeffects.effect_handle_reset(ctypes.byref(self.handle))
-        if result != 0:
-            raise RuntimeError("Failed to reset effect runtime")
+        libeffects.effect_instance_reset(ctypes.byref(self.instance))
 
     def set_overdrive(self, param):
-        result = libeffects.effect_handle_set_overdrive_params(
-            ctypes.byref(self.handle), ctypes.byref(param)
+        result = libeffects.effect_instance_set_overdrive_params(
+            ctypes.byref(self.instance), ctypes.byref(param)
         )
         if result != 0:
             raise RuntimeError("Failed to set overdrive parameters")
 
     def set_echo(self, param):
-        result = libeffects.effect_handle_set_echo_params(
-            ctypes.byref(self.handle), ctypes.byref(param)
+        result = libeffects.effect_instance_set_echo_params(
+            ctypes.byref(self.instance), ctypes.byref(param)
         )
         if result != 0:
             raise RuntimeError("Failed to set echo parameters")
 
     def set_compression(self, param):
-        result = libeffects.effect_handle_set_compression_params(
-            ctypes.byref(self.handle), ctypes.byref(param)
+        result = libeffects.effect_instance_set_compression_params(
+            ctypes.byref(self.instance), ctypes.byref(param)
         )
         if result != 0:
             raise RuntimeError("Failed to set compression parameters")
@@ -165,8 +161,8 @@ class EffectRuntime:
         in_samples_array = (ctypes.c_uint16 * len(in_samples_list))(*in_samples_list)
         out_samples_array = (ctypes.c_uint16 * out_samples_count)()
 
-        result = libeffects.effect_handle_process(
-            ctypes.byref(self.handle),
+        result = libeffects.effect_instance_process(
+            ctypes.byref(self.instance),
             in_samples_array,
             out_samples_array,
             out_samples_count,

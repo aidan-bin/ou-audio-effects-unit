@@ -1,3 +1,7 @@
+/*
+ * cli_session — byte-stream front end for one CLI connection.
+ */
+
 #ifndef CLI_SESSION_H
 #define CLI_SESSION_H
 

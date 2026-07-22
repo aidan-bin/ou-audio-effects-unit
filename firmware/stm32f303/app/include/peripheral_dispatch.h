@@ -1,3 +1,7 @@
+/*
+ * peripheral_dispatch — dependency-injection layer for ISR/DMA/ADC; converts hardware events into app-level notifications.
+ */
+
 #ifndef PERIPHERAL_DISPATCH_H
 #define PERIPHERAL_DISPATCH_H
 

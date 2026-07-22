@@ -14,7 +14,7 @@ bool pot_task_step(const PotTaskContext *task_context, const PotTaskOps *ops)
     for (uint8_t pot = 0; pot < task_context->pot_count; pot++)
     {
         uint32_t adc_value = 0;
-        Effect active_effect;
+        EffectType active_effect;
 
         if (!ops->start_adc(pot, ops->context))
         {

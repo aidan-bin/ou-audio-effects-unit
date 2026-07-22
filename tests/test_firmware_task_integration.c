@@ -101,7 +101,7 @@ static bool pot_wait_for_sample(uint32_t timeout_ticks, uint32_t *value_out, voi
     return true;
 }
 
-static bool pot_read_active_effect(Effect *active_effect, void *context)
+static bool pot_read_active_effect(EffectType *active_effect, void *context)
 {
     IntegrationState *state = (IntegrationState *)context;
 
@@ -116,7 +116,7 @@ static bool pot_read_active_effect(Effect *active_effect, void *context)
     return effects_state_get_active_effect(&latched_state, active_effect);
 }
 
-static void pot_apply_sample(Effect active_effect, uint8_t pot_index, uint32_t adc_value,
+static void pot_apply_sample(EffectType active_effect, uint8_t pot_index, uint32_t adc_value,
                              uint32_t adc_max, void *context)
 {
     IntegrationState *state = (IntegrationState *)context;
@@ -203,34 +203,6 @@ static uint32_t effects_ms_to_ticks(uint32_t ms, void *context)
     return ms;
 }
 
-static void seed_default_limits(IntegrationState *state)
-{
-    state->effects_params.overdrive_min = (OverdriveParam){
-        .level = 0,
-        .gain = 0,
-        .tone = MIN_OVERDRIVE_TONE,
-        .mix = 0,
-    };
-    state->effects_params.overdrive_max = (OverdriveParam){
-        .level = MAX_OVERDRIVE_LEVEL,
-        .gain = MAX_OVERDRIVE_GAIN,
-        .tone = MAX_OVERDRIVE_TONE,
-        .mix = MAX_OVERDRIVE_MIX,
-    };
-    state->effects_params.echo_min = (EchoParam){
-        .pre_delay = MIN_ECHO_PRE_DELAY,
-        .density = 5,
-        .attack = 7,
-        .decay = 3,
-    };
-    state->effects_params.echo_max = (EchoParam){
-        .pre_delay = MAX_ECHO_PRE_DELAY,
-        .density = 25,
-        .attack = 27,
-        .decay = 23,
-    };
-}
-
 static void test_integration_switch_pot_and_effects_pipeline(void)
 {
     IntegrationState state;
@@ -248,8 +220,6 @@ static void test_integration_switch_pot_and_effects_pipeline(void)
     state.pot_samples[2] = 64;
     state.pot_samples[3] = 32;
 
-    seed_default_limits(&state);
-
     SwitchTaskContext switch_context = {
         .polling_frequency_ms = 5,
     };
@@ -262,11 +232,11 @@ static void test_integration_switch_pot_and_effects_pipeline(void)
     };
 
     expect_true(switch_task_step(&switch_context, &switch_ops), "switch task step succeeds");
-    expect_true(effects_state_effect_enabled(&state.effects_state, OVERDRIVE) == false,
+    expect_true(effects_state_effect_enabled(&state.effects_state, EFFECT_TYPE_OVERDRIVE) == false,
                 "switch task disables overdrive");
-    expect_true(effects_state_effect_enabled(&state.effects_state, ECHO),
+    expect_true(effects_state_effect_enabled(&state.effects_state, EFFECT_TYPE_ECHO),
                 "switch task enables echo");
-    expect_true(effects_state_effect_enabled(&state.effects_state, COMPRESSION) == false,
+    expect_true(effects_state_effect_enabled(&state.effects_state, EFFECT_TYPE_COMPRESSION) == false,
                 "switch task disables compression");
 
     PotTaskContext pot_context = {
@@ -287,14 +257,11 @@ static void test_integration_switch_pot_and_effects_pipeline(void)
     expect_eq_u32(
         map_adc_to_param(state.pot_samples[0], MIN_ECHO_PRE_DELAY, MAX_ECHO_PRE_DELAY, 255),
         state.effects_params.echo.pre_delay, "pot A updates echo pre-delay");
-    expect_eq_u32(map_adc_to_param(state.pot_samples[1], state.effects_params.echo_min.density,
-                                   state.effects_params.echo_max.density, 255),
+    expect_eq_u32(map_adc_to_param(state.pot_samples[1], 0, MAX_ECHO_DENSITY, 255),
                   state.effects_params.echo.density, "pot B updates echo density");
-    expect_eq_u32(map_adc_to_param(state.pot_samples[2], state.effects_params.echo_min.attack,
-                                   state.effects_params.echo_max.attack, 255),
+    expect_eq_u32(map_adc_to_param(state.pot_samples[2], 0, MAX_ECHO_ATTACK, 255),
                   state.effects_params.echo.attack, "pot C updates echo attack");
-    expect_eq_u32(map_adc_to_param(state.pot_samples[3], state.effects_params.echo_min.decay,
-                                   state.effects_params.echo_max.decay, 255),
+    expect_eq_u32(map_adc_to_param(state.pot_samples[3], 0, MAX_ECHO_DECAY, 255),
                   state.effects_params.echo.decay, "pot D updates echo decay");
 
     EffectsPipeline pipeline;

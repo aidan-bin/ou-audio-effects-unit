@@ -1,3 +1,7 @@
+/*
+ * test_vector_source — test data for audio input/output.
+ */
+
 #ifndef TEST_VECTOR_SOURCE_H
 #define TEST_VECTOR_SOURCE_H
 

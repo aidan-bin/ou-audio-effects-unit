@@ -1,3 +1,7 @@
+/*
+ * usb_cdc_dual_init — Custom init for dual-CDC USB device CLI (CDC0) + audio (CDC1).
+ */
+
 #ifndef USB_CDC_DUAL_INIT_H
 #define USB_CDC_DUAL_INIT_H
 

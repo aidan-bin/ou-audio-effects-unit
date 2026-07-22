@@ -61,7 +61,7 @@ static void test_pipeline_process_matches_runtime_helpers(void)
     uint16_t output[4] = {0};
     uint16_t expected[4] = {0};
 
-    expect_true(effects_pipeline_process(&pipeline, OVERDRIVE, input, output, 4) == 0,
+    expect_true(effects_pipeline_process(&pipeline, EFFECT_TYPE_OVERDRIVE, input, output, 4) == 0,
                 "pipeline overdrive process succeeds");
     buf_overdrive(input, expected, 4, &params.overdrive);
 
@@ -75,7 +75,7 @@ static void test_pipeline_process_matches_runtime_helpers(void)
     memset(output, 0, sizeof(output));
     memset(expected, 0, sizeof(expected));
 
-    expect_true(effects_pipeline_process(&pipeline, ECHO, echo_input, output, 4) == 0,
+    expect_true(effects_pipeline_process(&pipeline, EFFECT_TYPE_ECHO, echo_input, output, 4) == 0,
                 "pipeline echo process succeeds");
     buf_echo(echo_input, expected, 4, &params.echo);
 
@@ -124,7 +124,7 @@ static void test_pipeline_echo_state_attach_and_reset(void)
     {
         loud[i] = (uint16_t)(X_AXIS + 800);
     }
-    expect_true(effects_pipeline_process(&pipeline, ECHO, loud, out, 4) == 0, "process loud frame");
+    expect_true(effects_pipeline_process(&pipeline, EFFECT_TYPE_ECHO, loud, out, 4) == 0, "process loud frame");
 
     bool history_has_energy = false;
     for (size_t i = 0; i < st.history_len; i++)
@@ -168,7 +168,7 @@ static void test_pipeline_process_compression_and_bounds(void)
     uint16_t output[4] = {0};
     uint16_t expected[4] = {0};
 
-    expect_true(effects_pipeline_process(&pipeline, COMPRESSION, input, output, 4) == 0,
+    expect_true(effects_pipeline_process(&pipeline, EFFECT_TYPE_COMPRESSION, input, output, 4) == 0,
                 "pipeline compression process succeeds");
     buf_compression(input, expected, 4, &params.compression);
     for (size_t i = 0; i < 4; i++)
@@ -177,9 +177,9 @@ static void test_pipeline_process_compression_and_bounds(void)
     }
 
     // Out-of-range effect index is rejected.
-    expect_true(effects_pipeline_process(&pipeline, (Effect)NUM_EFFECTS, input, output, 4) != 0,
+    expect_true(effects_pipeline_process(&pipeline, (EffectType)NUM_EFFECTS, input, output, 4) != 0,
                 "process rejects out-of-range effect");
-    expect_true(effects_pipeline_reset_state(&pipeline, (Effect)NUM_EFFECTS) != 0,
+    expect_true(effects_pipeline_reset_state(&pipeline, (EffectType)NUM_EFFECTS) != 0,
                 "reset rejects out-of-range effect");
 }
 

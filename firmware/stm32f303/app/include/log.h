@@ -1,9 +1,14 @@
+/*
+ * log — leveled logging with a pluggable sink.
+ */
+
 #ifndef LOG_H
 #define LOG_H
 
 #include <stdbool.h>
 #include <stdint.h>
 
+// TODO: Simplify?
 typedef enum
 {
     LOG_LEVEL_OFF = 0,
