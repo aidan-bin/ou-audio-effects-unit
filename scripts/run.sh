@@ -29,6 +29,7 @@ Commands:
   format-check
   lint
   test
+  usb-dump
 EOF
 }
 
@@ -53,6 +54,7 @@ case "$command_name" in
 	format-check) run_format_check ;;
 	lint) run_lint ;;
 	test) run_test ;;
+	usb-dump) run_usb_dump "${@:2}" ;;
 	-h|--help|help) usage ;;
 	*) usage; exit 1 ;;
 esac

@@ -489,3 +489,7 @@ run_demo() {
 run_decode_fault() {
 	python3 "$WORKFLOWS_DIR/decode_fault.py" "$@"
 }
+
+run_usb_dump() {
+	python3 "$WORKFLOWS_DIR/../usb_dump.py" "$@"
+}
