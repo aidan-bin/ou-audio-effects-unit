@@ -15,7 +15,7 @@
 static const SysinfoEntry entries[] = {
     {"audio_in", "1"},
     {"audio_out", "1"},
-    {"audio_routing", "dual-cdc"},
+    {"audio_routing", "uac1"},
     {"board", SYSINFO_BOARD},
     {"mcu", SYSINFO_MCU},
     {"version", SYSINFO_VERSION},

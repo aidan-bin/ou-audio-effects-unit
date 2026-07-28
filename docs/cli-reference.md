@@ -122,7 +122,7 @@ Compile-time system information. One `key=value` per line.
 Includes:
 
 - `audio_in` / `audio_out` — USB audio streaming support flags
-- `audio_routing` — USB audio protocol hint (`dual-cdc`)
+- `audio_routing` — USB audio protocol hint (`uac1`)
 - `version` — firmware/protocol version string
 - `board` / `mcu` — hardware identifiers set at build time
 

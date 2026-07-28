@@ -1,7 +1,10 @@
-"""Host-side USB audio streaming tool for the OU audio effects unit.
+"""Host-side control/streaming tool for the OU audio effects unit.
 
-Dual USB-CDC: text CLI on one port, raw int16 mono PCM on the other. Controls
-effects/routing over the CLI and streams audio with file or live (mic/speaker) I/O.
+The device exposes a text CLI over USB CDC ACM and, since the UAC1 rework, a
+standard USB Audio Class 1.0 interface for the audio path — no custom driver
+or protocol needed on the audio side. This tool drives the CLI over a serial
+port and streams audio through the OS's own audio driver (via `sounddevice`),
+exactly like any other microphone/speaker the device shows up as.
 
 Usage:
     python ouaudio.py --list
@@ -10,9 +13,11 @@ Usage:
 
 Dependencies: pyserial numpy sounddevice
 
-Requires the device's native USB (VID:PID 0483:5740) for audio. ST-Link VCP
-(0483:374B) can be used for CLI only. The device is the sample clock (~40506 Hz);
-host audio is resampled accordingly.
+Requires the device's native USB (VID:PID 0483:5740) for the CLI and to be
+recognized as the "ou-audio-effects" audio device by the OS. ST-Link VCP
+(0483:374B) can be used for CLI-only access when the native cable isn't
+connected, but that leaves no audio device to stream through. The device is
+the sample clock (~40506 Hz); host audio is resampled accordingly.
 """
 
 from __future__ import annotations
@@ -41,24 +46,14 @@ log = logging.getLogger("ouaudio")
 VID, PID = 0x0483, 0x5740  # native composite device (CLI + audio)
 STLINK_VID, STLINK_PID = 0x0483, 0x374B  # ST-Link VCP (CLI mirror, fallback)
 
-SAMPLE_DTYPE = np.dtype("<i2")  # little-endian signed 16-bit, mono
+UAC_DEVICE_NAME = "ou-audio-effects"  # must match USBD_PRODUCT_STRING_FS in usbd_desc.c
+
 DEFAULT_DEVICE_RATE = 40506  # 48 MHz / 1185; fallback if `info` unavailable
 FRAME_SAMPLES = 405  # ~10 ms pacing unit at 40506 Hz
 CLI_PROMPT = "> "
 
 EFFECT_NAMES = ("overdrive", "echo", "compression")
 INT16_MIN, INT16_MAX = -32768, 32767
-
-
-def samples_to_bytes(samples: np.ndarray) -> bytes:
-    return np.ascontiguousarray(samples, dtype=SAMPLE_DTYPE).tobytes()
-
-
-def bytes_to_samples(raw: bytes) -> np.ndarray:
-    usable = len(raw) - (len(raw) % 2)
-    if usable <= 0:
-        return np.empty(0, dtype=SAMPLE_DTYPE)
-    return np.frombuffer(raw[:usable], dtype=SAMPLE_DTYPE)
 
 
 def to_int16(samples: np.ndarray) -> np.ndarray:
@@ -216,9 +211,9 @@ class CliPort:
     def verify_audio_support(self, *, need_input: bool, need_output: bool) -> dict[str, str]:
         info = self.sysinfo()
         tag = f"board={info.get('board', '?')} version={info.get('version', '?')}"
-        if info.get("audio_routing") != "dual-cdc":
+        if info.get("audio_routing") != "uac1":
             raise DeviceUnsupportedError(
-                f"audio_routing={info.get('audio_routing')!r} (want dual-cdc); {tag}"
+                f"audio_routing={info.get('audio_routing')!r} (want uac1); {tag}"
             )
         if need_input and info.get("audio_in") != "1":
             raise DeviceUnsupportedError(f"no USB audio input (audio_in!=1); {tag}")
@@ -290,28 +285,6 @@ class CliPort:
 
     def set_param(self, key: str, value: int) -> None:
         self._expect_ok(self.command(f"config set {key} {value}"))
-
-
-# --- Audio transport ---
-
-
-class AudioPort:
-    def __init__(self, port: str, *, read_timeout_s: float = 0.02) -> None:
-        self._serial = serial.Serial(port, 115200, timeout=read_timeout_s, write_timeout=2.0)
-        self.port = port
-
-    def write(self, data: bytes) -> None:
-        self._serial.write(data)
-
-    def read(self, max_bytes: int) -> bytes:
-        return self._serial.read(max_bytes)
-
-    def reset(self) -> None:
-        self._serial.reset_input_buffer()
-        self._serial.reset_output_buffer()
-
-    def close(self) -> None:
-        self._serial.close()
 
 
 # --- Sources and sinks ---
@@ -465,6 +438,91 @@ class SpeakerSink(Sink):
         self._stream.close()
 
 
+class DeviceAudioSink(Sink):
+    """Plays samples on the OU device's UAC1 playback endpoint via the OS audio
+    driver. No resampling here — the caller already produced device-rate samples."""
+
+    def __init__(self, device_index: int, device_rate: float) -> None:
+        import sounddevice as sd
+
+        self._lock = threading.Lock()
+        self._buf = np.empty(0, dtype=np.int16)
+        self._stream = sd.OutputStream(
+            device=device_index, samplerate=device_rate, channels=1, dtype="int16",
+            callback=self._cb,
+        )
+
+    def _cb(self, outdata, frames, _time, _status) -> None:
+        with self._lock:
+            n = min(frames, self._buf.size)
+            outdata[:n, 0] = self._buf[:n]
+            self._buf = self._buf[n:]
+        if n < frames:
+            outdata[n:, 0] = 0
+
+    def pending(self) -> int:
+        with self._lock:
+            return self._buf.size
+
+    def start(self) -> None:
+        self._stream.start()
+
+    def write(self, samples: np.ndarray) -> None:
+        with self._lock:
+            self._buf = np.concatenate([self._buf, samples.astype(np.int16)])
+
+    def close(self) -> None:
+        self._stream.stop()
+        self._stream.close()
+
+
+class DeviceAudioSource(Source):
+    """Captures samples from the OU device's UAC1 capture endpoint via the OS
+    audio driver. No resampling here — output is already at the device rate."""
+
+    finished = False
+
+    def __init__(self, device_index: int, device_rate: float) -> None:
+        import queue
+
+        import sounddevice as sd
+
+        self._queue: queue.Queue[np.ndarray] = queue.Queue()
+        self._carry = np.empty(0, dtype=np.int16)
+        self._stream = sd.InputStream(
+            device=device_index, samplerate=device_rate, channels=1, dtype="int16",
+            callback=self._cb,
+        )
+
+    def _cb(self, indata, _frames, _time, _status) -> None:
+        self._queue.put(indata[:, 0].copy())
+
+    def start(self) -> None:
+        self._stream.start()
+
+    def read(self, max_samples: int) -> np.ndarray:
+        import queue
+
+        parts = [self._carry] if self._carry.size else []
+        total = self._carry.size
+        while total < max_samples:
+            try:
+                block = self._queue.get_nowait()
+            except queue.Empty:
+                break
+            parts.append(block)
+            total += block.size
+        if not parts:
+            return np.empty(0, dtype=np.int16)
+        merged = np.concatenate(parts)
+        out, self._carry = merged[:max_samples], merged[max_samples:]
+        return out
+
+    def close(self) -> None:
+        self._stream.stop()
+        self._stream.close()
+
+
 class RampSource(Source):
     """Fixed-length int16 ramp generated directly at device rate (no resampling),
     for byte-exact loopback comparison."""
@@ -532,25 +590,32 @@ class DiscardSink(Sink):
 
 
 class StreamEngine:
+    """Pumps samples between a host Source/Sink pair and the device's UAC1
+    endpoints (a DeviceAudioSink/DeviceAudioSource pair). Real-time pacing is
+    the OS audio driver's job now (it pulls/pushes via callback at the
+    hardware clock) — this just keeps DeviceAudioSink topped up without
+    letting it grow unbounded for open-ended sources like InfiniteRampSource."""
+
     def __init__(
         self,
-        audio: AudioPort,
+        device_sink: DeviceAudioSink,
+        device_source: DeviceAudioSource,
         source: Source,
         sink: Sink,
         *,
-        device_rate: float,
         frame_samples: int = FRAME_SAMPLES,
         tail_s: float = 0.5,
     ) -> None:
-        self._port, self._source, self._sink = audio, source, sink
+        self._device_sink, self._device_source = device_sink, device_source
+        self._source, self._sink = source, sink
         self._frame = frame_samples
-        self._period = frame_samples / device_rate
         self._tail_s = tail_s
         self._stop = threading.Event()
         self._input_done = threading.Event()
 
     def run(self, stop_event: threading.Event | None = None) -> None:
-        self._port.reset()
+        self._device_sink.start()
+        self._device_source.start()
         self._source.start()
         self._sink.start()
         reader = threading.Thread(target=self._read_loop, daemon=True)
@@ -573,34 +638,36 @@ class StreamEngine:
             reader.join(2.0)
             self._source.close()
             self._sink.close()
+            self._device_sink.close()
+            self._device_source.close()
 
     def _write_loop(self) -> None:
-        next_send = time.monotonic()
+        max_pending = self._frame * 8  # a few callback periods of slack
         while not self._stop.is_set():
+            if self._device_sink.pending() >= max_pending:
+                self._stop.wait(0.005)
+                continue
             samples = self._source.read(self._frame)
             if samples.size:
-                self._port.write(samples_to_bytes(samples))
+                self._device_sink.write(samples)
             elif self._source.finished:
                 self._input_done.set()
                 return
-            next_send += self._period
-            delay = next_send - time.monotonic()
-            if delay > 0:
-                self._stop.wait(delay)
             else:
-                next_send = time.monotonic()
+                self._stop.wait(0.005)
 
     def _read_loop(self) -> None:
-        read_size = self._frame * 8
         while not self._stop.is_set():
-            data = self._port.read(read_size)
-            if data:
-                self._sink.write(bytes_to_samples(data))
+            data = self._device_source.read(self._frame)
+            if data.size:
+                self._sink.write(data)
+            else:
+                self._stop.wait(0.005)
         for _ in range(8):  # final drain
-            data = self._port.read(read_size)
-            if not data:
+            data = self._device_source.read(self._frame)
+            if not data.size:
                 break
-            self._sink.write(bytes_to_samples(data))
+            self._sink.write(data)
 
 
 # --- Device session ---
@@ -613,13 +680,22 @@ class DiscoveryError(RuntimeError):
 @dataclass
 class DeviceSession:
     cli: CliPort
-    audio: AudioPort | None
+    audio_in_index: int | None
+    audio_out_index: int | None
     device_rate: float
     via_stlink: bool = False
-    audio_port_name: str | None = None
 
     def verify_audio_support(self, *, need_input: bool, need_output: bool) -> dict[str, str]:
-        return self.cli.verify_audio_support(need_input=need_input, need_output=need_output)
+        info = self.cli.verify_audio_support(need_input=need_input, need_output=need_output)
+        if need_input and self.audio_in_index is None:
+            raise DeviceUnsupportedError(
+                f"no '{UAC_DEVICE_NAME}' capture device found via the OS audio driver"
+            )
+        if need_output and self.audio_out_index is None:
+            raise DeviceUnsupportedError(
+                f"no '{UAC_DEVICE_NAME}' playback device found via the OS audio driver"
+            )
+        return info
 
     def configure_effects(
         self,
@@ -651,8 +727,6 @@ class DeviceSession:
                 log.warning("failed to restore audio routing: %s", exc)
 
     def close(self) -> None:
-        if self.audio is not None:
-            self.audio.close()
         self.cli.close()
 
 
@@ -661,15 +735,38 @@ def _ports(vid: int, pid: int) -> list[ListPortInfo]:
     return sorted(matches, key=lambda p: (p.location or "", p.device))
 
 
+def _find_audio_device(
+    name_or_index: str | None, *, want_input: bool, want_output: bool
+) -> int | None:
+    """Resolve a sounddevice device index matching `name_or_index` (or
+    UAC_DEVICE_NAME by default) with the required channel direction."""
+    import sounddevice as sd
+
+    if name_or_index is not None and name_or_index.lstrip("-").isdigit():
+        return int(name_or_index)
+
+    needle = (name_or_index or UAC_DEVICE_NAME).lower()
+    for index, info in enumerate(sd.query_devices()):
+        if needle not in info["name"].lower():
+            continue
+        if want_input and info["max_input_channels"] < 1:
+            continue
+        if want_output and info["max_output_channels"] < 1:
+            continue
+        return index
+    return None
+
+
 def open_device(
     *,
     cli_port: str | None = None,
-    audio_port: str | None = None,
+    audio_device: str | None = None,
     char_delay_s: float = 0.01,
     query_rate: bool = True,
     open_audio: bool = True,
 ) -> DeviceSession:
-    """Discover/identify the CDC ports and open a session (CLI kept open once)."""
+    """Discover/identify the CLI's CDC port and the OS-level UAC1 audio device,
+    and open a session (CLI kept open once)."""
     native = [p.device for p in _ports(VID, PID)]
     via_stlink = False
 
@@ -691,15 +788,14 @@ def open_device(
         if resolved_cli is None:
             raise DiscoveryError(
                 f"no OU audio device found (expected CDC {VID:04x}:{PID:04x}). "
-                "Connect the native USB cable, or pass --cli-port/--audio-port."
+                "Connect the native USB cable, or pass --cli-port/--audio-device."
             )
         cli = CliPort(resolved_cli, char_delay_s=char_delay_s)
 
-    # Audio port: explicit override, else the native port that is not the CLI.
-    resolved_audio = audio_port
-    if resolved_audio is None and not via_stlink:
-        resolved_audio = next((d for d in native if d != resolved_cli), None)
-    audio = AudioPort(resolved_audio) if (open_audio and resolved_audio) else None
+    audio_in_index = audio_out_index = None
+    if open_audio:
+        audio_in_index = _find_audio_device(audio_device, want_input=True, want_output=False)
+        audio_out_index = _find_audio_device(audio_device, want_input=False, want_output=True)
 
     device_rate = float(DEFAULT_DEVICE_RATE)
     if query_rate:
@@ -708,7 +804,7 @@ def open_device(
         except Exception as exc:  # noqa: BLE001 - best effort
             log.warning("could not query device rate (%s); using %d", exc, DEFAULT_DEVICE_RATE)
 
-    return DeviceSession(cli, audio, device_rate, via_stlink, audio_port_name=resolved_audio)
+    return DeviceSession(cli, audio_in_index, audio_out_index, device_rate, via_stlink)
 
 
 # --- CLI ---
@@ -721,7 +817,11 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     p.add_argument("--input", metavar="mic|FILE.wav")
     p.add_argument("--output", metavar="speaker|FILE.wav")
     p.add_argument("--cli-port")
-    p.add_argument("--audio-port")
+    p.add_argument(
+        "--audio-device",
+        metavar="NAME|INDEX",
+        help=f"override UAC1 device lookup (default: match {UAC_DEVICE_NAME!r} via sounddevice)",
+    )
     p.add_argument(
         "--cli-char-delay",
         type=float,
@@ -777,8 +877,10 @@ def _parse_set(items: list[str]) -> dict[str, int]:
 
 
 def _cmd_list(args: argparse.Namespace) -> int:
+    import sounddevice as sd
+
     native, stlink = _ports(VID, PID), _ports(STLINK_VID, STLINK_PID)
-    print(f"Native device ports ({VID:04x}:{PID:04x}):")
+    print(f"Native CLI ports ({VID:04x}:{PID:04x}):")
     for port in native or []:
         print(f"  {port.device}  loc={port.location}  {port.product!r}")
     if not native:
@@ -786,16 +888,24 @@ def _cmd_list(args: argparse.Namespace) -> int:
     print(f"ST-Link VCP ports ({STLINK_VID:04x}:{STLINK_PID:04x}, CLI fallback):")
     for port in stlink:
         print(f"  {port.device}  loc={port.location}  {port.product!r}")
+    print(f"\nOS audio devices matching {(args.audio_device or UAC_DEVICE_NAME)!r}:")
+    for index, info in enumerate(sd.query_devices()):
+        needle = (args.audio_device or UAC_DEVICE_NAME).lower()
+        if needle in info["name"].lower():
+            print(
+                f"  [{index}] {info['name']!r}  in={info['max_input_channels']} "
+                f"out={info['max_output_channels']}  rate={info['default_samplerate']:.0f}"
+            )
 
     dev = open_device(
         cli_port=args.cli_port,
-        audio_port=args.audio_port,
+        audio_device=args.audio_device,
         char_delay_s=args.cli_char_delay,
-        open_audio=False,
     )
     try:
-        print(f"\nResolved CLI  : {dev.cli.port}{' (ST-Link VCP)' if dev.via_stlink else ''}")
-        print(f"Resolved audio: {dev.audio_port_name or '(unavailable -- native USB unreachable)'}")
+        print(f"\nResolved CLI       : {dev.cli.port}{' (ST-Link VCP)' if dev.via_stlink else ''}")
+        print(f"Resolved audio in  : index {dev.audio_in_index}")
+        print(f"Resolved audio out : index {dev.audio_out_index}")
         print("\nsysinfo:", dev.cli.sysinfo())
         info = dev.cli.info()
         print(
@@ -826,17 +936,12 @@ def _cmd_stream(args: argparse.Namespace) -> int:
     set_params = _parse_set(args.set_params)
     dev = open_device(
         cli_port=args.cli_port,
-        audio_port=args.audio_port,
+        audio_device=args.audio_device,
         char_delay_s=args.cli_char_delay,
         query_rate=args.device_rate is None,
     )
     device_rate = float(args.device_rate) if args.device_rate else dev.device_rate
     try:
-        if dev.audio is None:
-            raise SystemExit(
-                f"audio port unavailable: the native USB ({VID:04x}:{PID:04x}) is not "
-                "enumerated (only the ST-Link VCP is present). Connect the native cable."
-            )
         dev.verify_audio_support(need_input=True, need_output=True)
         enable = dict.fromkeys(args.enable, True)
         enable.update(dict.fromkeys(args.disable, False))
@@ -844,8 +949,10 @@ def _cmd_stream(args: argparse.Namespace) -> int:
 
         source = _build_source(args.input, device_rate, args.host_rate)
         sink = _build_sink(args.output, device_rate, args.host_rate)
+        device_sink = DeviceAudioSink(dev.audio_out_index, device_rate)
+        device_source = DeviceAudioSource(dev.audio_in_index, device_rate)
         engine = StreamEngine(
-            dev.audio, source, sink, device_rate=device_rate, tail_s=args.tail_ms / 1000.0
+            device_sink, device_source, source, sink, tail_s=args.tail_ms / 1000.0
         )
         stop = threading.Event()
         signal.signal(signal.SIGINT, lambda *_: stop.set())
@@ -906,9 +1013,8 @@ def _cmd_debug_probe(args: argparse.Namespace) -> int:
 
     dev = open_device(
         cli_port=args.cli_port,
-        audio_port=args.audio_port,
+        audio_device=args.audio_device,
         char_delay_s=args.cli_char_delay,
-        open_audio=False,
     )
     try:
         print(
@@ -938,14 +1044,9 @@ def _cmd_debug_probe(args: argparse.Namespace) -> int:
 
 def _cmd_debug_loopback(args: argparse.Namespace) -> int:
     dev = open_device(
-        cli_port=args.cli_port, audio_port=args.audio_port, char_delay_s=args.cli_char_delay
+        cli_port=args.cli_port, audio_device=args.audio_device, char_delay_s=args.cli_char_delay
     )
     try:
-        if dev.audio is None:
-            raise SystemExit(
-                f"audio port unavailable: the native USB ({VID:04x}:{PID:04x}) is not "
-                "enumerated (only the ST-Link VCP is present). Connect the native cable."
-            )
         dev.verify_audio_support(need_input=True, need_output=True)
 
         # Query pipeline delay before streaming (CLI is still fast at this
@@ -964,8 +1065,10 @@ def _cmd_debug_loopback(args: argparse.Namespace) -> int:
         source = RampSource(length)
         expected = source.buffer.copy()
         sink = RecordingSink()
+        device_sink = DeviceAudioSink(dev.audio_out_index, dev.device_rate)
+        device_source = DeviceAudioSource(dev.audio_in_index, dev.device_rate)
         with dev.usb_routing(input_usb=True, output_on=True):
-            engine = StreamEngine(dev.audio, source, sink, device_rate=dev.device_rate)
+            engine = StreamEngine(device_sink, device_source, source, sink)
             engine.run()
             status = dev.cli.audio_status()
 
@@ -997,23 +1100,20 @@ def _cmd_debug_loopback(args: argparse.Namespace) -> int:
 
 def _cmd_debug_stress(args: argparse.Namespace) -> int:
     dev = open_device(
-        cli_port=args.cli_port, audio_port=args.audio_port, char_delay_s=args.cli_char_delay
+        cli_port=args.cli_port, audio_device=args.audio_device, char_delay_s=args.cli_char_delay
     )
     try:
-        if dev.audio is None:
-            raise SystemExit(
-                f"audio port unavailable: the native USB ({VID:04x}:{PID:04x}) is not "
-                "enumerated (only the ST-Link VCP is present). Connect the native cable."
-            )
         dev.verify_audio_support(need_input=True, need_output=True)
 
         source = InfiniteRampSource()
         sink = DiscardSink()
+        device_sink = DeviceAudioSink(dev.audio_out_index, dev.device_rate)
+        device_source = DeviceAudioSource(dev.audio_in_index, dev.device_rate)
         stop = threading.Event()
         timer = threading.Timer(args.duration, stop.set)
         with dev.usb_routing(input_usb=True, output_on=True):
             print(f"streaming {dev.device_rate:.0f} Hz for {args.duration:.0f}s ...")
-            engine = StreamEngine(dev.audio, source, sink, device_rate=dev.device_rate)
+            engine = StreamEngine(device_sink, device_source, source, sink)
             timer.start()
             engine.run(stop_event=stop)
             timer.cancel()
