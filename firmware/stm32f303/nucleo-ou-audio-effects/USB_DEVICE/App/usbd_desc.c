@@ -67,8 +67,8 @@
 #define USBD_MANUFACTURER_STRING     "ou-audio"
 #define USBD_PID_FS     22336
 #define USBD_PRODUCT_STRING_FS     "ou-audio-effects"
-#define USBD_CONFIGURATION_STRING_FS     "Dual CDC"
-#define USBD_INTERFACE_STRING_FS     "CDC CLI / CDC Audio"
+#define USBD_CONFIGURATION_STRING_FS     "CLI + UAC1 Audio"
+#define USBD_INTERFACE_STRING_FS     "CDC CLI"
 
 /* USER CODE BEGIN PRIVATE_DEFINES */
 
