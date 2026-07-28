@@ -128,8 +128,8 @@ uint8_t usbd_cdc_cli_setup(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef *req)
                 if (h->cli_fops != NULL && h->cli_fops->Control != NULL)
                 {
                     h->cli_fops->Control(req->bRequest,
-                                        (uint8_t *)(void *)h->cli_data, // NOLINT(bugprone-casting-through-void)
-                                        req->wLength);
+                                         (uint8_t *)(void *)h->cli_data, // NOLINT(bugprone-casting-through-void)
+                                         req->wLength);
                 }
                 // NOLINTNEXTLINE(bugprone-casting-through-void)
                 USBD_CtlSendData(pdev, (uint8_t *)(void *)h->cli_data,
@@ -219,7 +219,7 @@ uint8_t usbd_cdc_cli_ep0_rxready(USBD_HandleTypeDef *pdev)
     {
         // NOLINTNEXTLINE(bugprone-casting-through-void)
         h->cli_fops->Control(h->cli_cmd_op_code, (uint8_t *)(void *)h->cli_data,
-                            (uint16_t)h->cli_cmd_length);
+                             (uint16_t)h->cli_cmd_length);
         h->cli_cmd_op_code = 0xFFU;
     }
 

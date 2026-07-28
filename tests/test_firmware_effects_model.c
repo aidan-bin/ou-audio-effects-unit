@@ -37,8 +37,8 @@ static void test_normalize_clears_invalid_and_duplicate(void)
 {
     EffectsState state;
     effects_state_set_default_slots(&state);
-    state.slots[2] = (uint8_t)99; // invalid id
-    state.slots[3] = EFFECT_TYPE_OVERDRIVE;   // duplicate of slot0
+    state.slots[2] = (uint8_t)99;           // invalid id
+    state.slots[3] = EFFECT_TYPE_OVERDRIVE; // duplicate of slot0
     state.slot_enabled[3] = true;
     state.active_slot = (uint8_t)(NUM_SLOTS + 3);
 

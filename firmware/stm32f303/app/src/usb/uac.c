@@ -1,5 +1,4 @@
 #include "usb/uac.h"
-
 #include "usb/audio_stream.h"
 #include "usb/uac_feedback.h"
 #include "usbd_ctlreq.h"
@@ -328,12 +327,12 @@ static void usbd_uac_sof_feedback(USBD_HandleTypeDef *pdev)
     USBD_LL_Transmit(pdev, UAC_FEEDBACK_EP, h->feedback_buf, UAC_FEEDBACK_PACKET_BYTES);
 }
 
-void usbd_uac_sof(USBD_HandleTypeDef *pdev)
+uint8_t usbd_uac_sof(USBD_HandleTypeDef *pdev)
 {
     UsbdUacHandleTypeDef *h = &usbd_uac_handle;
     if (!h->initialized)
     {
-        return;
+        return USBD_OK;
     }
 
     if (h->as_in_active)
@@ -346,6 +345,7 @@ void usbd_uac_sof(USBD_HandleTypeDef *pdev)
     }
 
     h->sof_count++;
+    return USBD_OK;
 }
 
 bool usbd_uac_owns_ep(uint8_t epnum)

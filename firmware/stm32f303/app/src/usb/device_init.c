@@ -1,5 +1,4 @@
 #include "usb/device_init.h"
-
 #include "usb/cdc_cli.h"
 #include "usb/composite.h"
 #include "usb_device.h"
@@ -112,6 +111,7 @@ void usbd_device_init(void)
     };
     HAL_GPIO_Init(GPIOA, &gpio_usb);
 
+    USB->CNTR &= ~((uint16_t)USB_CNTR_PDWN);
     USB->ISTR = 0U;
     USB_EnableGlobalInt(USB);
 }

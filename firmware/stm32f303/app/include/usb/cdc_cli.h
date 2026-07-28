@@ -9,6 +9,7 @@
 #ifndef USB_CDC_CLI_H
 #define USB_CDC_CLI_H
 
+#include <stdbool.h>
 #include "usbd_cdc.h"
 
 #define CDC0_IN_EP 0x81U
@@ -27,7 +28,8 @@ void USBD_CDC_CLI_SetTxBuffer(uint8_t *pbuff, uint16_t len);
 void USBD_CDC_CLI_ReceivePacket(void);
 
 /* Composite dispatcher entry points (composite.c only) */
-uint8_t usbd_cdc_cli_class_init(USBD_HandleTypeDef *pdev);uint8_t usbd_cdc_cli_class_deinit(USBD_HandleTypeDef *pdev);
+uint8_t usbd_cdc_cli_class_init(USBD_HandleTypeDef *pdev);
+uint8_t usbd_cdc_cli_class_deinit(USBD_HandleTypeDef *pdev);
 uint8_t usbd_cdc_cli_setup(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef *req);
 uint8_t usbd_cdc_cli_ep0_rxready(USBD_HandleTypeDef *pdev);
 uint8_t usbd_cdc_cli_data_in(USBD_HandleTypeDef *pdev, uint8_t epnum);

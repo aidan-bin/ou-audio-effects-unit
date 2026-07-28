@@ -1,5 +1,4 @@
 #include "usb/composite.h"
-
 #include "usb/cdc_cli.h"
 #include "usb/uac.h"
 #include "usbd_ctlreq.h"
@@ -33,111 +32,307 @@ __ALIGN_BEGIN static uint8_t USBD_Composite_CfgFSDesc[USB_COMPOSITE_CONFIG_DESC_
         0x32, /* bMaxPower: 100 mA */
 
         /* CDC0 (CLI) -- Interface Association Descriptor (groups if0+if1)   */
-        0x08, 0x0B, 0x00, 0x02, 0x02, 0x02, 0x01, 0x00,
+        0x08,
+        0x0B,
+        0x00,
+        0x02,
+        0x02,
+        0x02,
+        0x01,
+        0x00,
 
         /* CDC0 (CLI) -- Interface 0 - Communication Class                  */
-        0x09, USB_DESC_TYPE_INTERFACE, 0x00, 0x00, 0x01, 0x02, 0x02, 0x01, 0x00,
+        0x09,
+        USB_DESC_TYPE_INTERFACE,
+        0x00,
+        0x00,
+        0x01,
+        0x02,
+        0x02,
+        0x01,
+        0x00,
 
         /* Header Functional Descriptor */
-        0x05, 0x24, 0x00, 0x10, 0x01,
+        0x05,
+        0x24,
+        0x00,
+        0x10,
+        0x01,
 
         /* Call Management Functional Descriptor */
-        0x05, 0x24, 0x01, 0x00, 0x01, /* bDataInterface = 1 */
+        0x05,
+        0x24,
+        0x01,
+        0x00,
+        0x01, /* bDataInterface = 1 */
 
         /* ACM Functional Descriptor */
-        0x04, 0x24, 0x02, 0x02,
+        0x04,
+        0x24,
+        0x02,
+        0x02,
 
         /* Union Functional Descriptor */
-        0x05, 0x24, 0x06, 0x00, 0x01, /* master=if0, slave=if1 */
+        0x05,
+        0x24,
+        0x06,
+        0x00,
+        0x01, /* master=if0, slave=if1 */
 
         /* Endpoint 2 IN Descriptor (Interrupt) */
-        0x07, USB_DESC_TYPE_ENDPOINT, CDC0_CMD_EP, 0x03,
-        LOBYTE(CDC_DUAL_CMD_PACKET_SIZE), HIBYTE(CDC_DUAL_CMD_PACKET_SIZE), 0x10,
+        0x07,
+        USB_DESC_TYPE_ENDPOINT,
+        CDC0_CMD_EP,
+        0x03,
+        LOBYTE(CDC_DUAL_CMD_PACKET_SIZE),
+        HIBYTE(CDC_DUAL_CMD_PACKET_SIZE),
+        0x10,
 
         /* CDC0 (CLI) -- Interface 1 - Data Class Interface                 */
-        0x09, USB_DESC_TYPE_INTERFACE, 0x01, 0x00, 0x02, 0x0A, 0x00, 0x00, 0x00,
+        0x09,
+        USB_DESC_TYPE_INTERFACE,
+        0x01,
+        0x00,
+        0x02,
+        0x0A,
+        0x00,
+        0x00,
+        0x00,
 
         /* Endpoint 1 OUT Descriptor (Bulk) */
-        0x07, USB_DESC_TYPE_ENDPOINT, CDC0_OUT_EP, 0x02,
-        LOBYTE(CDC_DUAL_DATA_FS_PACKET_SIZE), HIBYTE(CDC_DUAL_DATA_FS_PACKET_SIZE), 0x00,
+        0x07,
+        USB_DESC_TYPE_ENDPOINT,
+        CDC0_OUT_EP,
+        0x02,
+        LOBYTE(CDC_DUAL_DATA_FS_PACKET_SIZE),
+        HIBYTE(CDC_DUAL_DATA_FS_PACKET_SIZE),
+        0x00,
 
         /* Endpoint 1 IN Descriptor (Bulk) */
-        0x07, USB_DESC_TYPE_ENDPOINT, CDC0_IN_EP, 0x02,
-        LOBYTE(CDC_DUAL_DATA_FS_PACKET_SIZE), HIBYTE(CDC_DUAL_DATA_FS_PACKET_SIZE), 0x00,
+        0x07,
+        USB_DESC_TYPE_ENDPOINT,
+        CDC0_IN_EP,
+        0x02,
+        LOBYTE(CDC_DUAL_DATA_FS_PACKET_SIZE),
+        HIBYTE(CDC_DUAL_DATA_FS_PACKET_SIZE),
+        0x00,
 
         /* UAC1 -- Interface 2 - Audio Control (no endpoint)                 */
-        0x09, USB_DESC_TYPE_INTERFACE, UAC_IFACE_AC, 0x00, 0x00, 0x01, 0x01, 0x00, 0x00,
+        0x09,
+        USB_DESC_TYPE_INTERFACE,
+        UAC_IFACE_AC,
+        0x00,
+        0x00,
+        0x01,
+        0x01,
+        0x00,
+        0x00,
 
         /* AC Interface Header: bcdADC=1.00, wTotalLength=52 (this header +
          * 2x(Input Terminal + Output Terminal)), 2 streaming interfaces */
-        0x0A, 0x24, 0x01, 0x00, 0x01, 0x34, 0x00, 0x02, UAC_IFACE_AS_OUT, UAC_IFACE_AS_IN,
+        0x0A,
+        0x24,
+        0x01,
+        0x00,
+        0x01,
+        0x34,
+        0x00,
+        0x02,
+        UAC_IFACE_AS_OUT,
+        UAC_IFACE_AS_IN,
 
         /* Input Terminal 1: USB streaming in (feeds the playback path) */
-        0x0C, 0x24, 0x02, 0x01, 0x01, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
+        0x0C,
+        0x24,
+        0x02,
+        0x01,
+        0x01,
+        0x01,
+        0x00,
+        0x01,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
 
         /* Output Terminal 2: Speaker, fed from Input Terminal 1 */
-        0x09, 0x24, 0x03, 0x02, 0x01, 0x03, 0x00, 0x01, 0x00,
+        0x09,
+        0x24,
+        0x03,
+        0x02,
+        0x01,
+        0x03,
+        0x00,
+        0x01,
+        0x00,
 
         /* Input Terminal 3: Microphone (feeds the capture path) */
-        0x0C, 0x24, 0x02, 0x03, 0x01, 0x02, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
+        0x0C,
+        0x24,
+        0x02,
+        0x03,
+        0x01,
+        0x02,
+        0x00,
+        0x01,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
 
         /* Output Terminal 4: USB streaming out, fed from Input Terminal 3 */
-        0x09, 0x24, 0x03, 0x04, 0x01, 0x01, 0x00, 0x03, 0x00,
+        0x09,
+        0x24,
+        0x03,
+        0x04,
+        0x01,
+        0x01,
+        0x00,
+        0x03,
+        0x00,
 
         /* UAC1 -- Interface 3 - Audio Streaming OUT (host->device) */
         /* Alt 0: zero-bandwidth */
-        0x09, USB_DESC_TYPE_INTERFACE, UAC_IFACE_AS_OUT, 0x00, 0x00, 0x01, 0x02, 0x00, 0x00,
+        0x09,
+        USB_DESC_TYPE_INTERFACE,
+        UAC_IFACE_AS_OUT,
+        0x00,
+        0x00,
+        0x01,
+        0x02,
+        0x00,
+        0x00,
 
         /* Alt 1: isoc data OUT + explicit feedback IN */
-        0x09, USB_DESC_TYPE_INTERFACE, UAC_IFACE_AS_OUT, 0x01, 0x02, 0x01, 0x02, 0x00, 0x00,
+        0x09,
+        USB_DESC_TYPE_INTERFACE,
+        UAC_IFACE_AS_OUT,
+        0x01,
+        0x02,
+        0x01,
+        0x02,
+        0x00,
+        0x00,
 
         /* Class-specific AS General: links to Input Terminal 1, PCM format */
-        0x07, 0x24, 0x01, 0x01, 0x00, 0x01, 0x00,
+        0x07,
+        0x24,
+        0x01,
+        0x01,
+        0x00,
+        0x01,
+        0x00,
 
         /* Format Type I: mono, 16-bit, one discrete sample rate */
-        0x0B, 0x24, 0x02, 0x01, 0x01, 0x02, 0x10, 0x01,
+        0x0B,
+        0x24,
+        0x02,
+        0x01,
+        0x01,
+        0x02,
+        0x10,
+        0x01,
         (uint8_t)(UAC_SAMPLE_RATE_HZ & 0xFFU),
         (uint8_t)((UAC_SAMPLE_RATE_HZ >> 8) & 0xFFU),
         (uint8_t)((UAC_SAMPLE_RATE_HZ >> 16) & 0xFFU),
 
         /* Isoc data OUT endpoint: Async, Data usage; bSynchAddress points at
          * the feedback endpoint below */
-        0x09, USB_DESC_TYPE_ENDPOINT, UAC_AS_OUT_EP, 0x05,
-        LOBYTE(UAC_AS_MAX_PACKET_BYTES), HIBYTE(UAC_AS_MAX_PACKET_BYTES),
-        0x01, 0x00, UAC_FEEDBACK_EP,
+        0x09,
+        USB_DESC_TYPE_ENDPOINT,
+        UAC_AS_OUT_EP,
+        0x05,
+        LOBYTE(UAC_AS_MAX_PACKET_BYTES),
+        HIBYTE(UAC_AS_MAX_PACKET_BYTES),
+        0x01,
+        0x00,
+        UAC_FEEDBACK_EP,
 
         /* Class-specific AS endpoint descriptor (no sampling-freq/pitch control) */
-        0x07, 0x25, 0x01, 0x00, 0x00, 0x00, 0x00,
+        0x07,
+        0x25,
+        0x01,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
 
         /* Explicit feedback endpoint: Isoc, no sync type, Feedback usage.
          * bRefresh=5 -> refresh every 2^5 = 32 ms. */
-        0x09, USB_DESC_TYPE_ENDPOINT, UAC_FEEDBACK_EP, 0x11,
-        LOBYTE(UAC_FEEDBACK_PACKET_BYTES), HIBYTE(UAC_FEEDBACK_PACKET_BYTES),
-        0x01, 0x05, 0x00,
+        0x09,
+        USB_DESC_TYPE_ENDPOINT,
+        UAC_FEEDBACK_EP,
+        0x11,
+        LOBYTE(UAC_FEEDBACK_PACKET_BYTES),
+        HIBYTE(UAC_FEEDBACK_PACKET_BYTES),
+        0x01,
+        0x05,
+        0x00,
 
         /* UAC1 -- Interface 4 - Audio Streaming IN (device->host) */
         /* Alt 0: zero-bandwidth */
-        0x09, USB_DESC_TYPE_INTERFACE, UAC_IFACE_AS_IN, 0x00, 0x00, 0x01, 0x02, 0x00, 0x00,
+        0x09,
+        USB_DESC_TYPE_INTERFACE,
+        UAC_IFACE_AS_IN,
+        0x00,
+        0x00,
+        0x01,
+        0x02,
+        0x00,
+        0x00,
 
         /* Alt 1: isoc data IN */
-        0x09, USB_DESC_TYPE_INTERFACE, UAC_IFACE_AS_IN, 0x01, 0x01, 0x01, 0x02, 0x00, 0x00,
+        0x09,
+        USB_DESC_TYPE_INTERFACE,
+        UAC_IFACE_AS_IN,
+        0x01,
+        0x01,
+        0x01,
+        0x02,
+        0x00,
+        0x00,
 
         /* Class-specific AS General: links to Output Terminal 4, PCM format */
-        0x07, 0x24, 0x01, 0x04, 0x00, 0x01, 0x00,
+        0x07,
+        0x24,
+        0x01,
+        0x04,
+        0x00,
+        0x01,
+        0x00,
 
         /* Format Type I: mono, 16-bit, one discrete sample rate */
-        0x0B, 0x24, 0x02, 0x01, 0x01, 0x02, 0x10, 0x01,
+        0x0B,
+        0x24,
+        0x02,
+        0x01,
+        0x01,
+        0x02,
+        0x10,
+        0x01,
         (uint8_t)(UAC_SAMPLE_RATE_HZ & 0xFFU),
         (uint8_t)((UAC_SAMPLE_RATE_HZ >> 8) & 0xFFU),
         (uint8_t)((UAC_SAMPLE_RATE_HZ >> 16) & 0xFFU),
 
         /* Isoc data IN endpoint: Adaptive, Data usage, no explicit feedback */
-        0x09, USB_DESC_TYPE_ENDPOINT, UAC_AS_IN_EP, 0x09,
-        LOBYTE(UAC_AS_MAX_PACKET_BYTES), HIBYTE(UAC_AS_MAX_PACKET_BYTES),
-        0x01, 0x00, 0x00,
+        0x09,
+        USB_DESC_TYPE_ENDPOINT,
+        UAC_AS_IN_EP,
+        0x09,
+        LOBYTE(UAC_AS_MAX_PACKET_BYTES),
+        HIBYTE(UAC_AS_MAX_PACKET_BYTES),
+        0x01,
+        0x00,
+        0x00,
 
         /* Class-specific AS endpoint descriptor */
-        0x07, 0x25, 0x01, 0x00, 0x00, 0x00, 0x00,
+        0x07,
+        0x25,
+        0x01,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
 };
 
 /* Other-speed descriptor (HS-capable device reporting FS config). Generated on
@@ -167,7 +362,7 @@ static uint8_t USBD_Composite_Setup(USBD_HandleTypeDef *pdev, USBD_SetupReqTyped
 static uint8_t USBD_Composite_EP0_RxReady(USBD_HandleTypeDef *pdev);
 static uint8_t USBD_Composite_DataIn(USBD_HandleTypeDef *pdev, uint8_t epnum);
 static uint8_t USBD_Composite_DataOut(USBD_HandleTypeDef *pdev, uint8_t epnum);
-static void USBD_Composite_SOF(USBD_HandleTypeDef *pdev);
+static uint8_t USBD_Composite_SOF(USBD_HandleTypeDef *pdev);
 static uint8_t *USBD_Composite_GetFSCfgDesc(uint16_t *length);
 static uint8_t *USBD_Composite_GetHSCfgDesc(uint16_t *length);
 static uint8_t *USBD_Composite_GetOtherSpeedCfgDesc(uint16_t *length);
@@ -284,9 +479,10 @@ static uint8_t USBD_Composite_DataOut(USBD_HandleTypeDef *pdev, uint8_t epnum)
     return USBD_FAIL;
 }
 
-static void USBD_Composite_SOF(USBD_HandleTypeDef *pdev)
+static uint8_t USBD_Composite_SOF(USBD_HandleTypeDef *pdev)
 {
     usbd_uac_sof(pdev);
+    return USBD_OK;
 }
 
 static uint8_t *USBD_Composite_GetFSCfgDesc(uint16_t *length)

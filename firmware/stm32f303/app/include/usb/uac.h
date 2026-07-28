@@ -39,7 +39,7 @@ uint8_t usbd_uac_class_deinit(USBD_HandleTypeDef *pdev);
 uint8_t usbd_uac_setup(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef *req);
 uint8_t usbd_uac_data_in(USBD_HandleTypeDef *pdev, uint8_t epnum);
 uint8_t usbd_uac_data_out(USBD_HandleTypeDef *pdev, uint8_t epnum);
-void usbd_uac_sof(USBD_HandleTypeDef *pdev);
+uint8_t usbd_uac_sof(USBD_HandleTypeDef *pdev);
 
 bool usbd_uac_owns_ep(uint8_t epnum);
 bool usbd_uac_owns_iface(uint8_t iface);

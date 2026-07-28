@@ -42,11 +42,11 @@ typedef struct
 typedef struct
 {
     EffectType effect;
-    const char *key;  // CLI key, e.g. "overdrive.gain"
-    size_t offset;    // byte offset of the value within EffectsParams
+    const char *key; // CLI key, e.g. "overdrive.gain"
+    size_t offset;   // byte offset of the value within EffectsParams
     size_t min;
     size_t max;
-    int pot;          // pot index that drives this param, or -1 for CLI-only
+    int pot; // pot index that drives this param, or -1 for CLI-only
 } EffectParamMeta;
 
 const EffectParamMeta *effect_params_meta_find(const char *key);
