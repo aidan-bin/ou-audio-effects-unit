@@ -27,7 +27,7 @@
 #include "usbd_cdc_if.h"
 
 /* USER CODE BEGIN Includes */
-#include "usb_cdc_dual_init.h"
+#include "usb/device_init.h"
 /* USER CODE END Includes */
 
 /* USER CODE BEGIN PV */
@@ -64,7 +64,7 @@ USBD_HandleTypeDef hUsbDeviceFS;
 void MX_USB_DEVICE_Init(void)
 {
   /* USER CODE BEGIN USB_DEVICE_Init_PreTreatment */
-  usb_cdc_dual_init();
+  usbd_device_init();
   return;
   /* USER CODE END USB_DEVICE_Init_PreTreatment */
 

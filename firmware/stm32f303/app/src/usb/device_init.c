@@ -1,8 +1,9 @@
-#include "usb_cdc_dual_init.h"
+#include "usb/device_init.h"
 
+#include "usb/cdc_cli.h"
+#include "usb/composite.h"
 #include "usb_device.h"
 #include "usbd_core.h"
-#include "usbd_cdc_dual.h"
 #include "usbd_desc.h"
 
 /* String descriptor functions from CubeMX-generated usbd_desc.c */
@@ -23,12 +24,11 @@ extern uint8_t *USBD_FS_InterfaceStrDescriptor(USBD_SpeedTypeDef speed,
 /* Dual CDC class handle (declared in usb_device.c) */
 extern USBD_HandleTypeDef hUsbDeviceFS;
 
-/* Dual CDC interface callbacks (defined in main.c) */
+/* CDC0 (CLI) interface callbacks (defined in main.c) */
 extern USBD_CDC_ItfTypeDef USBD_Interface_fops_FS_CLI;
-extern USBD_CDC_ItfTypeDef USBD_Interface_fops_FS_Audio;
 
 /* ---------------------------------------------------------------- */
-/* Dual CDC device descriptor (IAD composite device)                */
+/* Composite device descriptor (IAD)                                */
 /* ---------------------------------------------------------------- */
 __ALIGN_BEGIN static uint8_t USBD_DualCDC_DeviceDesc[USB_LEN_DEV_DESC] __ALIGN_END = {
     0x12,                 /* bLength */
@@ -69,19 +69,18 @@ static USBD_DescriptorsTypeDef DualCDC_Desc = {
 };
 // NOLINTEND(readability-identifier-naming)
 
-void usb_cdc_dual_init(void)
+void usbd_device_init(void)
 {
     if (USBD_Init(&hUsbDeviceFS, &DualCDC_Desc, DEVICE_FS) != USBD_OK)
     {
         Error_Handler();
     }
-    if (USBD_RegisterClass(&hUsbDeviceFS, &USBD_CDC_Dual) != USBD_OK)
+    if (USBD_RegisterClass(&hUsbDeviceFS, &USBD_Composite) != USBD_OK)
     {
         Error_Handler();
     }
-    if (USBD_CDC_Dual_RegisterInterface(&hUsbDeviceFS,
-                                        &USBD_Interface_fops_FS_CLI,
-                                        &USBD_Interface_fops_FS_Audio) != USBD_OK)
+    if (USBD_CDC_CLI_RegisterInterface(&hUsbDeviceFS,
+                                       &USBD_Interface_fops_FS_CLI) != USBD_OK)
     {
         Error_Handler();
     }

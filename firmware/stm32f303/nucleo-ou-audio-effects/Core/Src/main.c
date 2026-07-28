@@ -37,8 +37,9 @@
 #include "effects_pipeline.h"
 #include "effects_task.h"
 #include "test_vector_source.h"
-#include "usb_audio_stream.h"
-#include "usbd_cdc_dual.h"
+#include "usb/audio_stream.h"
+#include "usb/cdc_cli.h"
+#include "usb/uac.h"
 
 #include "i2c_handler.h"
 #include "i2c_task_support.h"
@@ -449,20 +450,30 @@ static bool effects_task_replace_input_for_testing(uint16_t *buf, size_t count, 
     }
 
     static bool dma_redirected = false;
+    static uint32_t consecutive_dma_failures = 0U;
 
     if ((!status.enabled || status.vector != 5U) && dma_redirected)
     {
         if (HAL_ADC_Stop_DMA(&hadc3) != HAL_OK)
         {
-            (void)log_write(LOG_LEVEL_WARN, "adc dma restore: stop failed");
+            if (consecutive_dma_failures % EFFECTS_RUNTIME_LOG_EVERY_FAILURES == 0U)
+            {
+                (void)log_write(LOG_LEVEL_WARN, "adc dma restore: stop failed");
+            }
+            consecutive_dma_failures++;
             return false;
         }
         if (HAL_ADC_Start_DMA(&hadc3, (uint32_t *)adc_buf, ADC_BUF_LEN) != HAL_OK)
         {
-            (void)log_write(LOG_LEVEL_WARN, "adc dma restore: start failed, retrying");
+            if (consecutive_dma_failures % EFFECTS_RUNTIME_LOG_EVERY_FAILURES == 0U)
+            {
+                (void)log_write(LOG_LEVEL_WARN, "adc dma restore: start failed, retrying");
+            }
+            consecutive_dma_failures++;
             return false;
         }
         dma_redirected = false;
+        consecutive_dma_failures = 0U;
     }
 
     if (!status.enabled)
@@ -477,27 +488,30 @@ static bool effects_task_replace_input_for_testing(uint16_t *buf, size_t count, 
             static uint16_t discard[ADC_BUF_LEN];
             if (HAL_ADC_Stop_DMA(&hadc3) != HAL_OK)
             {
-                (void)log_write(LOG_LEVEL_WARN, "adc dma redirect: stop failed");
+                if (consecutive_dma_failures % EFFECTS_RUNTIME_LOG_EVERY_FAILURES == 0U)
+                {
+                    (void)log_write(LOG_LEVEL_WARN, "adc dma redirect: stop failed");
+                }
+                consecutive_dma_failures++;
                 return false;
             }
             if (HAL_ADC_Start_DMA(&hadc3, (uint32_t *)discard, ADC_BUF_LEN) != HAL_OK)
             {
-                (void)log_write(LOG_LEVEL_WARN, "adc dma redirect: start failed, retrying");
+                if (consecutive_dma_failures % EFFECTS_RUNTIME_LOG_EVERY_FAILURES == 0U)
+                {
+                    (void)log_write(LOG_LEVEL_WARN, "adc dma redirect: start failed, retrying");
+                }
+                consecutive_dma_failures++;
                 return false;
             }
             dma_redirected = true;
+            consecutive_dma_failures = 0U;
         }
         for (size_t i = 0; i < count; i++)
         {
             int16_t s;
-            if (usb_audio_stream_pop_sample(&audio_stream, &s))
-            {
-                buf[i] = usb_i16_to_sample(s);
-            }
-            else
-            {
-                buf[i] = (uint16_t)X_AXIS;
-            }
+            (void)usb_audio_stream_pop_sample_or_hold(&audio_stream, &s);
+            buf[i] = usb_i16_to_sample(s);
         }
         return true;
     }
@@ -803,6 +817,7 @@ static void init_cli_service_adapter(void)
     cli_usb_rx_count = 0;
 
     usb_audio_stream_init(&audio_stream);
+    usbd_uac_register_stream(&audio_stream);
 }
 
 static void init_effects_defaults(void)
@@ -978,70 +993,6 @@ void startCliTask(void const *argument)
 
         cli_uart_recover_rx_errors();
         cli_session_poll(&cli_session);
-
-        {
-            static int16_t audio_tx_staging[200];
-            static size_t audio_tx_staging_len;
-            static uint32_t audio_tx_staging_busy_ticks;
-            static bool was_output_active;
-            static uint32_t stuck_count;
-
-            if (audio_stream.output_active)
-            {
-                if (!was_output_active)
-                {
-                    stuck_count = 0U;
-                }
-                was_output_active = true;
-
-                if (audio_tx_staging_len == 0U &&
-                    usb_audio_stream_out_available(&audio_stream) > 0U)
-                {
-                    audio_tx_staging_len = usb_audio_stream_pop_samples(
-                        &audio_stream, audio_tx_staging, 200);
-                }
-
-                if (audio_tx_staging_len > 0U)
-                {
-                    const uint8_t result = USBD_CDC_Dual_Transmit_FS_Audio(
-                        (uint8_t *)audio_tx_staging,
-                        (uint16_t)(audio_tx_staging_len * 2U));
-                    if (result != USBD_BUSY)
-                    {
-                        audio_tx_staging_busy_ticks = 0U;
-                        stuck_count = 0U;
-                        if (result != USBD_OK)
-                        {
-                            PANIC_USB("audio tx fail");
-                        }
-                        audio_tx_staging_len = 0U;
-                    }
-                    else
-                    {
-                        audio_tx_staging_busy_ticks++;
-                        if (audio_tx_staging_busy_ticks >= 2000U)
-                        {
-                            (void)log_write(LOG_LEVEL_WARN, "audio tx stuck, disabling output");
-                            audio_stream.output_active = false;
-                            audio_tx_staging_len = 0U;
-                            audio_tx_staging_busy_ticks = 0U;
-                            was_output_active = false;
-                            stuck_count++;
-                            if (stuck_count >= 3U)
-                            {
-                                NVIC_SystemReset();
-                            }
-                        }
-                    }
-                }
-            }
-            else if (was_output_active)
-            {
-                was_output_active = false;
-                audio_tx_staging_len = 0U;
-                audio_tx_staging_busy_ticks = 0U;
-            }
-        }
 
 #ifdef ENABLE_DIAGNOSTICS
         /* in_ring drop reporting deferred from ISR — PANIC_USB calls
@@ -1419,7 +1370,7 @@ static bool cli_dual_write(const char *text, void *context)
     for (uint8_t attempts = 0; attempts < 10; attempts++)
     {
         const uint8_t result =
-            USBD_CDC_Dual_Transmit_FS_CLI((uint8_t *)text, (uint16_t)length);
+            USBD_CDC_CLI_Transmit_FS((uint8_t *)text, (uint16_t)length);
         if (result == USBD_OK)
         {
             usb_ok = true;
@@ -1450,8 +1401,8 @@ static uint8_t UserTxBufferFS_CLI[APP_TX_DATA_SIZE];
 
 static int8_t CDC_CLI_Init(void)
 {
-    USBD_CDC_Dual_SetRxBuffer_CLI(UserRxBufferFS_CLI);
-    USBD_CDC_Dual_SetTxBuffer_CLI(UserTxBufferFS_CLI, 0);
+    USBD_CDC_CLI_SetRxBuffer(UserRxBufferFS_CLI);
+    USBD_CDC_CLI_SetTxBuffer(UserTxBufferFS_CLI, 0);
     PANIC_USB("CDC0 cli up");
     return 0;
 }
@@ -1472,8 +1423,8 @@ static int8_t CDC_CLI_Control(uint8_t cmd, uint8_t *pbuf, uint16_t length)
 
 static int8_t CDC_CLI_Receive(uint8_t *buf, uint32_t *len)
 {
-    USBD_CDC_Dual_SetRxBuffer_CLI(buf);
-    USBD_CDC_Dual_ReceivePacket_CLI();
+    USBD_CDC_CLI_SetRxBuffer(buf);
+    USBD_CDC_CLI_ReceivePacket();
 
     if (buf != NULL && len != NULL)
     {
@@ -1501,56 +1452,6 @@ USBD_CDC_ItfTypeDef USBD_Interface_fops_FS_CLI = {
     CDC_CLI_DeInit,
     CDC_CLI_Control,
     CDC_CLI_Receive,
-};
-
-/*
- * CDC1 (Audio) interface callbacks
- */
-
-static uint8_t UserRxBufferFS_Audio[APP_RX_DATA_SIZE];
-static uint8_t UserTxBufferFS_Audio[APP_TX_DATA_SIZE];
-
-static int8_t CDC_Audio_Init(void)
-{
-    USBD_CDC_Dual_SetRxBuffer_Audio(UserRxBufferFS_Audio);
-    USBD_CDC_Dual_SetTxBuffer_Audio(UserTxBufferFS_Audio, 0);
-    PANIC_USB("CDC1 audio up");
-    return 0;
-}
-
-static int8_t CDC_Audio_DeInit(void)
-{
-    PANIC_USB("CDC1 audio down");
-    return 0;
-}
-
-static int8_t CDC_Audio_Control(uint8_t cmd, uint8_t *pbuf, uint16_t length)
-{
-    (void)cmd;
-    (void)pbuf;
-    (void)length;
-    return 0;
-}
-
-static int8_t CDC_Audio_Receive(uint8_t *buf, uint32_t *len)
-{
-    USBD_CDC_Dual_SetRxBuffer_Audio(buf);
-    USBD_CDC_Dual_ReceivePacket_Audio();
-
-    if (buf != NULL && len != NULL && *len >= 2U)
-    {
-        usb_audio_stream_push_bytes(&audio_stream, buf, *len);
-        /* in_ring drops deferred to CLI task loop; HAL_UART_Transmit
-         * must not be called from ISR. */
-    }
-    return 0;
-}
-
-USBD_CDC_ItfTypeDef USBD_Interface_fops_FS_Audio = {
-    CDC_Audio_Init,
-    CDC_Audio_DeInit,
-    CDC_Audio_Control,
-    CDC_Audio_Receive,
 };
 
 static bool cli_usb_rx_queue_pop_byte(uint8_t *byte_out)

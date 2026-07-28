@@ -37,6 +37,7 @@ set(OU_FIRMWARE_APP_STANDARD_TESTS
     rom_handler
     test_vector_source
     usb_audio_stream
+    usbd_uac_feedback
 )
 
 function(ou_link_math_library target_name)
@@ -88,7 +89,8 @@ set(OU_FIRMWARE_APP_SOURCES
     firmware/stm32f303/app/src/rom_handler.c
     firmware/stm32f303/app/src/switch_task.c
     firmware/stm32f303/app/src/test_vector_source.c
-    firmware/stm32f303/app/src/usb_audio_stream.c
+    firmware/stm32f303/app/src/usb/audio_stream.c
+    firmware/stm32f303/app/src/usb/uac_feedback.c
     firmware/stm32f303/app/src/sysinfo.c
 )
 

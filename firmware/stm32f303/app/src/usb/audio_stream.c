@@ -1,4 +1,4 @@
-#include "usb_audio_stream.h"
+#include "usb/audio_stream.h"
 
 #include <string.h>
 
@@ -22,6 +22,7 @@ void usb_audio_stream_reset(UsbAudioStream *stream)
     /* Callers should hold taskENTER_CRITICAL (or equivalent) to prevent races with ISR writes */
     stream->in_head = 0U;
     stream->in_tail = 0U;
+    stream->in_last_sample = 0;
     stream->out_head = 0U;
     stream->out_tail = 0U;
     stream->in_dropped = 0U;
@@ -90,8 +91,29 @@ bool usb_audio_stream_pop_sample(UsbAudioStream *stream, int16_t *sample_out)
         return false;
     }
 
-    return read_from_ring(stream->in_ring, &stream->in_head,
-                          &stream->in_tail, sample_out, USB_AUDIO_RING_SIZE);
+    bool popped = read_from_ring(stream->in_ring, &stream->in_head,
+                                 &stream->in_tail, sample_out, USB_AUDIO_RING_SIZE);
+    if (popped)
+    {
+        stream->in_last_sample = *sample_out;
+    }
+    return popped;
+}
+
+bool usb_audio_stream_pop_sample_or_hold(UsbAudioStream *stream, int16_t *sample_out)
+{
+    if (stream == NULL || sample_out == NULL)
+    {
+        return false;
+    }
+
+    if (usb_audio_stream_pop_sample(stream, sample_out))
+    {
+        return true;
+    }
+
+    *sample_out = stream->in_last_sample;
+    return false;
 }
 
 bool usb_audio_stream_push_sample(UsbAudioStream *stream, int16_t sample)
@@ -118,6 +140,17 @@ size_t usb_audio_stream_out_available(const UsbAudioStream *stream)
     }
 
     return ring_available(&stream->out_head, &stream->out_tail,
+                          USB_AUDIO_RING_SIZE);
+}
+
+size_t usb_audio_stream_in_available(const UsbAudioStream *stream)
+{
+    if (stream == NULL)
+    {
+        return 0U;
+    }
+
+    return ring_available(&stream->in_head, &stream->in_tail,
                           USB_AUDIO_RING_SIZE);
 }
 

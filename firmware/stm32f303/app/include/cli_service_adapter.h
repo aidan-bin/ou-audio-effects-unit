@@ -11,7 +11,7 @@
 
 #include "cli_core.h"
 #include "effects_model.h"
-#include "usb_audio_stream.h"
+#include "usb/audio_stream.h"
 
 #define CLI_POT_COUNT 4
 #define CLI_SWITCH_COUNT 3

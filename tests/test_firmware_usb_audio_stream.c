@@ -3,8 +3,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#include "usb_audio_stream.h"
-
+#include "usb/audio_stream.h"
 #include "harness/expect.h"
 
 int failures = 0;
@@ -69,6 +68,22 @@ static void test_partial_drain(void)
     expect_eq_size(3, usb_audio_stream_pop_samples(&stream, out, 3), "pop only requested count");
     expect_eq_i16(100, out[0], "partial drain keeps FIFO order");
     expect_eq_size(2, usb_audio_stream_out_available(&stream), "two samples remain after partial drain");
+}
+
+static void test_in_available_tracks_push_and_pop(void)
+{
+    UsbAudioStream stream;
+    usb_audio_stream_init(&stream);
+
+    expect_eq_size(0, usb_audio_stream_in_available(&stream), "in_ring starts empty");
+
+    uint8_t bytes[6] = {0x01, 0x00, 0x02, 0x00, 0x03, 0x00};
+    usb_audio_stream_push_bytes(&stream, bytes, sizeof(bytes));
+    expect_eq_size(3, usb_audio_stream_in_available(&stream), "in_available reflects pushed bytes");
+
+    int16_t sample = 0;
+    expect_true(usb_audio_stream_pop_sample(&stream, &sample), "pop succeeds");
+    expect_eq_size(2, usb_audio_stream_in_available(&stream), "in_available decreases after pop");
 }
 
 static void test_wraparound(void)
@@ -404,13 +419,46 @@ static void test_throughput_stress(void)
     expect_eq_size(total_samples, total_popped + drops, "throughput: total pushed = popped + dropped");
 }
 
+static void test_pop_sample_or_hold_returns_last_on_underrun(void)
+{
+    UsbAudioStream stream;
+    usb_audio_stream_init(&stream);
+
+    int16_t sample = -1;
+    expect_false(usb_audio_stream_pop_sample_or_hold(&stream, &sample),
+                 "hold on empty ring before any sample seen");
+    expect_eq_i16(0, sample, "holds zero before any sample popped");
+
+    uint8_t bytes[4] = {0x39, 0x30, 0x00, 0x00}; /* 12345, 0 */
+    usb_audio_stream_push_bytes(&stream, bytes, sizeof(bytes));
+
+    expect_true(usb_audio_stream_pop_sample_or_hold(&stream, &sample), "pops first sample");
+    expect_eq_i16(12345, sample, "first sample value");
+    expect_true(usb_audio_stream_pop_sample_or_hold(&stream, &sample), "pops second sample");
+    expect_eq_i16(0, sample, "second sample value");
+
+    expect_false(usb_audio_stream_pop_sample_or_hold(&stream, &sample),
+                 "underrun after ring drained");
+    expect_eq_i16(0, sample, "holds last popped sample (0) on underrun");
+
+    usb_audio_stream_push_bytes(&stream, bytes, 2); /* just 12345 */
+    expect_true(usb_audio_stream_pop_sample_or_hold(&stream, &sample), "pops fresh sample");
+    expect_eq_i16(12345, sample, "fresh sample value");
+
+    expect_false(usb_audio_stream_pop_sample_or_hold(&stream, &sample),
+                 "underrun again holds most recent sample");
+    expect_eq_i16(12345, sample, "holds updated last sample (12345) on underrun");
+}
+
 static void test_null_safe(void)
 {
     int16_t sample = 0;
     expect_false(usb_audio_stream_push_sample(NULL, 0), "push_sample NULL safe");
     expect_false(usb_audio_stream_pop_sample(NULL, &sample), "pop_sample NULL safe");
     expect_eq_size(0, usb_audio_stream_pop_samples(NULL, &sample, 1), "pop_samples NULL safe");
+    expect_false(usb_audio_stream_pop_sample_or_hold(NULL, &sample), "pop_sample_or_hold NULL safe");
     expect_eq_size(0, usb_audio_stream_out_available(NULL), "out_available NULL safe");
+    expect_eq_size(0, usb_audio_stream_in_available(NULL), "in_available NULL safe");
     expect_eq_u32(0, usb_audio_stream_out_dropped(NULL), "out_dropped NULL safe");
     expect_eq_u32(0, usb_audio_stream_in_dropped(NULL), "in_dropped NULL safe");
     // Does not crash
@@ -423,10 +471,12 @@ int main(void)
     test_push_pop_roundtrip();
     test_pop_empty_returns_zero();
     test_partial_drain();
+    test_in_available_tracks_push_and_pop();
     test_wraparound();
     test_overflow_drops_and_counts();
     test_push_bytes_little_endian();
     test_push_bytes_ignores_odd_trailing();
+    test_pop_sample_or_hold_returns_last_on_underrun();
     test_in_ring_overflow_drops();
     test_push_bytes_cdc_packet_size();
     test_interleaved_isr_push_task_pop();

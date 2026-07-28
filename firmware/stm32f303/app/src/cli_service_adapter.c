@@ -1,11 +1,11 @@
 #include "cli_service_adapter.h"
 
+#include "usb/audio_stream.h"
+
 #include <limits.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
-
-#include "usb_audio_stream.h"
 
 #define TEST_FREQ_MIN_HZ 20U
 #define TEST_DEFAULT_FREQ_HZ 1000

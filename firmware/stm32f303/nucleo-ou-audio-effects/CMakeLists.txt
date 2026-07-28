@@ -73,9 +73,12 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ../app/src/effects_pipeline.c
     ../app/src/effects_task.c
     ../app/src/test_vector_source.c
-    ../app/src/usb_audio_stream.c
-    ../app/src/usb_cdc_dual_init.c
-    ../app/src/usbd_cdc_dual.c
+    ../app/src/usb/audio_stream.c
+    ../app/src/usb/device_init.c
+    ../app/src/usb/cdc_cli.c
+    ../app/src/usb/composite.c
+    ../app/src/usb/uac.c
+    ../app/src/usb/uac_feedback.c
     ../app/src/sysinfo.c
     ../app/src/i2c_handler.c
     ../app/src/i2c_task_support.c
