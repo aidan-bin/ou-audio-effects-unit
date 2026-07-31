@@ -338,8 +338,8 @@ USBD_StatusTypeDef USBD_LL_Init(USBD_HandleTypeDef *pdev)
   HAL_PCDEx_PMAConfig((PCD_HandleTypeDef *)pdev->pData, 0x01, PCD_SNG_BUF, 0xD8);
   HAL_PCDEx_PMAConfig((PCD_HandleTypeDef *)pdev->pData, 0x82, PCD_SNG_BUF, 0x118);
   HAL_PCDEx_PMAConfig((PCD_HandleTypeDef *)pdev->pData, 0x83, PCD_SNG_BUF, 0x120);
-  HAL_PCDEx_PMAConfig((PCD_HandleTypeDef *)pdev->pData, 0x03, PCD_SNG_BUF, 0x160);
-  HAL_PCDEx_PMAConfig((PCD_HandleTypeDef *)pdev->pData, 0x84, PCD_SNG_BUF, 0x1A0);
+  HAL_PCDEx_PMAConfig((PCD_HandleTypeDef *)pdev->pData, 0x03, PCD_SNG_BUF, 0x174);
+  HAL_PCDEx_PMAConfig((PCD_HandleTypeDef *)pdev->pData, 0x84, PCD_SNG_BUF, 0x1C8);
   /* USER CODE END EndPoint_Configuration_CDC */
   return USBD_OK;
 }
