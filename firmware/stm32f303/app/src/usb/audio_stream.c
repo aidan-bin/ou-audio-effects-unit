@@ -112,7 +112,12 @@ bool usb_audio_stream_pop_sample_or_hold(UsbAudioStream *stream, int16_t *sample
         return true;
     }
 
-    *sample_out = stream->in_last_sample;
+    /* Ring is empty -- return silence rather than the last real sample.
+     * Repeating stale samples turns momentary starvation into a strong DC
+     * excursion that speakers reproduce as a loud beep at the effects-frame
+     * rate (~100 Hz). Silence during starvation is far less audible. */
+    *sample_out = 0;
+    stream->effects_zoh_holds++;
     return false;
 }
 
@@ -198,6 +203,12 @@ void usb_audio_stream_push_bytes(UsbAudioStream *stream,
             stream->in_dropped++;
         }
     }
+
+    uint32_t fill = (uint32_t)usb_audio_stream_in_available(stream);
+    if (fill > stream->in_ring_fill_peak)
+    {
+        stream->in_ring_fill_peak = fill;
+    }
 }
 
 uint32_t usb_audio_stream_out_dropped(const UsbAudioStream *stream)
@@ -208,4 +219,52 @@ uint32_t usb_audio_stream_out_dropped(const UsbAudioStream *stream)
 uint32_t usb_audio_stream_in_dropped(const UsbAudioStream *stream)
 {
     return (stream == NULL) ? 0U : stream->in_dropped;
+}
+
+void usb_audio_stream_note_as_out_packet(UsbAudioStream *stream)
+{
+    if (stream != NULL)
+    {
+        stream->as_out_packets++;
+    }
+}
+
+void usb_audio_stream_note_effects_frame(UsbAudioStream *stream)
+{
+    if (stream != NULL)
+    {
+        stream->effects_frames++;
+    }
+}
+
+void usb_audio_stream_reset_diag(UsbAudioStream *stream)
+{
+    if (stream == NULL)
+    {
+        return;
+    }
+    stream->as_out_packets = 0U;
+    stream->in_ring_fill_peak = 0U;
+    stream->effects_zoh_holds = 0U;
+    stream->effects_frames = 0U;
+}
+
+uint32_t usb_audio_stream_as_out_packets(const UsbAudioStream *stream)
+{
+    return (stream == NULL) ? 0U : stream->as_out_packets;
+}
+
+uint32_t usb_audio_stream_in_ring_fill_peak(const UsbAudioStream *stream)
+{
+    return (stream == NULL) ? 0U : stream->in_ring_fill_peak;
+}
+
+uint32_t usb_audio_stream_effects_zoh_holds(const UsbAudioStream *stream)
+{
+    return (stream == NULL) ? 0U : stream->effects_zoh_holds;
+}
+
+uint32_t usb_audio_stream_effects_frames(const UsbAudioStream *stream)
+{
+    return (stream == NULL) ? 0U : stream->effects_frames;
 }

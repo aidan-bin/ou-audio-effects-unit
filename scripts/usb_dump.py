@@ -52,7 +52,9 @@ class DeviceInfo:
 def _ioreg_device(device_name: str) -> str:
     result = subprocess.run(
         ["ioreg", "-p", "IOUSB", "-w0", "-l", "-r", "-n", device_name],
-        capture_output=True, text=True, timeout=10,
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
     return result.stdout
 
@@ -60,7 +62,9 @@ def _ioreg_device(device_name: str) -> str:
 def _ioreg_interfaces() -> str:
     result = subprocess.run(
         ["ioreg", "-w0", "-l", "-r", "-c", "IOUSBHostInterface"],
-        capture_output=True, text=True, timeout=10,
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
     return result.stdout
 
@@ -175,7 +179,9 @@ def _class_name(cls: int) -> str:
 
 def _subcls_name(cls: int, subcls: int) -> str:
     if cls == 0x01:
-        return {1: "Audio Control", 2: "Audio Streaming", 3: "MIDI Streaming"}.get(subcls, f"0x{subcls:02X}")
+        return {1: "Audio Control", 2: "Audio Streaming", 3: "MIDI Streaming"}.get(
+            subcls, f"0x{subcls:02X}"
+        )
     if cls == 0x02:
         return {1: "Direct Line", 2: "ACM"}.get(subcls, f"0x{subcls:02X}")
     if cls == 0xEF:
@@ -209,9 +215,9 @@ def _fmt_device(info: DeviceInfo) -> list[str]:
         f"    idVendor            0x{info.vid:04X}",
         f"    idProduct           0x{info.pid:04X}",
         f"    bcdDevice           {dev_ver}",
-        f"    iManufacturer       \"{info.manufacturer}\"",
-        f"    iProduct            \"{info.product}\"",
-        f"    iSerialNumber       \"{info.serial}\"",
+        f'    iManufacturer       "{info.manufacturer}"',
+        f'    iProduct            "{info.product}"',
+        f'    iSerialNumber       "{info.serial}"',
         f"    bNumConfigurations  {info.num_configs}",
         f"    Speed               {info.speed}",
     ]
@@ -260,12 +266,12 @@ def _fmt_interfaces(ifaces: list[InterfaceInfo]) -> list[str]:
 
 def _fmt_endpoints() -> list[str]:
     eps = [
-        ("0x01", "OUT", "Bulk",       "64", "CLI data            (EP1)"),
-        ("0x81", "IN",  "Bulk",       "64", "CLI data            (EP1)"),
-        ("0x82", "IN",  "Interrupt",  "8",  "CLI cmd status      (EP2)"),
-        ("0x03", "OUT", "Isoc",       "84", "AS-OUT data         (EP3)"),
-        ("0x83", "IN",  "Isoc",       "84", "AS-IN data          (EP3)"),
-        ("0x84", "IN",  "Isoc",       "3",  "AS-OUT feedback     (EP4, 32 ms)"),
+        ("0x01", "OUT", "Bulk", "64", "CLI data            (EP1)"),
+        ("0x81", "IN", "Bulk", "64", "CLI data            (EP1)"),
+        ("0x82", "IN", "Interrupt", "8", "CLI cmd status      (EP2)"),
+        ("0x03", "OUT", "Isoc", "84", "AS-OUT data         (EP3)"),
+        ("0x83", "IN", "Isoc", "84", "AS-IN data          (EP3)"),
+        ("0x84", "IN", "Isoc", "3", "AS-OUT feedback     (EP4, 32 ms)"),
     ]
     lines = ["  ENDPOINT SUMMARY (full-speed, max packet size)"]
     for addr, dir_, typ, mps, desc in eps:
@@ -279,9 +285,9 @@ def _fmt_endpoints() -> list[str]:
 def _fmt_strings(info: DeviceInfo) -> list[str]:
     return [
         "  STRING DESCRIPTORS (USB 2.0, langid = English)",
-        f"    Manufacturer    \"{info.manufacturer}\"",
-        f"    Product         \"{info.product}\"",
-        f"    Serial          \"{info.serial}\"",
+        f'    Manufacturer    "{info.manufacturer}"',
+        f'    Product         "{info.product}"',
+        f'    Serial          "{info.serial}"',
         '    Configuration   "CLI + UAC1 Audio"',
         '    Interface 0-1   "CDC CLI"',
     ]
@@ -306,10 +312,17 @@ def main() -> None:
     if use_json:
         device_fields = asdict(info)
         del device_fields["interfaces"]
-        print(json.dumps({
-            "device": device_fields,
-            "interfaces": [asdict(i) for i in sorted(info.interfaces, key=lambda x: x.iface_num)],
-        }, indent=2))
+        print(
+            json.dumps(
+                {
+                    "device": device_fields,
+                    "interfaces": [
+                        asdict(i) for i in sorted(info.interfaces, key=lambda x: x.iface_num)
+                    ],
+                },
+                indent=2,
+            )
+        )
         return
 
     header = f"  USB Descriptor Dump — {info.manufacturer} {info.product}"

@@ -875,6 +875,11 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     p.add_argument("-v", "--verbose", action="store_true")
     p.add_argument("--no-meter", action="store_true", help="disable the level meter")
     p.add_argument(
+        "--diag",
+        action="store_true",
+        help="reset device audio-diag counters before streaming and print them after",
+    )
+    p.add_argument(
         "--no-reset",
         action="store_true",
         help="skip automatic USB reset after streaming (default: auto-reset)",
@@ -995,9 +1000,16 @@ def _cmd_stream(args: argparse.Namespace) -> int:
             args.output,
             " (Ctrl-C to stop)" if live else "",
         )
+        if args.diag:
+            with suppress(Exception):
+                dev.cli.command("audio diag reset", timeout_s=0.3)
         with dev.usb_routing():
             engine.run(stop_event=stop, show_meter=not args.no_meter)
         streaming_ran = True
+        if args.diag:
+            with suppress(Exception):
+                for line in dev.cli.command("audio diag", timeout_s=0.5):
+                    log.info("diag: %s", line.strip())
         log.info("done")
     except ImportError:
         log.error(

@@ -330,16 +330,33 @@ USBD_StatusTypeDef USBD_LL_Init(USBD_HandleTypeDef *pdev)
   HAL_PCD_RegisterIsoInIncpltCallback(&hpcd_USB_FS, PCD_ISOINIncompleteCallback);
 #endif /* USE_HAL_PCD_REGISTER_CALLBACKS */
   /* USER CODE BEGIN EndPoint_Configuration */
-  HAL_PCDEx_PMAConfig((PCD_HandleTypeDef *)pdev->pData, 0x00, PCD_SNG_BUF, 0x18);
-  HAL_PCDEx_PMAConfig((PCD_HandleTypeDef *)pdev->pData, 0x80, PCD_SNG_BUF, 0x58);
+  /* PMA layout note: BTABLE lives at PMA offset 0, 8 bytes per EP slot. With
+   * 8 EPs supported that reserves PMA[0..0x3F]. CubeMX's default EP0 OUT at
+   * PMA 0x18 sits inside BTABLE[3..7] and is safe only when EPs 3+ are unused.
+   * Because we run UAC (EP3/EP4/EP5), every control-OUT DATA transaction that
+   * writes into EP0 OUT's buffer corrupts BTABLE's COUNT_RX/ADDR_RX for those
+   * endpoints, which then makes the HAL ISR overflow-read PMA into RAM,
+   * scribbling `usbd_uac_handle` and hard-faulting on the next isoc packet.
+   * Relocating all buffers past 0x3F protects BTABLE for every EP. */
+  HAL_PCDEx_PMAConfig((PCD_HandleTypeDef *)pdev->pData, 0x00, PCD_SNG_BUF, 0x40);
+  HAL_PCDEx_PMAConfig((PCD_HandleTypeDef *)pdev->pData, 0x80, PCD_SNG_BUF, 0x80);
   /* USER CODE END EndPoint_Configuration */
   /* USER CODE BEGIN EndPoint_Configuration_CDC */
-  HAL_PCDEx_PMAConfig((PCD_HandleTypeDef *)pdev->pData, 0x81, PCD_SNG_BUF, 0x98);
-  HAL_PCDEx_PMAConfig((PCD_HandleTypeDef *)pdev->pData, 0x01, PCD_SNG_BUF, 0xD8);
-  HAL_PCDEx_PMAConfig((PCD_HandleTypeDef *)pdev->pData, 0x82, PCD_SNG_BUF, 0x118);
-  HAL_PCDEx_PMAConfig((PCD_HandleTypeDef *)pdev->pData, 0x83, PCD_SNG_BUF, 0x120);
-  HAL_PCDEx_PMAConfig((PCD_HandleTypeDef *)pdev->pData, 0x03, PCD_SNG_BUF, 0x174);
-  HAL_PCDEx_PMAConfig((PCD_HandleTypeDef *)pdev->pData, 0x84, PCD_SNG_BUF, 0x1C8);
+  HAL_PCDEx_PMAConfig((PCD_HandleTypeDef *)pdev->pData, 0x81, PCD_SNG_BUF, 0xC0);
+  HAL_PCDEx_PMAConfig((PCD_HandleTypeDef *)pdev->pData, 0x01, PCD_SNG_BUF, 0x100);
+  HAL_PCDEx_PMAConfig((PCD_HandleTypeDef *)pdev->pData, 0x82, PCD_SNG_BUF, 0x140);
+  /* AS-IN (0x83) and AS-OUT (0x05) each need 100 bytes at 48000 Hz mono/16-bit
+   * (48 samples/ms * 2 bytes + slack). Feedback endpoint (0x84) is unused but
+   * kept at a safe offset so any spurious IO doesn't stomp AS-OUT's buffer. */
+  /* AS-IN is isochronous: the peripheral flips DTOG_TX every frame and reads
+   * whichever of ADDR0_TX/ADDR1_TX that bit selects, so a single-buffered ISO
+   * IN endpoint transmits from an unconfigured descriptor on alternate frames.
+   * buf0 keeps the old 0x148 slot; buf1 sits above AS-OUT's buffer (which ends
+   * at 0x204) in otherwise unused PMA. */
+  HAL_PCDEx_PMAConfig((PCD_HandleTypeDef *)pdev->pData, 0x83, PCD_DBL_BUF, 0x02100148U);
+  HAL_PCDEx_PMAConfig((PCD_HandleTypeDef *)pdev->pData, 0x84, PCD_SNG_BUF, 0x1AC);
+  /* EP5 OUT (isoc AS-OUT): single-buffered for now. */
+  HAL_PCDEx_PMAConfig((PCD_HandleTypeDef *)pdev->pData, 0x05, PCD_SNG_BUF, 0x1B0);
   /* USER CODE END EndPoint_Configuration_CDC */
   return USBD_OK;
 }

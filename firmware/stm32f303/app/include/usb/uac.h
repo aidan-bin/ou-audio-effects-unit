@@ -18,7 +18,11 @@ struct UsbAudioStream;
 #define UAC_IFACE_AS_IN 4U
 
 #define UAC_AS_IN_EP 0x83U
-#define UAC_AS_OUT_EP 0x03U
+/* AS-OUT must live on a different EP number from AS-IN. On STM32F303 the
+ * double-buffered OUT mode reuses the ADDR_TX BTABLE slot as buf0, which is
+ * also used by any IN endpoint on the same EP number. Putting AS-OUT on EP5
+ * keeps EP3's ADDR_TX free for AS-IN. */
+#define UAC_AS_OUT_EP 0x05U
 #define UAC_FEEDBACK_EP 0x84U
 
 /* Must match compute_sample_rate_hz() (main.c): 48000000 / 1185 = 40506. */
@@ -43,5 +47,8 @@ uint8_t usbd_uac_sof(USBD_HandleTypeDef *pdev);
 
 bool usbd_uac_owns_ep(uint8_t epnum);
 bool usbd_uac_owns_iface(uint8_t iface);
+
+/* USB-side diagnostics live in usb/uac_diag.h (safe for host-test builds). */
+#include "usb/uac_diag.h"
 
 #endif /* USBD_UAC_H */

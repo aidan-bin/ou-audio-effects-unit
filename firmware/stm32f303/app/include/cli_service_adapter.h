@@ -12,6 +12,7 @@
 #include "cli_core.h"
 #include "effects_model.h"
 #include "usb/audio_stream.h"
+#include "usb/uac_diag.h"
 
 #define CLI_POT_COUNT 4
 #define CLI_SWITCH_COUNT 3
@@ -141,6 +142,15 @@ typedef struct
     uint32_t processing_slack_ms;
 
     UsbAudioStream *audio_stream;
+
+    /* Optional hooks for reading the USB-side (uac.c) diagnostic counters.
+     * Left NULL in host tests; bound from main.c on the target. */
+    void (*uac_get_diag)(UsbdUacDiag *out);
+    void (*uac_reset_diag)(void);
+    /* Optional hooks for reading cumulative ADC/DAC DMA callback totals.
+     * Left NULL in host tests; bound from main.c on the target. */
+    void (*hw_events_get)(uint32_t *adc_events, uint32_t *dac_events);
+    void (*hw_events_reset)(void);
 } CliServiceAdapter;
 
 void cli_service_adapter_init(CliServiceAdapter *context, EffectsState *state,
@@ -188,5 +198,13 @@ void cli_service_adapter_set_audio_info(CliServiceAdapter *context,
 
 void cli_service_adapter_set_audio_stream(CliServiceAdapter *context,
                                           UsbAudioStream *stream);
+
+void cli_service_adapter_bind_uac_diag(CliServiceAdapter *context,
+                                       void (*get_diag)(UsbdUacDiag *),
+                                       void (*reset_diag)(void));
+
+void cli_service_adapter_bind_hw_events(CliServiceAdapter *context,
+                                        void (*get_events)(uint32_t *, uint32_t *),
+                                        void (*reset_events)(void));
 
 #endif

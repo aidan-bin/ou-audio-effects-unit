@@ -1142,6 +1142,82 @@ static CliStatus handle_audio(char **tokens,
         return CLI_STATUS_OK;
     }
 
+    if (strcmp(tokens[1], "diag") == 0)
+    {
+        if (token_count == 3 && strcmp(tokens[2], "reset") == 0)
+        {
+            REQUIRE_SERVICE(services->audio_reset_diag);
+            return services->audio_reset_diag(services->context)
+                       ? CLI_STATUS_OK
+                       : CLI_STATUS_SERVICE_ERROR;
+        }
+        if (token_count != 2)
+        {
+            return CLI_STATUS_INVALID_ARGUMENTS;
+        }
+        REQUIRE_SERVICE(services->audio_get_diag);
+        CliAudioDiag diag = {0};
+        if (!services->audio_get_diag(&diag, services->context))
+        {
+            return CLI_STATUS_SERVICE_ERROR;
+        }
+        char line[224];
+        (void)snprintf(line, sizeof(line),
+                       "as_out_pkts=%lu in_ring_now=%lu in_ring_peak=%lu "
+                       "eff_frames=%lu eff_zoh=%lu\n",
+                       (unsigned long)diag.as_out_packets,
+                       (unsigned long)diag.in_ring_fill_current,
+                       (unsigned long)diag.in_ring_fill_peak,
+                       (unsigned long)diag.effects_frames,
+                       (unsigned long)diag.effects_zoh_holds);
+        if (!write_line(io, line))
+        {
+            return CLI_STATUS_SERVICE_ERROR;
+        }
+        (void)snprintf(line, sizeof(line),
+                       "uac_isr=%lu uac_push=%lu uac_bad=%lu uac_zero=%lu "
+                       "uac_over=%lu uac_sof=%lu uac_lastrx=%lu uac_repair=%lu "
+                       "as_out_active=%u as_in_active=%u "
+                       "salt_out=%u/%u salt_in=%u/%u\n",
+                       (unsigned long)diag.uac_isr_total,
+                       (unsigned long)diag.uac_pushed,
+                       (unsigned long)diag.uac_stream_bad,
+                       (unsigned long)diag.uac_size_zero,
+                       (unsigned long)diag.uac_size_oversz,
+                       (unsigned long)diag.uac_sof_count,
+                       (unsigned long)diag.uac_last_received,
+                       (unsigned long)diag.uac_stream_repair_count,
+                       (unsigned)(diag.uac_as_out_active ? 1U : 0U),
+                       (unsigned)(diag.uac_as_in_active ? 1U : 0U),
+                       (unsigned)diag.uac_setalt_out_1,
+                       (unsigned)diag.uac_setalt_out_0,
+                       (unsigned)diag.uac_setalt_in_1,
+                       (unsigned)diag.uac_setalt_in_0);
+        if (!write_line(io, line))
+        {
+            return CLI_STATUS_SERVICE_ERROR;
+        }
+        (void)snprintf(line, sizeof(line),
+                       "as_in_tx=%lu as_in_tx_err=%lu as_in_datain=%lu "
+                       "as_in_sof=%lu as_in_long=%lu as_in_under=%lu\n",
+                       (unsigned long)diag.uac_as_in_tx,
+                       (unsigned long)diag.uac_as_in_tx_err,
+                       (unsigned long)diag.uac_as_in_datain,
+                       (unsigned long)diag.uac_as_in_sof_active,
+                       (unsigned long)diag.uac_as_in_tx_long,
+                       (unsigned long)diag.uac_as_in_underrun);
+        if (!write_line(io, line))
+        {
+            return CLI_STATUS_SERVICE_ERROR;
+        }
+        (void)snprintf(line, sizeof(line),
+                       "hw_adc=%lu hw_dac=%lu\n",
+                       (unsigned long)diag.hw_adc_events,
+                       (unsigned long)diag.hw_dac_events);
+        return write_line(io, line) ? CLI_STATUS_OK
+                                    : CLI_STATUS_SERVICE_ERROR;
+    }
+
     return CLI_STATUS_UNKNOWN_COMMAND;
 }
 
@@ -1490,7 +1566,7 @@ static const CliCommandDefinition command_table[] = {
     {"effects", handle_effects, "effects (list catalog + slot assignment)\n"},
     {"rom", handle_rom, "rom save-state|load-state|read <addr> <len>|write <addr> <hex>\n"},
     {"log", handle_log, "log enable <0|1> | level <0-255> | stream [0|1] [batch <N>] (q to stop) | stats [reset|timing]\n"},
-    {"audio", handle_audio, "audio input adc|usb | output on|off | status\n"},
+    {"audio", handle_audio, "audio input adc|usb | output on|off | status | diag [reset]\n"},
     {"test", handle_test, "test mode <0|1> | vector <sine|lut|sweep|wav|impulse|usb> | freq <hz> | amp <value> | status\n"},
     {"i2c", handle_i2c, "i2c scan [start] [end] | ping <addr> | read <addr> <reg> [len] | write <addr> <reg> <hex> | send <addr> <hex> | recv <addr> <len>\n"},
     {"crash", handle_crash, "crash null|udf|div0\n"},

@@ -140,6 +140,11 @@ static volatile uint32_t effects_event_count_adc_a = 0U;
 static volatile uint32_t effects_event_count_adc_b = 0U;
 static volatile uint32_t effects_event_count_dac_a = 0U;
 static volatile uint32_t effects_event_count_dac_b = 0U;
+/* Cumulative ADC/DAC DMA-callback totals. Unlike the pending counters above,
+ * these are never decremented, so they can be sampled over a fixed window to
+ * measure event rate. Exposed via `audio diag`. */
+static volatile uint32_t effects_event_cum_adc = 0U;
+static volatile uint32_t effects_event_cum_dac = 0U;
 static volatile uint32_t heartbeat_period_ms = HEARTBEAT_PERIOD_MS_DEFAULT;
 static uint32_t effects_frames_ok = 0U;
 static uint32_t effects_frames_failed = 0U;
@@ -627,6 +632,8 @@ static void effects_task_on_output_frame(const uint16_t *buf, size_t count, void
         return;
     }
 
+    usb_audio_stream_note_effects_frame(&audio_stream);
+
     for (size_t i = 0; i < count; i++)
     {
         usb_audio_stream_push_sample(&audio_stream, sample_to_usb_i16(buf[i]));
@@ -698,21 +705,47 @@ static void effects_task_record_buffer_event_from_isr(EffectsBufferEvent event)
     {
     case EFFECTS_BUFFER_EVENT_ADC_A:
         effects_event_count_adc_a++;
+        effects_event_cum_adc++;
         break;
     case EFFECTS_BUFFER_EVENT_ADC_B:
         effects_event_count_adc_b++;
+        effects_event_cum_adc++;
         break;
     case EFFECTS_BUFFER_EVENT_DAC_A:
         effects_event_count_dac_a++;
+        effects_event_cum_dac++;
         break;
     case EFFECTS_BUFFER_EVENT_DAC_B:
         effects_event_count_dac_b++;
+        effects_event_cum_dac++;
         break;
     default:
         break;
     }
 
     taskEXIT_CRITICAL_FROM_ISR(saved_interrupt_mask);
+}
+
+static void effects_task_hw_events_get(uint32_t *adc_events, uint32_t *dac_events)
+{
+    taskENTER_CRITICAL();
+    if (adc_events != NULL)
+    {
+        *adc_events = effects_event_cum_adc;
+    }
+    if (dac_events != NULL)
+    {
+        *dac_events = effects_event_cum_dac;
+    }
+    taskEXIT_CRITICAL();
+}
+
+static void effects_task_hw_events_reset(void)
+{
+    taskENTER_CRITICAL();
+    effects_event_cum_adc = 0U;
+    effects_event_cum_dac = 0U;
+    taskEXIT_CRITICAL();
 }
 
 static void cli_service_lock(void *context)
@@ -818,6 +851,12 @@ static void init_cli_service_adapter(void)
 
     usb_audio_stream_init(&audio_stream);
     usbd_uac_register_stream(&audio_stream);
+    cli_service_adapter_bind_uac_diag(&cli_service_adapter_context,
+                                      usbd_uac_get_diag,
+                                      usbd_uac_reset_diag);
+    cli_service_adapter_bind_hw_events(&cli_service_adapter_context,
+                                       effects_task_hw_events_get,
+                                       effects_task_hw_events_reset);
 }
 
 static void init_effects_defaults(void)
@@ -1723,10 +1762,10 @@ static void MX_ADC3_Init(void)
   hadc3.Init.ClockPrescaler = ADC_CLOCK_ASYNC_DIV1;
   hadc3.Init.Resolution = ADC_RESOLUTION_12B;
   hadc3.Init.ScanConvMode = ADC_SCAN_DISABLE;
-  hadc3.Init.ContinuousConvMode = ENABLE;
+  hadc3.Init.ContinuousConvMode = DISABLE;
   hadc3.Init.DiscontinuousConvMode = DISABLE;
-  hadc3.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
-  hadc3.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc3.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING;
+  hadc3.Init.ExternalTrigConv = ADC_EXTERNALTRIGCONV_T2_TRGO;
   hadc3.Init.DataAlign = ADC_DATAALIGN_LEFT;
   hadc3.Init.NbrOfConversion = 1;
   hadc3.Init.DMAContinuousRequests = ENABLE;

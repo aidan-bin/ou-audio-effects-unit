@@ -7,14 +7,14 @@
 
 // NOLINTBEGIN(readability-identifier-naming)
 
-#define USB_COMPOSITE_CONFIG_DESC_SIZ 249U
+#define USB_COMPOSITE_CONFIG_DESC_SIZ 240U
 
 /* Combined Full-Speed Configuration Descriptor:
  *  CDC0 (CLI):    Interface 0 (Comm) + Interface 1 (Data)
  *                 EP2 IN (Interrupt), EP1 OUT/IN (Bulk)
  *  UAC1 (Audio):  Interface 2 (Audio Control)
  *                 Interface 3 (Audio Streaming OUT, alt0/alt1)
- *                   EP3 OUT (Isoc, async data), EP4 IN (Isoc, feedback)
+ *                   EP5 OUT (Isoc, async data), EP4 IN (Isoc, feedback)
  *                 Interface 4 (Audio Streaming IN, alt0/alt1)
  *                   EP3 IN (Isoc, adaptive data)
  */
@@ -203,12 +203,12 @@ __ALIGN_BEGIN static uint8_t USBD_Composite_CfgFSDesc[USB_COMPOSITE_CONFIG_DESC_
         0x00,
         0x00,
 
-        /* Alt 1: isoc data OUT + explicit feedback IN */
+        /* Alt 1: isoc data OUT (sync, no feedback) */
         0x09,
         USB_DESC_TYPE_INTERFACE,
         UAC_IFACE_AS_OUT,
         0x01,
-        0x02,
+        0x01,
         0x01,
         0x02,
         0x00,
@@ -236,17 +236,21 @@ __ALIGN_BEGIN static uint8_t USBD_Composite_CfgFSDesc[USB_COMPOSITE_CONFIG_DESC_
         (uint8_t)((UAC_SAMPLE_RATE_HZ >> 8) & 0xFFU),
         (uint8_t)((UAC_SAMPLE_RATE_HZ >> 16) & 0xFFU),
 
-        /* Isoc data OUT endpoint: Async, Data usage; bSynchAddress points at
-         * the feedback endpoint below */
+        /* Isoc data OUT endpoint: Synchronous (device locks to USB SOF clock),
+         * Data usage. No feedback endpoint. Async 0x05 was tried but macOS's
+         * AUALockDelay startup check on the feedback endpoint kept failing,
+         * cycling the audio session. Sync eliminates that whole path. Our
+         * device's actual sample clock is TIM2-driven (48 MHz HCLK / 1000),
+         * not truly SOF-locked, but drift over short intervals is negligible. */
         0x09,
         USB_DESC_TYPE_ENDPOINT,
         UAC_AS_OUT_EP,
-        0x05,
+        0x0D,
         LOBYTE(UAC_AS_MAX_PACKET_BYTES),
         HIBYTE(UAC_AS_MAX_PACKET_BYTES),
         0x01,
         0x00,
-        UAC_FEEDBACK_EP,
+        0x00,
 
         /* Class-specific AS endpoint descriptor (no sampling-freq/pitch control) */
         0x07,
@@ -255,18 +259,6 @@ __ALIGN_BEGIN static uint8_t USBD_Composite_CfgFSDesc[USB_COMPOSITE_CONFIG_DESC_
         0x00,
         0x00,
         0x00,
-        0x00,
-
-        /* Explicit feedback endpoint: Isoc, no sync type, Feedback usage.
-         * bRefresh=5 -> refresh every 2^5 = 32 ms. */
-        0x09,
-        USB_DESC_TYPE_ENDPOINT,
-        UAC_FEEDBACK_EP,
-        0x11,
-        LOBYTE(UAC_FEEDBACK_PACKET_BYTES),
-        HIBYTE(UAC_FEEDBACK_PACKET_BYTES),
-        0x01,
-        0x05,
         0x00,
 
         /* UAC1 -- Interface 4 - Audio Streaming IN (device->host) */
@@ -314,11 +306,15 @@ __ALIGN_BEGIN static uint8_t USBD_Composite_CfgFSDesc[USB_COMPOSITE_CONFIG_DESC_
         (uint8_t)((UAC_SAMPLE_RATE_HZ >> 8) & 0xFFU),
         (uint8_t)((UAC_SAMPLE_RATE_HZ >> 16) & 0xFFU),
 
-        /* Isoc data IN endpoint: Adaptive, Data usage, no explicit feedback */
+        /* Isoc data IN endpoint: Async (device is the source clock; host
+         * adapts). Sync (0x0D) was tried but made macOS cycle *both* streams.
+         * Async is the closest correct match: the device really does generate
+         * from its own TIM2 clock, and there's no implicit sync data being
+         * returned. */
         0x09,
         USB_DESC_TYPE_ENDPOINT,
         UAC_AS_IN_EP,
-        0x09,
+        0x05,
         LOBYTE(UAC_AS_MAX_PACKET_BYTES),
         HIBYTE(UAC_AS_MAX_PACKET_BYTES),
         0x01,

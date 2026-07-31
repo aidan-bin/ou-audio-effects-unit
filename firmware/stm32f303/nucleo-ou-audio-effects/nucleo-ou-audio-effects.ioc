@@ -1,10 +1,11 @@
 #MicroXplorer Configuration settings - do not modify
 ADC3.Channel-0\#ChannelRegularConversion=ADC_CHANNEL_1
 ADC3.ClockPrescaler=ADC_CLOCK_ASYNC_DIV1
-ADC3.ContinuousConvMode=ENABLE
+ADC3.ContinuousConvMode=DISABLE
 ADC3.DMAContinuousRequests=ENABLE
 ADC3.DataAlign=ADC_DATAALIGN_LEFT
-ADC3.IPParameters=Rank-0\#ChannelRegularConversion,master,SamplingTime-0\#ChannelRegularConversion,Channel-0\#ChannelRegularConversion,SamplingTimeOPAMP-0\#ChannelRegularConversion,OffsetNumber-0\#ChannelRegularConversion,Offset-0\#ChannelRegularConversion,NbrOfConversionFlag,ContinuousConvMode,ClockPrescaler,InjNumberOfConversion,Rank1_Channel,DMAContinuousRequests,DataAlign
+ADC3.ExternalTrigConv=ADC_EXTERNALTRIGCONV_T2_TRGO
+ADC3.IPParameters=Rank-0\#ChannelRegularConversion,master,SamplingTime-0\#ChannelRegularConversion,Channel-0\#ChannelRegularConversion,SamplingTimeOPAMP-0\#ChannelRegularConversion,OffsetNumber-0\#ChannelRegularConversion,Offset-0\#ChannelRegularConversion,NbrOfConversionFlag,ContinuousConvMode,ClockPrescaler,InjNumberOfConversion,Rank1_Channel,DMAContinuousRequests,DataAlign,ExternalTrigConv
 ADC3.InjNumberOfConversion=0
 ADC3.NbrOfConversionFlag=1
 ADC3.Offset-0\#ChannelRegularConversion=0

@@ -25,6 +25,12 @@ typedef struct UsbAudioStream
 
     volatile uint32_t in_dropped;
     volatile uint32_t out_dropped;
+
+    /* Diagnostic counters (never reset by normal operation). */
+    volatile uint32_t as_out_packets;    /* AS-OUT ISR callback count */
+    volatile uint32_t in_ring_fill_peak; /* Peak in_ring occupancy since reset */
+    volatile uint32_t effects_zoh_holds; /* pop_sample_or_hold falling back to hold */
+    volatile uint32_t effects_frames;    /* Frames processed by effects task */
 } UsbAudioStream;
 
 void usb_audio_stream_init(UsbAudioStream *stream);
@@ -55,5 +61,15 @@ size_t usb_audio_stream_in_available(const UsbAudioStream *stream);
 
 uint32_t usb_audio_stream_out_dropped(const UsbAudioStream *stream);
 uint32_t usb_audio_stream_in_dropped(const UsbAudioStream *stream);
+
+/* Diagnostics. Counters wrap on overflow. */
+void usb_audio_stream_note_as_out_packet(UsbAudioStream *stream);
+void usb_audio_stream_note_effects_frame(UsbAudioStream *stream);
+void usb_audio_stream_reset_diag(UsbAudioStream *stream);
+
+uint32_t usb_audio_stream_as_out_packets(const UsbAudioStream *stream);
+uint32_t usb_audio_stream_in_ring_fill_peak(const UsbAudioStream *stream);
+uint32_t usb_audio_stream_effects_zoh_holds(const UsbAudioStream *stream);
+uint32_t usb_audio_stream_effects_frames(const UsbAudioStream *stream);
 
 #endif

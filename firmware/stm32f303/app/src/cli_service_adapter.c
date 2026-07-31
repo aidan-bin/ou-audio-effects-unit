@@ -843,6 +843,8 @@ static bool service_audio_get_status(uint8_t *source_out,
                                      bool *output_enabled_out,
                                      uint32_t *out_dropped_out,
                                      uint32_t *in_dropped_out, void *ctx);
+static bool service_audio_get_diag(CliAudioDiag *diag_out, void *ctx);
+static bool service_audio_reset_diag(void *ctx);
 
 void cli_service_adapter_bind(CliServiceAdapter *context, CliServices *services_out)
 {
@@ -895,6 +897,8 @@ void cli_service_adapter_bind(CliServiceAdapter *context, CliServices *services_
     services_out->audio_set_output = service_audio_set_output;
     services_out->audio_get_status = service_audio_get_status;
     services_out->audio_get_info = service_audio_get_info;
+    services_out->audio_get_diag = service_audio_get_diag;
+    services_out->audio_reset_diag = service_audio_reset_diag;
     services_out->context = context;
 }
 
@@ -1241,6 +1245,32 @@ void cli_service_adapter_set_audio_stream(CliServiceAdapter *context,
     }
 }
 
+void cli_service_adapter_bind_uac_diag(CliServiceAdapter *context,
+                                       void (*get_diag)(UsbdUacDiag *),
+                                       void (*reset_diag)(void))
+{
+    if (context != NULL)
+    {
+        lock_ctx(context);
+        context->uac_get_diag = get_diag;
+        context->uac_reset_diag = reset_diag;
+        unlock_ctx(context);
+    }
+}
+
+void cli_service_adapter_bind_hw_events(CliServiceAdapter *context,
+                                        void (*get_events)(uint32_t *, uint32_t *),
+                                        void (*reset_events)(void))
+{
+    if (context != NULL)
+    {
+        lock_ctx(context);
+        context->hw_events_get = get_events;
+        context->hw_events_reset = reset_events;
+        unlock_ctx(context);
+    }
+}
+
 static bool service_audio_set_input(uint8_t source, void *ctx)
 {
     CliServiceAdapter *c = (CliServiceAdapter *)ctx;
@@ -1307,5 +1337,80 @@ static bool service_audio_get_status(uint8_t *source_out,
     *out_dropped_out = usb_audio_stream_out_dropped(c->audio_stream);
     *in_dropped_out = usb_audio_stream_in_dropped(c->audio_stream);
     unlock_ctx(c);
+    return true;
+}
+
+static bool service_audio_get_diag(CliAudioDiag *diag_out, void *ctx)
+{
+    CliServiceAdapter *c = (CliServiceAdapter *)ctx;
+    if (c == NULL || diag_out == NULL || c->audio_stream == NULL)
+    {
+        return false;
+    }
+
+    lock_ctx(c);
+    diag_out->as_out_packets = usb_audio_stream_as_out_packets(c->audio_stream);
+    diag_out->in_ring_fill_peak = usb_audio_stream_in_ring_fill_peak(c->audio_stream);
+    diag_out->effects_zoh_holds = usb_audio_stream_effects_zoh_holds(c->audio_stream);
+    diag_out->effects_frames = usb_audio_stream_effects_frames(c->audio_stream);
+    diag_out->in_ring_fill_current = (uint32_t)usb_audio_stream_in_available(c->audio_stream);
+    unlock_ctx(c);
+
+    if (c->uac_get_diag != NULL)
+    {
+        UsbdUacDiag uac = {0};
+        c->uac_get_diag(&uac);
+        diag_out->uac_isr_total = uac.data_out_isr_total;
+        diag_out->uac_pushed = uac.data_out_pushed;
+        diag_out->uac_stream_bad = uac.data_out_stream_bad;
+        diag_out->uac_size_zero = uac.data_out_size_zero;
+        diag_out->uac_size_oversz = uac.data_out_size_oversz;
+        diag_out->uac_sof_count = uac.sof_count;
+        diag_out->uac_last_received = uac.last_received;
+        diag_out->uac_stream_repair_count = uac.stream_repair_count;
+        diag_out->uac_as_in_tx = uac.as_in_tx;
+        diag_out->uac_as_in_tx_err = uac.as_in_tx_err;
+        diag_out->uac_as_in_datain = uac.as_in_datain;
+        diag_out->uac_as_in_sof_active = uac.as_in_sof_active;
+        diag_out->uac_as_in_tx_long = uac.as_in_tx_long;
+        diag_out->uac_as_in_underrun = uac.as_in_underrun;
+        diag_out->uac_setalt_out_1 = uac.setalt_out_1;
+        diag_out->uac_setalt_out_0 = uac.setalt_out_0;
+        diag_out->uac_setalt_in_1 = uac.setalt_in_1;
+        diag_out->uac_setalt_in_0 = uac.setalt_in_0;
+        diag_out->uac_as_out_active = uac.as_out_active;
+        diag_out->uac_as_in_active = uac.as_in_active;
+    }
+    if (c->hw_events_get != NULL)
+    {
+        uint32_t adc_events = 0;
+        uint32_t dac_events = 0;
+        c->hw_events_get(&adc_events, &dac_events);
+        diag_out->hw_adc_events = adc_events;
+        diag_out->hw_dac_events = dac_events;
+    }
+    return true;
+}
+
+static bool service_audio_reset_diag(void *ctx)
+{
+    CliServiceAdapter *c = (CliServiceAdapter *)ctx;
+    if (c == NULL || c->audio_stream == NULL)
+    {
+        return false;
+    }
+
+    lock_ctx(c);
+    usb_audio_stream_reset_diag(c->audio_stream);
+    unlock_ctx(c);
+
+    if (c->uac_reset_diag != NULL)
+    {
+        c->uac_reset_diag();
+    }
+    if (c->hw_events_reset != NULL)
+    {
+        c->hw_events_reset();
+    }
     return true;
 }

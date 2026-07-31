@@ -77,6 +77,39 @@ typedef struct
 
 typedef struct
 {
+    uint32_t as_out_packets;       /* AS-OUT ISR callbacks since reset */
+    uint32_t in_ring_fill_peak;    /* Peak in_ring occupancy since reset (samples) */
+    uint32_t effects_zoh_holds;    /* pop_or_hold fallbacks since reset */
+    uint32_t effects_frames;       /* Effects task frames since reset */
+    uint32_t in_ring_fill_current; /* Snapshot at read time */
+    /* USB-side (uac.c) counters, populated when the adapter has a hook. */
+    uint32_t uac_isr_total;
+    uint32_t uac_pushed;
+    uint32_t uac_stream_bad;
+    uint32_t uac_size_zero;
+    uint32_t uac_size_oversz;
+    uint32_t uac_sof_count;
+    uint32_t uac_last_received;
+    uint32_t uac_stream_repair_count;
+    uint32_t uac_as_in_tx;
+    uint32_t uac_as_in_tx_err;
+    uint32_t uac_as_in_datain;
+    uint32_t uac_as_in_sof_active;
+    uint32_t uac_as_in_tx_long;
+    uint32_t uac_as_in_underrun;
+    uint16_t uac_setalt_out_1;
+    uint16_t uac_setalt_out_0;
+    uint16_t uac_setalt_in_1;
+    uint16_t uac_setalt_in_0;
+    bool uac_as_out_active;
+    bool uac_as_in_active;
+    /* Cumulative ADC/DAC DMA half/complete callback totals for rate analysis. */
+    uint32_t hw_adc_events;
+    uint32_t hw_dac_events;
+} CliAudioDiag;
+
+typedef struct
+{
     bool (*set_pot_override)(uint8_t pot_index, uint32_t value, void *context);
     bool (*clear_pot_override)(uint8_t pot_index, void *context);
     bool (*set_switch_override)(uint8_t switch_index, bool enabled, void *context);
@@ -142,6 +175,8 @@ typedef struct
                              void *context);
 
     bool (*audio_get_info)(CliAudioStatus *status_out, void *context);
+    bool (*audio_get_diag)(CliAudioDiag *diag_out, void *context);
+    bool (*audio_reset_diag)(void *context);
     void *context;
 } CliServices;
 

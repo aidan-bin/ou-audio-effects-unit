@@ -419,7 +419,7 @@ static void test_throughput_stress(void)
     expect_eq_size(total_samples, total_popped + drops, "throughput: total pushed = popped + dropped");
 }
 
-static void test_pop_sample_or_hold_returns_last_on_underrun(void)
+static void test_pop_sample_or_hold_returns_silence_on_underrun(void)
 {
     UsbAudioStream stream;
     usb_audio_stream_init(&stream);
@@ -427,7 +427,7 @@ static void test_pop_sample_or_hold_returns_last_on_underrun(void)
     int16_t sample = -1;
     expect_false(usb_audio_stream_pop_sample_or_hold(&stream, &sample),
                  "hold on empty ring before any sample seen");
-    expect_eq_i16(0, sample, "holds zero before any sample popped");
+    expect_eq_i16(0, sample, "returns 0 before any sample popped");
 
     uint8_t bytes[4] = {0x39, 0x30, 0x00, 0x00}; /* 12345, 0 */
     usb_audio_stream_push_bytes(&stream, bytes, sizeof(bytes));
@@ -439,15 +439,15 @@ static void test_pop_sample_or_hold_returns_last_on_underrun(void)
 
     expect_false(usb_audio_stream_pop_sample_or_hold(&stream, &sample),
                  "underrun after ring drained");
-    expect_eq_i16(0, sample, "holds last popped sample (0) on underrun");
+    expect_eq_i16(0, sample, "returns silence (0) on underrun");
 
     usb_audio_stream_push_bytes(&stream, bytes, 2); /* just 12345 */
     expect_true(usb_audio_stream_pop_sample_or_hold(&stream, &sample), "pops fresh sample");
     expect_eq_i16(12345, sample, "fresh sample value");
 
     expect_false(usb_audio_stream_pop_sample_or_hold(&stream, &sample),
-                 "underrun again holds most recent sample");
-    expect_eq_i16(12345, sample, "holds updated last sample (12345) on underrun");
+                 "underrun again returns silence");
+    expect_eq_i16(0, sample, "still returns silence (0) after fresh sample seen");
 }
 
 static void test_null_safe(void)
@@ -476,7 +476,7 @@ int main(void)
     test_overflow_drops_and_counts();
     test_push_bytes_little_endian();
     test_push_bytes_ignores_odd_trailing();
-    test_pop_sample_or_hold_returns_last_on_underrun();
+    test_pop_sample_or_hold_returns_silence_on_underrun();
     test_in_ring_overflow_drops();
     test_push_bytes_cdc_packet_size();
     test_interleaved_isr_push_task_pop();
