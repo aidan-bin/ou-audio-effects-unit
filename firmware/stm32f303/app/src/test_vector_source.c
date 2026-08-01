@@ -123,6 +123,19 @@ bool test_vector_source_fill_buffer(TestVectorSource *source, const CliTestModeS
         return true;
     }
 
+    if (status->vector == TEST_VECTOR_COUNTER)
+    {
+        /* Fill buf with a monotonically-incrementing counter so that any
+         * dropped, duplicated, or wrong-buffer samples in the AS-IN
+         * transport show up as gaps, repeats, or restarts on the host. */
+        for (size_t i = 0; i < count; i++)
+        {
+            buf[i] = (uint16_t)(source->counter_state & 0xFFFFU);
+            source->counter_state++;
+        }
+        return true;
+    }
+
     if (status->vector == TEST_VECTOR_USB_STREAM)
     {
         if (source->stream_pop == NULL)

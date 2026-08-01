@@ -348,15 +348,22 @@ USBD_StatusTypeDef USBD_LL_Init(USBD_HandleTypeDef *pdev)
   /* AS-IN (0x83) and AS-OUT (0x05) each need 100 bytes at 48000 Hz mono/16-bit
    * (48 samples/ms * 2 bytes + slack). Feedback endpoint (0x84) is unused but
    * kept at a safe offset so any spurious IO doesn't stomp AS-OUT's buffer. */
-  /* AS-IN is isochronous: the peripheral flips DTOG_TX every frame and reads
-   * whichever of ADDR0_TX/ADDR1_TX that bit selects, so a single-buffered ISO
-   * IN endpoint transmits from an unconfigured descriptor on alternate frames.
-   * buf0 keeps the old 0x148 slot; buf1 sits above AS-OUT's buffer (which ends
-   * at 0x204) in otherwise unused PMA. */
-  HAL_PCDEx_PMAConfig((PCD_HandleTypeDef *)pdev->pData, 0x83, PCD_DBL_BUF, 0x02100148U);
+  /* PMA layout for the audio endpoints:
+   *   0x148..0x1AB  AS-IN buf0   (100 bytes)
+   *   0x1AC..0x1AF  EP4 feedback (4 bytes, unused)
+   *   0x1B0..0x213  AS-OUT buf0  (100 bytes)
+   *   0x218..0x27B  AS-IN buf1   (100 bytes)  -- moved from 0x210 which
+   *                              overlapped AS-OUT's slot (0x1B0..0x213)
+   *   0x280..0x2E3  AS-OUT buf1  (100 bytes)  -- new for DBL_BUF */
+  /* Both isochronous audio endpoints are double-buffered. On the STM32 USB
+   * peripheral the hardware flips DTOG_TX/DTOG_RX every frame and reads or
+   * writes ADDR0/ADDR1 based on that bit, so a single-buffered isoc endpoint
+   * effectively loses every other packet -- confirmed for AS-IN previously
+   * and observed on AS-OUT as ~16 % packet delivery loss (which appeared
+   * downstream as periodic zero-fills in the effects-task input path). */
+  HAL_PCDEx_PMAConfig((PCD_HandleTypeDef *)pdev->pData, 0x83, PCD_DBL_BUF, 0x02180148U);
   HAL_PCDEx_PMAConfig((PCD_HandleTypeDef *)pdev->pData, 0x84, PCD_SNG_BUF, 0x1AC);
-  /* EP5 OUT (isoc AS-OUT): single-buffered for now. */
-  HAL_PCDEx_PMAConfig((PCD_HandleTypeDef *)pdev->pData, 0x05, PCD_SNG_BUF, 0x1B0);
+  HAL_PCDEx_PMAConfig((PCD_HandleTypeDef *)pdev->pData, 0x05, PCD_DBL_BUF, 0x028001B0U);
   /* USER CODE END EndPoint_Configuration_CDC */
   return USBD_OK;
 }

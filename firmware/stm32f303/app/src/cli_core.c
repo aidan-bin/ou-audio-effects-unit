@@ -83,6 +83,7 @@ static const struct
     {"wav", 3U},
     {"impulse", 4U},
     {"usb", 5U},
+    {"counter", 6U},
 };
 
 static const char *test_vector_name(uint8_t vector)

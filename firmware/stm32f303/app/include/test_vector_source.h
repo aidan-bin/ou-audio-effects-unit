@@ -17,7 +17,8 @@
 #define TEST_VECTOR_WAV 3U
 #define TEST_VECTOR_IMPULSE 4U
 #define TEST_VECTOR_USB_STREAM 5U
-#define TEST_VECTOR_COUNT 6U
+#define TEST_VECTOR_COUNTER 6U
+#define TEST_VECTOR_COUNT 7U
 
 #define TEST_VECTOR_WAV_DEFAULT_FREQ 1000U
 
@@ -31,6 +32,7 @@ typedef struct
     bool (*stream_pop)(int16_t *sample, void *context);
     void *stream_context;
     uint32_t usb_underruns;
+    uint32_t counter_state;
 } TestVectorSource;
 
 void test_vector_source_init(TestVectorSource *source, uint32_t sample_rate_hz);
