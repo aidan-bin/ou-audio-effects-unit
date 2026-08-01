@@ -85,16 +85,9 @@ typedef struct
     /* USB-side (uac.c) counters, populated when the adapter has a hook. */
     uint32_t uac_isr_total;
     uint32_t uac_pushed;
-    uint32_t uac_stream_bad;
-    uint32_t uac_size_zero;
-    uint32_t uac_size_oversz;
     uint32_t uac_sof_count;
-    uint32_t uac_last_received;
-    uint32_t uac_stream_repair_count;
     uint32_t uac_as_in_tx;
     uint32_t uac_as_in_tx_err;
-    uint32_t uac_as_in_datain;
-    uint32_t uac_as_in_sof_active;
     uint32_t uac_as_in_tx_long;
     uint32_t uac_as_in_underrun;
     uint16_t uac_setalt_out_1;

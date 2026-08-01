@@ -46,14 +46,8 @@ typedef struct
     /* Diagnostics; not touched by hot-path unless needed. */
     volatile uint32_t diag_isr_total;
     volatile uint32_t diag_pushed;
-    volatile uint32_t diag_stream_bad;
-    volatile uint32_t diag_size_zero;
-    volatile uint32_t diag_size_oversz;
-    volatile uint32_t diag_last_received;
     volatile uint32_t diag_as_in_tx;
     volatile uint32_t diag_as_in_tx_err;
-    volatile uint32_t diag_as_in_datain;
-    volatile uint32_t diag_as_in_sof_active;
     volatile uint32_t diag_as_in_tx_long;
     volatile uint32_t diag_as_in_underrun;
     volatile uint16_t diag_setalt_out_0;
@@ -64,23 +58,9 @@ typedef struct
 
 static UsbdUacHandleTypeDef usbd_uac_handle;
 
-/* Independent copy of the registered stream pointer. Kept in a separate .bss
- * slot so a buffer overflow that scribbles usbd_uac_handle.stream is very
- * unlikely to also touch this. Every hot-path check goes through
- * effective_stream(), which repairs h->stream on the fly and counts how often
- * repair was needed. */
+/* Retained across usbd_uac_class_init, which memsets the handle on every USB
+ * reset. Without it, h->stream would be NULL after the first reset. */
 static struct UsbAudioStream *registered_stream;
-static volatile uint32_t diag_stream_repair_count;
-
-static struct UsbAudioStream *effective_stream(UsbdUacHandleTypeDef *h)
-{
-    if (h->stream != registered_stream)
-    {
-        diag_stream_repair_count++;
-        h->stream = registered_stream;
-    }
-    return h->stream;
-}
 
 void usbd_uac_register_stream(struct UsbAudioStream *stream)
 {
@@ -302,31 +282,12 @@ uint8_t usbd_uac_data_in(USBD_HandleTypeDef *pdev, uint8_t epnum)
     {
         return USBD_OK;
     }
-    h->diag_as_in_datain++;
     /* Host just accepted the previous AS-IN packet: arm the next one now.
      * Data-in-driven scheduling (rather than SOF-driven) guarantees we never
      * overwrite an unsent PMA buffer, which is what caused macOS's usbaudiod
      * to log completeCount=0 overruns and cycle the AS-IN interface. */
     usbd_uac_transmit_as_in_packet(pdev);
     return USBD_OK;
-}
-
-/* STM32F303RE SRAM is 64 KB at 0x20000000; CCMRAM is 16 KB at 0x10000000.
- * Any struct pointer we deref must land in one of those. This is a defensive
- * check because BTABLE corruption (see docs / decode-fault trail) has been
- * observed scribbling garbage into h->stream, and a subsequent deref bus-faults. */
-static inline bool stream_ptr_is_sane(const void *p)
-{
-    uintptr_t v = (uintptr_t)p;
-    if (v >= 0x20000000U && v < 0x20010000U)
-    {
-        return true;
-    }
-    if (v >= 0x10000000U && v < 0x10004000U)
-    {
-        return true;
-    }
-    return false;
 }
 
 uint8_t usbd_uac_data_out(USBD_HandleTypeDef *pdev, uint8_t epnum)
@@ -340,31 +301,16 @@ uint8_t usbd_uac_data_out(USBD_HandleTypeDef *pdev, uint8_t epnum)
     }
 
     uint32_t received = USBD_LL_GetRxDataSize(pdev, epnum);
-    h->diag_last_received = received;
-    /* Defensive clamp: the peripheral reports COUNT_RX from BTABLE (a 10-bit
-     * field, so up to 1023). If BTABLE has been corrupted, this can be a bogus
-     * value larger than out_rx_buf. Bad receives are dropped rather than
-     * trusted, so downstream code never reads past the buffer. */
     if (received > (uint32_t)UAC_AS_MAX_PACKET_BYTES)
     {
-        h->diag_size_oversz++;
         received = 0U;
     }
-    if (received == 0U)
-    {
-        h->diag_size_zero++;
-    }
 
-    struct UsbAudioStream *s = effective_stream(h);
-    if (!stream_ptr_is_sane(s))
-    {
-        h->diag_stream_bad++;
-    }
-    else if (received > 0U)
+    if (received > 0U && h->stream != NULL)
     {
         h->diag_pushed++;
-        usb_audio_stream_note_as_out_packet(s);
-        usb_audio_stream_push_bytes(s, h->out_rx_buf, received);
+        usb_audio_stream_note_as_out_packet(h->stream);
+        usb_audio_stream_push_bytes(h->stream, h->out_rx_buf, received);
     }
 
     USBD_LL_PrepareReceive(pdev, UAC_AS_OUT_EP, h->out_rx_buf, UAC_AS_MAX_PACKET_BYTES);
@@ -389,11 +335,10 @@ static void usbd_uac_transmit_as_in_packet(USBD_HandleTypeDef *pdev)
     }
 
     size_t popped = 0U;
-    struct UsbAudioStream *s = effective_stream(h);
-    if (stream_ptr_is_sane(s))
+    if (h->stream != NULL)
     {
         // NOLINTNEXTLINE(bugprone-casting-through-void)
-        popped = usb_audio_stream_pop_samples(s, (int16_t *)(void *)h->in_tx_buf,
+        popped = usb_audio_stream_pop_samples(h->stream, (int16_t *)(void *)h->in_tx_buf,
                                               samples_this_ms);
     }
 
@@ -429,10 +374,9 @@ static void usbd_uac_sof_feedback(USBD_HandleTypeDef *pdev)
         uint32_t nominal_samples = (UAC_SAMPLE_RATE_HZ * UAC_FEEDBACK_PERIOD_MS) / 1000U;
         int32_t correction = 0;
 
-        struct UsbAudioStream *s = effective_stream(h);
-        if (stream_ptr_is_sane(s))
+        if (h->stream != NULL)
         {
-            int32_t fill = (int32_t)usb_audio_stream_in_available(s);
+            int32_t fill = (int32_t)usb_audio_stream_in_available(h->stream);
             /* Report a LOWER rate when the ring is above target (host is sending
              * faster than we consume) and HIGHER when below. Gentle P gain. */
             int32_t deficit = (int32_t)UAC_IN_RING_TARGET_FILL - fill;
@@ -474,10 +418,6 @@ uint8_t usbd_uac_sof(USBD_HandleTypeDef *pdev)
     (void)usbd_uac_sof_feedback;
 
     h->sof_count++;
-    if (h->as_in_active)
-    {
-        h->diag_as_in_sof_active++;
-    }
     return USBD_OK;
 }
 
@@ -502,16 +442,9 @@ void usbd_uac_get_diag(UsbdUacDiag *out)
     const UsbdUacHandleTypeDef *h = &usbd_uac_handle;
     out->data_out_isr_total = h->diag_isr_total;
     out->data_out_pushed = h->diag_pushed;
-    out->data_out_stream_bad = h->diag_stream_bad;
-    out->data_out_size_zero = h->diag_size_zero;
-    out->data_out_size_oversz = h->diag_size_oversz;
     out->sof_count = h->sof_count;
-    out->last_received = h->diag_last_received;
-    out->stream_repair_count = diag_stream_repair_count;
     out->as_in_tx = h->diag_as_in_tx;
     out->as_in_tx_err = h->diag_as_in_tx_err;
-    out->as_in_datain = h->diag_as_in_datain;
-    out->as_in_sof_active = h->diag_as_in_sof_active;
     out->as_in_tx_long = h->diag_as_in_tx_long;
     out->as_in_underrun = h->diag_as_in_underrun;
     out->setalt_out_1 = h->diag_setalt_out_1;
@@ -527,20 +460,13 @@ void usbd_uac_reset_diag(void)
     UsbdUacHandleTypeDef *h = &usbd_uac_handle;
     h->diag_isr_total = 0U;
     h->diag_pushed = 0U;
-    h->diag_stream_bad = 0U;
-    h->diag_size_zero = 0U;
-    h->diag_size_oversz = 0U;
-    h->diag_last_received = 0U;
     h->diag_as_in_tx = 0U;
     h->diag_as_in_tx_err = 0U;
-    h->diag_as_in_datain = 0U;
-    h->diag_as_in_sof_active = 0U;
     h->diag_as_in_tx_long = 0U;
     h->diag_as_in_underrun = 0U;
     h->diag_setalt_out_0 = 0U;
     h->diag_setalt_out_1 = 0U;
     h->diag_setalt_in_0 = 0U;
     h->diag_setalt_in_1 = 0U;
-    diag_stream_repair_count = 0U;
 }
 // NOLINTEND(readability-identifier-naming)

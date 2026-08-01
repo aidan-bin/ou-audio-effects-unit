@@ -1178,18 +1178,12 @@ static CliStatus handle_audio(char **tokens,
             return CLI_STATUS_SERVICE_ERROR;
         }
         (void)snprintf(line, sizeof(line),
-                       "uac_isr=%lu uac_push=%lu uac_bad=%lu uac_zero=%lu "
-                       "uac_over=%lu uac_sof=%lu uac_lastrx=%lu uac_repair=%lu "
+                       "uac_isr=%lu uac_push=%lu uac_sof=%lu "
                        "as_out_active=%u as_in_active=%u "
                        "salt_out=%u/%u salt_in=%u/%u\n",
                        (unsigned long)diag.uac_isr_total,
                        (unsigned long)diag.uac_pushed,
-                       (unsigned long)diag.uac_stream_bad,
-                       (unsigned long)diag.uac_size_zero,
-                       (unsigned long)diag.uac_size_oversz,
                        (unsigned long)diag.uac_sof_count,
-                       (unsigned long)diag.uac_last_received,
-                       (unsigned long)diag.uac_stream_repair_count,
                        (unsigned)(diag.uac_as_out_active ? 1U : 0U),
                        (unsigned)(diag.uac_as_in_active ? 1U : 0U),
                        (unsigned)diag.uac_setalt_out_1,
@@ -1201,12 +1195,10 @@ static CliStatus handle_audio(char **tokens,
             return CLI_STATUS_SERVICE_ERROR;
         }
         (void)snprintf(line, sizeof(line),
-                       "as_in_tx=%lu as_in_tx_err=%lu as_in_datain=%lu "
-                       "as_in_sof=%lu as_in_long=%lu as_in_under=%lu\n",
+                       "as_in_tx=%lu as_in_tx_err=%lu "
+                       "as_in_long=%lu as_in_under=%lu\n",
                        (unsigned long)diag.uac_as_in_tx,
                        (unsigned long)diag.uac_as_in_tx_err,
-                       (unsigned long)diag.uac_as_in_datain,
-                       (unsigned long)diag.uac_as_in_sof_active,
                        (unsigned long)diag.uac_as_in_tx_long,
                        (unsigned long)diag.uac_as_in_underrun);
         if (!write_line(io, line))

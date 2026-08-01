@@ -1362,16 +1362,9 @@ static bool service_audio_get_diag(CliAudioDiag *diag_out, void *ctx)
         c->uac_get_diag(&uac);
         diag_out->uac_isr_total = uac.data_out_isr_total;
         diag_out->uac_pushed = uac.data_out_pushed;
-        diag_out->uac_stream_bad = uac.data_out_stream_bad;
-        diag_out->uac_size_zero = uac.data_out_size_zero;
-        diag_out->uac_size_oversz = uac.data_out_size_oversz;
         diag_out->uac_sof_count = uac.sof_count;
-        diag_out->uac_last_received = uac.last_received;
-        diag_out->uac_stream_repair_count = uac.stream_repair_count;
         diag_out->uac_as_in_tx = uac.as_in_tx;
         diag_out->uac_as_in_tx_err = uac.as_in_tx_err;
-        diag_out->uac_as_in_datain = uac.as_in_datain;
-        diag_out->uac_as_in_sof_active = uac.as_in_sof_active;
         diag_out->uac_as_in_tx_long = uac.as_in_tx_long;
         diag_out->uac_as_in_underrun = uac.as_in_underrun;
         diag_out->uac_setalt_out_1 = uac.setalt_out_1;
