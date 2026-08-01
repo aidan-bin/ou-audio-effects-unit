@@ -375,9 +375,10 @@ static void usbd_uac_transmit_as_in_packet(USBD_HandleTypeDef *pdev)
 {
     UsbdUacHandleTypeDef *h = &usbd_uac_handle;
 
-    /* UAC_SAMPLE_RATE_HZ isn't a whole multiple of 1000; Bresenham-style
-     * accumulator sends the extra sample often enough to track the average
-     * rate exactly. */
+    /* At UAC_SAMPLE_RATE_HZ = 48000, samples/ms is exactly 48. The
+     * Bresenham-style accumulator is kept so this still tracks the average
+     * rate correctly if the rate ever changes to a value that isn't a whole
+     * multiple of 1000. */
     uint32_t samples_this_ms = UAC_SAMPLE_RATE_HZ / 1000U;
     h->as_in_frac_accum += UAC_SAMPLE_RATE_HZ % 1000U;
     if (h->as_in_frac_accum >= 1000U)
@@ -391,6 +392,7 @@ static void usbd_uac_transmit_as_in_packet(USBD_HandleTypeDef *pdev)
     struct UsbAudioStream *s = effective_stream(h);
     if (stream_ptr_is_sane(s))
     {
+        // NOLINTNEXTLINE(bugprone-casting-through-void)
         popped = usb_audio_stream_pop_samples(s, (int16_t *)(void *)h->in_tx_buf,
                                               samples_this_ms);
     }

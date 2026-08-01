@@ -60,7 +60,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-#define SAMPLE_BUF_LEN 405U
+#define SAMPLE_BUF_LEN 480U
 #define ADC_BUF_LEN (2U * SAMPLE_BUF_LEN)
 #define DAC_BUF_LEN ADC_BUF_LEN
 #define NUM_DELAY_SAMPLES MAX_ECHO_DELAY_SAMPLES
@@ -950,11 +950,11 @@ void startEffectsTask(void const *argument)
 
     test_vector_source_init(&test_vector_source,
                             task_context.sampling_period_us == 0U
-                                ? 40500U
+                                ? 48000U
                                 : (1000000U / task_context.sampling_period_us));
     test_vector_source_init(&test_vector_source_output,
                             task_context.sampling_period_us == 0U
-                                ? 40500U
+                                ? 48000U
                                 : (1000000U / task_context.sampling_period_us));
 
     test_vector_source.stream_pop = test_vector_stream_pop_sample;
@@ -1973,7 +1973,7 @@ static void MX_TIM2_Init(void)
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 0;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 1184;
+  htim2.Init.Period = 999;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)

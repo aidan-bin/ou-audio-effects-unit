@@ -39,6 +39,7 @@ typedef struct
 } EffectsParams;
 
 // Schema for one tunable parameter
+// NOLINTNEXTLINE(clang-analyzer-optin.performance.Padding): field order prioritizes readability over packing; ~14 entries so waste is negligible.
 typedef struct
 {
     EffectType effect;

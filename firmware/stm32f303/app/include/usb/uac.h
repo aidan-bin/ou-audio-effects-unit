@@ -25,8 +25,8 @@ struct UsbAudioStream;
 #define UAC_AS_OUT_EP 0x05U
 #define UAC_FEEDBACK_EP 0x84U
 
-/* Must match compute_sample_rate_hz() (main.c): 48000000 / 1185 = 40506. */
-#define UAC_SAMPLE_RATE_HZ 40506U
+/* Must match compute_sample_rate_hz() (main.c): 48000000 / 1000 = 48000. */
+#define UAC_SAMPLE_RATE_HZ 48000U
 
 /* One SOF (1 ms) worth of samples plus margin for feedback-driven rate
  * correction. */

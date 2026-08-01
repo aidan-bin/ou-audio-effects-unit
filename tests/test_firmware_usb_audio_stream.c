@@ -274,25 +274,25 @@ static void test_interleaved_isr_push_task_pop(void)
     UsbAudioStream stream;
     usb_audio_stream_init(&stream);
 
-    int16_t expected[405];
-    int16_t received[405];
+    int16_t expected[480];
+    int16_t received[480];
 
     for (int frame = 0; frame < 8; frame++)
     {
-        for (size_t i = 0; i < 405; i++)
+        for (size_t i = 0; i < 480; i++)
         {
-            expected[i] = (int16_t)((frame * 405 + (int)i) & 0xFFFF);
+            expected[i] = (int16_t)((frame * 480 + (int)i) & 0xFFFF);
         }
 
-        for (size_t i = 0; i < 405; i++)
+        for (size_t i = 0; i < 480; i++)
         {
             usb_audio_stream_push_sample(&stream, expected[i]);
         }
 
-        size_t popped = usb_audio_stream_pop_samples(&stream, received, 405);
-        expect_eq_size(405, popped, "full frame popped");
+        size_t popped = usb_audio_stream_pop_samples(&stream, received, 480);
+        expect_eq_size(480, popped, "full frame popped");
 
-        for (size_t i = 0; i < 405; i++)
+        for (size_t i = 0; i < 480; i++)
         {
             if (expected[i] != received[i])
             {
@@ -378,7 +378,7 @@ static void test_throughput_stress(void)
     UsbAudioStream stream;
     usb_audio_stream_init(&stream);
 
-    const size_t total_samples = 40500;
+    const size_t total_samples = 48000;
     uint8_t pair[2];
 
     for (size_t i = 0; i < total_samples; i++)
@@ -389,8 +389,8 @@ static void test_throughput_stress(void)
         usb_audio_stream_push_bytes(&stream, pair, sizeof(pair));
     }
 
-    size_t burst_size = 405;
-    int16_t buf[405];
+    size_t burst_size = 480;
+    int16_t buf[480];
     size_t total_popped = 0;
     for (;;)
     {

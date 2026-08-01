@@ -43,8 +43,8 @@ Q8 fixed-point where noted: `256 = 1.0`.
 - `overdrive.level` — wet signal saturation amplitude, range 0–32767, default **32767**
 - `overdrive.tone` — tone filter cutoff (Q8), range 256–1280, default **256** (below 256 inverts signal)
 - `overdrive.mix` — wet/dry ratio (Q8), range 0–256, default **0** (0 = dry, 256 = fully wet)
-- `echo.delay_samples` — buffer depth for echo, range 0–2207, default **1**
-- `echo.pre_delay` — samples before first echo, range 1–2207, default **1**
+- `echo.delay_samples` — buffer depth for echo, range 0–2400, default **1**
+- `echo.pre_delay` — samples before first echo, range 1–2400, default **1**
 - `echo.density` — echo density (Q8), range 0–256, default **256**
 - `echo.attack` — gain on first echo (Q8), range 0–256, default **256**
 - `echo.decay` — gain reduction per subsequent echo (Q8), range 0–256, default **256**

@@ -13,10 +13,10 @@ static void test_zero_period_is_defined_zero(void)
 
 static void test_nominal_rate_round_trips(void)
 {
-    /* 40506 samples/sec == 40.506 samples/ms; over 1000 ms that's exactly
-     * 40506 samples, and the FS 10.10 value should be 40506 * 1024, rounded. */
-    uint32_t value = usbd_uac_compute_feedback_value(40506U, 1000U);
-    expect_eq_u32(40506U * 1024U / 1000U, value, "nominal rate over 1000ms");
+    /* 48000 samples/sec == 48 samples/ms; over 1000 ms that's exactly
+     * 48000 samples, and the FS 10.10 value should be 48000 * 1024, rounded. */
+    uint32_t value = usbd_uac_compute_feedback_value(48000U, 1000U);
+    expect_eq_u32(48000U * 1024U / 1000U, value, "nominal rate over 1000ms");
 }
 
 static void test_rounds_to_nearest_not_truncated(void)

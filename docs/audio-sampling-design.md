@@ -52,12 +52,12 @@ $$
 - ADC3 DMA: `DMA2_Channel5`, circular, halfword
 - DAC DMA: `DMA1_Channel3`, circular, halfword
 
-## Set 40.5 kHz (recommended settings)
+## Set 48 kHz (recommended settings)
 
 In TIM2:
 
 - `Prescaler = 0`
-- `Period = 1184`
+- `Period = 999`
 - `Master Output Trigger = Update Event (TRGO)`
 
 In DAC1 CH1:
@@ -67,7 +67,7 @@ In DAC1 CH1:
 Result:
 
 $$
-F_s = \frac{48{,}000{,}000}{(0+1)(1184+1)} = 40{,}506\,\text{Hz}
+F_s = \frac{48{,}000{,}000}{(0+1)(999+1)} = 48{,}000\,\text{Hz}
 $$
 
 For near 44.1 kHz: `PSC = 0`, `ARR = 1088` (about `44,077 Hz`).
@@ -83,4 +83,4 @@ Example at `F_ADC = 48 MHz`:
 - `1.5 cycles`: $(1.5 + 12.5)/48e6 = 0.292\,\mu s$ (about `3.43 MSPS` max)
 - `19.5 cycles`: $(19.5 + 12.5)/48e6 = 0.667\,\mu s$ (about `1.50 MSPS` max)
 
-Both are far above `40.5 kSPS`.
+Both are far above `48 kSPS`.

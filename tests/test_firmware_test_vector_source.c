@@ -10,7 +10,7 @@
 int failures = 0;
 
 #define SWEEP_COUNT 256U
-#define SWEEP_SAMPLE_RATE 40500U
+#define SWEEP_SAMPLE_RATE 48000U
 
 static void test_init_sets_default_sample_rate(void)
 {

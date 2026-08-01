@@ -54,7 +54,7 @@ typedef struct
     size_t damping;        // One-pole low-pass amount in QN applied in the feedback path
 } EchoParam;
 
-#define MAX_ECHO_DELAY_SAMPLES 2207 // Note: At 40.54 kHz, 50 ms is 2027 samples
+#define MAX_ECHO_DELAY_SAMPLES 2400 // 50 ms @ 48 kHz
 #define MIN_ECHO_PRE_DELAY 1U       // Min delay before first echo is one unit
 #define MAX_ECHO_PRE_DELAY \
     MAX_ECHO_DELAY_SAMPLES      // Max delay before first echo is until end of delay samples (equivalent
@@ -65,7 +65,7 @@ typedef struct
     QN_ONE // Max gain reduction is 1.0 (equivalent to a single echo)
 
 #define MAX_ECHO_FEEDBACK (QN_ONE - (QN_ONE / 20u)) // ~0.95 in QN
-#define MAX_ECHO_FEEDBACK_DELAY 8000                // ~196 ms @ 40.5 kHz
+#define MAX_ECHO_FEEDBACK_DELAY 8000                // ~166 ms @ 48 kHz (CCM-constrained, ~16 KB)
 #define MAX_ECHO_DAMPING (QN_ONE - 1u)
 
 typedef struct

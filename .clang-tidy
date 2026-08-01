@@ -3,6 +3,8 @@ Checks: >
   bugprone-*,
   -bugprone-easily-swappable-parameters,
   performance-*,
+  -performance-no-int-to-ptr,
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,
   readability-identifier-naming
 WarningsAsErrors: ''
 HeaderFilterRegex: '(^|/)(dsp|firmware|host|tests)/'

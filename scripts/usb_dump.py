@@ -132,30 +132,6 @@ def _parse_interfaces(tree: str, location_id: int) -> list[InterfaceInfo]:
     return ifaces
 
 
-_RULE = "─" * 64
-
-
-def _fmt_device(info: DeviceInfo) -> list[str]:
-    names = {
-        0x01: "Audio",
-        0x02: "CDC (Communications)",
-        0x03: "HID",
-        0x06: "Image",
-        0x07: "Printer",
-        0x08: "Mass Storage",
-        0x09: "Hub",
-        0x0A: "CDC Data",
-        0x0B: "Smart Card",
-        0x0E: "Video",
-        0xDC: "Diagnostic",
-        0xE0: "Wireless Controller",
-        0xEF: "Miscellaneous (IAD)",
-        0xFE: "Application Specific",
-        0xFF: "Vendor Specific",
-    }
-    return names.get(cls, f"0x{cls:02X}")
-
-
 def _class_name(cls: int) -> str:
     names = {
         0x01: "Audio",
@@ -205,12 +181,15 @@ _RULE = "─" * 64
 def _fmt_device(info: DeviceInfo) -> list[str]:
     usb_ver = f"{info.bcd_usb >> 8}.{info.bcd_usb & 0xFF}"
     dev_ver = f"{info.bcd_device >> 8}.{info.bcd_device & 0xFF:02d}"
+    cls = info.device_class
+    sub = info.device_subclass
+    prot = info.device_protocol
     return [
         "  DEVICE DESCRIPTOR",
         f"    bcdUSB             {usb_ver}",
-        f"    bDeviceClass        {info.device_class} ({_class_name(info.device_class)})",
-        f"    bDeviceSubClass     {info.device_subclass} ({_subcls_name(info.device_class, info.device_subclass)})",
-        f"    bDeviceProtocol     {info.device_protocol} ({_prot_name(info.device_class, info.device_subclass, info.device_protocol)})",
+        f"    bDeviceClass        {cls} ({_class_name(cls)})",
+        f"    bDeviceSubClass     {sub} ({_subcls_name(cls, sub)})",
+        f"    bDeviceProtocol     {prot} ({_prot_name(cls, sub, prot)})",
         f"    bMaxPacketSize0     {info.max_packet_size0}",
         f"    idVendor            0x{info.vid:04X}",
         f"    idProduct           0x{info.pid:04X}",
@@ -277,7 +256,7 @@ def _fmt_endpoints() -> list[str]:
     for addr, dir_, typ, mps, desc in eps:
         lines.append(f"    {addr}  {dir_:3s}  {typ:12s}  {mps:>3s}B   {desc}")
     lines.append("")
-    lines.append("  SAMPLE RATE  40506 Hz  (48 MHz / 1185)")
+    lines.append("  SAMPLE RATE  48000 Hz  (48 MHz / 1000)")
     lines.append("  FORMAT       mono, 16-bit signed PCM, little-endian")
     return lines
 
@@ -326,7 +305,10 @@ def main() -> None:
         return
 
     header = f"  USB Descriptor Dump — {info.manufacturer} {info.product}"
-    sub = f"  VID:PID = 0x{info.vid:04X}:0x{info.pid:04X}  |  Serial = {info.serial}  |  Location = 0x{info.location_id:X}"
+    sub = (
+        f"  VID:PID = 0x{info.vid:04X}:0x{info.pid:04X}  |  "
+        f"Serial = {info.serial}  |  Location = 0x{info.location_id:X}"
+    )
 
     print()
     print(header)

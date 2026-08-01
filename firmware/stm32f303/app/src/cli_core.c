@@ -204,6 +204,7 @@ static CliStatus handle_crash(char **tokens,
     if (strcmp(tokens[1], "null") == 0)
     {
         volatile uint32_t *volatile p = (volatile uint32_t *)(uintptr_t)0;
+        // NOLINTNEXTLINE(clang-analyzer-core.NullDereference)
         *p = 0xDEADBEEF;
     }
     else if (strcmp(tokens[1], "udf") == 0)
@@ -216,6 +217,7 @@ static CliStatus handle_crash(char **tokens,
     {
         volatile int x = 1;
         volatile int y = 0;
+        // NOLINTNEXTLINE(clang-analyzer-core.DivideZero)
         volatile int z = x / y;
         (void)z;
     }
