@@ -231,16 +231,6 @@ class CliPort:
             status.update(t.split("=", 1) for t in line.split() if "=" in t)
         return status
 
-    def audio_diag(self) -> dict[str, str]:
-        lines = self.command("audio diag")
-        diag: dict[str, str] = {}
-        for line in lines:
-            if not line.startswith("last_"):
-                diag.update(t.split("=", 1) for t in line.split() if "=" in t)
-            else:
-                diag[line.split()[0]] = line
-        return diag
-
     def set_input(self, source: str) -> None:
         self._expect_ok(self.command(f"audio input {source}"))
 

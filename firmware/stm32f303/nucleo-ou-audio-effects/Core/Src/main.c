@@ -140,9 +140,8 @@ static volatile uint32_t effects_event_count_adc_a = 0U;
 static volatile uint32_t effects_event_count_adc_b = 0U;
 static volatile uint32_t effects_event_count_dac_a = 0U;
 static volatile uint32_t effects_event_count_dac_b = 0U;
-/* Cumulative ADC/DAC DMA-callback totals. Unlike the pending counters above,
- * these are never decremented, so they can be sampled over a fixed window to
- * measure event rate. Exposed via `audio diag`. */
+/* Cumulative ADC/DAC DMA-callback totals; never decremented, so they can be
+ * sampled over a fixed window to measure event rate. */
 static volatile uint32_t effects_event_cum_adc = 0U;
 static volatile uint32_t effects_event_cum_dac = 0U;
 static volatile uint32_t heartbeat_period_ms = HEARTBEAT_PERIOD_MS_DEFAULT;

@@ -22,7 +22,6 @@ void usb_audio_stream_reset(UsbAudioStream *stream)
     /* Callers should hold taskENTER_CRITICAL (or equivalent) to prevent races with ISR writes */
     stream->in_head = 0U;
     stream->in_tail = 0U;
-    stream->in_last_sample = 0;
     stream->out_head = 0U;
     stream->out_tail = 0U;
     stream->in_dropped = 0U;
@@ -93,10 +92,6 @@ bool usb_audio_stream_pop_sample(UsbAudioStream *stream, int16_t *sample_out)
 
     bool popped = read_from_ring(stream->in_ring, &stream->in_head,
                                  &stream->in_tail, sample_out, USB_AUDIO_RING_SIZE);
-    if (popped)
-    {
-        stream->in_last_sample = *sample_out;
-    }
     return popped;
 }
 
@@ -112,10 +107,8 @@ bool usb_audio_stream_pop_sample_or_hold(UsbAudioStream *stream, int16_t *sample
         return true;
     }
 
-    /* Ring is empty -- return silence rather than the last real sample.
-     * Repeating stale samples turns momentary starvation into a strong DC
-     * excursion that speakers reproduce as a loud beep at the effects-frame
-     * rate (~100 Hz). Silence during starvation is far less audible. */
+    /* Return silence on starvation. Repeating the last sample causes an audible
+     * click at the effects-frame rate when the ring drains. */
     *sample_out = 0;
     stream->effects_zoh_holds++;
     return false;

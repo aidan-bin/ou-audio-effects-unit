@@ -16,7 +16,6 @@ typedef struct UsbAudioStream
     int16_t in_ring[USB_AUDIO_RING_SIZE];
     volatile size_t in_head;
     volatile size_t in_tail;
-    volatile int16_t in_last_sample;
 
     int16_t out_ring[USB_AUDIO_RING_SIZE];
     volatile size_t out_head;

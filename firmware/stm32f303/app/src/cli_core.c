@@ -1178,9 +1178,9 @@ static CliStatus handle_audio(char **tokens,
             return CLI_STATUS_SERVICE_ERROR;
         }
         (void)snprintf(line, sizeof(line),
-                       "uac_isr=%lu uac_push=%lu uac_sof=%lu "
+                       "uac_isr_total=%lu uac_pushed=%lu uac_sof=%lu "
                        "as_out_active=%u as_in_active=%u "
-                       "salt_out=%u/%u salt_in=%u/%u\n",
+                       "setalt_out=%u/%u setalt_in=%u/%u\n",
                        (unsigned long)diag.uac_isr_total,
                        (unsigned long)diag.uac_pushed,
                        (unsigned long)diag.uac_sof_count,

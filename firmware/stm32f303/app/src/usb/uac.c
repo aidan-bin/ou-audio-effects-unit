@@ -1,6 +1,5 @@
 #include "usb/uac.h"
 #include "usb/audio_stream.h"
-#include "usb/uac_feedback.h"
 #include "usbd_ctlreq.h"
 #include "usbd_ioreq.h"
 
@@ -19,12 +18,6 @@
 #define UAC_REQ_SET_RES 0x04U
 #define UAC_REQ_GET_RES 0x84U
 
-/* Matches bRefresh (2^3 = 8ms) in the descriptor, composite.c. */
-#define UAC_FEEDBACK_PERIOD_MS 8U
-
-/* in_ring fill level (samples) the feedback controller steers toward. */
-#define UAC_IN_RING_TARGET_FILL (UAC_SAMPLES_PER_MS * 8U)
-
 typedef struct
 {
     bool initialized;
@@ -33,7 +26,6 @@ typedef struct
 
     uint8_t out_rx_buf[UAC_AS_MAX_PACKET_BYTES];
     uint8_t in_tx_buf[UAC_AS_MAX_PACKET_BYTES];
-    uint8_t feedback_buf[UAC_FEEDBACK_PACKET_BYTES];
 
     uint32_t as_in_frac_accum;
     uint32_t sof_count;
@@ -321,10 +313,7 @@ static void usbd_uac_transmit_as_in_packet(USBD_HandleTypeDef *pdev)
 {
     UsbdUacHandleTypeDef *h = &usbd_uac_handle;
 
-    /* At UAC_SAMPLE_RATE_HZ = 48000, samples/ms is exactly 48. The
-     * Bresenham-style accumulator is kept so this still tracks the average
-     * rate correctly if the rate ever changes to a value that isn't a whole
-     * multiple of 1000. */
+    /* Bresenham accumulator: handles non-integer samples/ms if the rate changes. */
     uint32_t samples_this_ms = UAC_SAMPLE_RATE_HZ / 1000U;
     h->as_in_frac_accum += UAC_SAMPLE_RATE_HZ % 1000U;
     if (h->as_in_frac_accum >= 1000U)
@@ -362,48 +351,6 @@ static void usbd_uac_transmit_as_in_packet(USBD_HandleTypeDef *pdev)
     }
 }
 
-static void usbd_uac_sof_feedback(USBD_HandleTypeDef *pdev)
-{
-    UsbdUacHandleTypeDef *h = &usbd_uac_handle;
-
-    /* Update the feedback value every UAC_FEEDBACK_PERIOD_MS SOFs. Between
-     * updates, feedback_buf keeps the previous value so IN tokens still get
-     * meaningful data. */
-    if (h->sof_count % UAC_FEEDBACK_PERIOD_MS == 0U)
-    {
-        uint32_t nominal_samples = (UAC_SAMPLE_RATE_HZ * UAC_FEEDBACK_PERIOD_MS) / 1000U;
-        int32_t correction = 0;
-
-        if (h->stream != NULL)
-        {
-            int32_t fill = (int32_t)usb_audio_stream_in_available(h->stream);
-            /* Report a LOWER rate when the ring is above target (host is sending
-             * faster than we consume) and HIGHER when below. Gentle P gain. */
-            int32_t deficit = (int32_t)UAC_IN_RING_TARGET_FILL - fill;
-            correction = deficit / 16;
-        }
-
-        int32_t samples_consumed = (int32_t)nominal_samples + correction;
-        if (samples_consumed < 0)
-        {
-            samples_consumed = 0;
-        }
-
-        uint32_t feedback_value = usbd_uac_compute_feedback_value(
-            (uint32_t)samples_consumed, UAC_FEEDBACK_PERIOD_MS);
-
-        h->feedback_buf[0] = (uint8_t)(feedback_value & 0xFFU);
-        h->feedback_buf[1] = (uint8_t)((feedback_value >> 8) & 0xFFU);
-        h->feedback_buf[2] = (uint8_t)((feedback_value >> 16) & 0xFFU);
-    }
-
-    /* Always arm the feedback endpoint every SOF. macOS polls every 1 ms and
-     * reports AUALockDelay overruns if the peripheral doesn't respond on every
-     * IN token, even though the value only changes every bRefresh interval. */
-    USBD_LL_Transmit(pdev, UAC_FEEDBACK_EP, h->feedback_buf,
-                     UAC_FEEDBACK_PACKET_BYTES);
-}
-
 uint8_t usbd_uac_sof(USBD_HandleTypeDef *pdev)
 {
     UsbdUacHandleTypeDef *h = &usbd_uac_handle;
@@ -412,11 +359,8 @@ uint8_t usbd_uac_sof(USBD_HandleTypeDef *pdev)
         return USBD_OK;
     }
 
-    /* AS-IN is scheduled entirely from usbd_uac_data_in. Feedback endpoint
-     * removed: AS-OUT declared synchronous. sof_feedback retained for
-     * reference but not invoked. */
-    (void)usbd_uac_sof_feedback;
-
+    /* AS-OUT is declared synchronous; no feedback endpoint in the descriptor.
+     * AS-IN is scheduled from usbd_uac_data_in, not here. */
     h->sof_count++;
     return USBD_OK;
 }

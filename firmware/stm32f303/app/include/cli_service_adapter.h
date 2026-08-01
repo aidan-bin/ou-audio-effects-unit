@@ -143,12 +143,9 @@ typedef struct
 
     UsbAudioStream *audio_stream;
 
-    /* Optional hooks for reading the USB-side (uac.c) diagnostic counters.
-     * Left NULL in host tests; bound from main.c on the target. */
+    /* Optional diagnostic hooks; NULL in host tests, bound from main.c on target. */
     void (*uac_get_diag)(UsbdUacDiag *out);
     void (*uac_reset_diag)(void);
-    /* Optional hooks for reading cumulative ADC/DAC DMA callback totals.
-     * Left NULL in host tests; bound from main.c on the target. */
     void (*hw_events_get)(uint32_t *adc_events, uint32_t *dac_events);
     void (*hw_events_reset)(void);
 } CliServiceAdapter;
